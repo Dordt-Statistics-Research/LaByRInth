@@ -90,21 +90,22 @@ viterbi <- function(probs, dists, prefs) {
     ## computed again. The probabilities are initialized to the emission
     ## probabilities of the first site of the probs matrix which is the first
     ## row
-    if (nrow(probs) < 1) {
+    if (path.size < 1) {
         stop("viterbi requires that probs have > 0 rows")
     }
     probs.tracker <- log(probs[1, ])
 
-    ## Hard code the first column to the vector 1,2,...,nstates
+    ## Hard code the first column to the vector 1,2,...,nstates as an index
     ## This is what the generatePath function will need
-    paths.tracker[, 1, ] <- diag(TRUE, nstates)
 
+    paths.tracker[, 1, ] <- diag(TRUE, nstates)
+  
     if (path.size != 1) {  # if the path size is 1 just use the emission probs
         for (site in 2:path.size) {  # for each site in the path
 
             dist <- dists[site - 1]
 
-            ## for each possible hidden state at this site
+            ## log of the probability for each possible hidden state at this site
             probs.tracker <- sapply(1:nstates, function(state) {
 
                 extension.probs <- sapply(1:nstates, function(i) {
@@ -305,7 +306,7 @@ VCF <- function(file) {
 
 ##' Get a subset of the data from the vcf object
 ##'
-##' Get data pertaining to the speficied field and subset it by samples and
+##' Get data pertaining to the specified field and subset it by samples and
 ##'     chromosomes.
 ##' @title
 ##' @param vcf an object of class vcf
@@ -355,13 +356,13 @@ ResolveHomozygotes <- function(vcf, samples) {
     genotype <- Get(vcf, "GT", samples)
     allele.counts <- Get(vcf, "AD", samples, vcf$chrom.names)
     ret.val <- genotype[, , 1]  # initilize to first slice in 3rd dim
-    for (r in 1:nrow(genotype)) {
-        for (c in 1:ncol(genotype)) {
+    for (r in 1:nrow(genotype)) {  # by chromosome site
+        for (c in 1:ncol(genotype)) {  # by variant/sample
+            ## Observed alleles from a specific site of a variant chromosome
             alleles <- genotype[r, c, ]
-
             if (any(is.na(alleles))) {  # One of the alleles is NA
                 ret.val[r, c] <- NA
-            } else if (all(alleles == alleles[1])) {  # Check if all are same)
+            } else if (all(alleles == alleles[1])) {  # Check if all are same
                 ret.val[r, c] <- alleles[1]
             } else if (sum(allele.counts[r, c, ] != 0) == 1) {  # Only 1 counted
                 ret.val[r, c] <- alleles[as.logical(allele.counts[r, c, ])]
@@ -438,7 +439,8 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
                 alt.calls <- 0
             }
 
-            max.allowed <- 1 - (2 * prefs$genotype.err)
+            ## probability constraints from LB-Impute original
+            max.allowed <- 1 - (2 * prefs$genotype.err)  
             min.allowed <- prefs$genotype.err
 
             ## Calculate the emission probabilities for this site
@@ -482,9 +484,6 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
-    if (is.null(chromosomes)) {
-        chromosomes <- vcf$chrom.names
-    }
     rows <- vcf$variants[, "CHROM"] %in% chromosomes
     apply(parent.geno[rows, , drop=F], 1, function(calls) {
         !anyNA(calls)
@@ -492,6 +491,8 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 }
 
 
+## TODO(Jason not Nathan) Add a set of parameters for MC (to control
+## parallelization)
 ## TODO(Jason): remove false homozygosity because otherwise variants will only
 ## be caled homozygous of the variant seen or heterozygous even if they were
 ## actually called homozygous of the other.
@@ -507,15 +508,6 @@ LabyrinthImpute <- function(file, parents) {
     prefs$parents <- parents
 
     LabyrinthImputeHelper(VCF(file), prefs)
-}
-
-
-IndexIncrementFun <- function() {
-    index <- 0
-    function() {
-        index <<- index + 1
-        index
-    }
 }
 
 
@@ -785,16 +777,19 @@ InitializePreferences <- function() {
     prefs  # implicit return
 }
 
-
+##' Checking preferences for the correct variable type
+##'
+##' 
+##' @title 
+##' @param prefs 
+##' @return 
+##' @author Jason Vander Woude and Nathan Ryder
 ValidatePreferences <- function(prefs) {
-    if (!inhereits(prefs, "prefs")) {
+    if (!inherits(prefs, "prefs")) {
         stop("prefs must be of class 'prefs'")
     }
     if (length(parents) != 2) {
-        stop("exaclty 2 parents must be specified")
-    }
-    if (prefs$states != length(parents) + 1) {
-        stop("illegal number of states")
+        stop("exactly 2 parents must be specified")
     }
     if (!is.logical(resolve.conflicts)) {
         stop("resolve.conflicts must be of type logical")
@@ -802,7 +797,29 @@ ValidatePreferences <- function(prefs) {
     if (!is.logical(recomb.double)) {
         stop("recomb.double must be of type logical")
     }
-    ## TODO
+    if (!(0 <= read.err && read.err < 1) ||
+        !(0 <= genotype.err && genotype.err < 1) ||
+        !(0 <= recomb.err && recomb.err < 1)) {
+        stop("error values must be between 0 and 1")
+    }
+    if (!is.numeric(recomb.dist) || !(recomb.dist > 0)) {
+        stop("recombination distance must be a number greater than 0")
+    }
+    if (!is.numeric(min.markers) || !(min.markers >= 1)) {
+        stop("min.markers must be a number greater than or equal to 1")
+    }
+    if (prefs$states != length(parents) + 1) {
+        stop("illegal number of states")
+    }
+    if (!is.logical(quiet)) {
+        stop("quiet must be of type logical")
+    }
+    if (!is.logical(parallel)) {
+        stop("parallel must be of type logical")
+    }
+    if (!is.integer(cores) || !(cores >= 1)) {
+        stop("cores should be an integer greater than or equal to 1")
+    }
 }
 
 
