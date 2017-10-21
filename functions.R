@@ -205,7 +205,7 @@ Increment <- function(x, max, min = 1) {
 ##' @param file the path to the vcf file
 ##' @return the vcf object created from the file
 ##' @author Jason Vander Woude
-VCF <- function(file) {
+VCF <- function(file, ADtoGT=TRUE) {
     ## TODO(Jason): add filtering step to remove non-biallelic calls or talk to
     ## Jesse about how those should be handled
 
@@ -232,7 +232,10 @@ VCF <- function(file) {
     field.names <- str.split(formatExample, ":")
 
     ## Verify that required fields are in the VCF
-    required.fields <- c("GT", "AD")  # could also use GQ
+    if (ADtoGT):
+        required.fields <- "AD"  # could also use GQ
+    else:
+        required.fields <- c("GT", "AD")  # could also use GQ
     if (!all(required.fields %in% field.names)) {
         stop(paste("VCF file does not contain all required fields.",
                    "Required fields are", toString(required.fields)))
@@ -278,17 +281,21 @@ VCF <- function(file) {
                             rownames(samples)[r], " for variant ", colnames(samples)[c]))
             }
 
-            ## Separate out GT field and split it into two calls
-            ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
-            ret.val.gt <- gsub("\\|", "/", ret.val.gt)
-            ret.val.gt <- as.numeric(str.split(ret.val.gt, "/"))
-            if (length(ret.val.gt) > 2) {
-                stop(paste0("There are more than two genotype calls at ",
-                            rownames(samples)[r], " for variant ", colnames(samples)[c]))
-            }
-            if (length(ret.val.gt) < 2) {
-                stop(paste0("There are less than two genotype calls at ",
-                            rownames(samples)[r], " for variant ", colnames(samples)[c]))
+            if (ADtoGT) {
+                ret.val.gt <- GenotypeFromDepth(ret.val.ad)
+            } else {
+                ## Separate out GT field and split it into two calls
+                ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
+                ret.val.gt <- gsub("\\|", "/", ret.val.gt)
+                ret.val.gt <- as.numeric(str.split(ret.val.gt, "/"))
+                if (length(ret.val.gt) > 2) {
+                    stop(paste0("There are more than two genotype calls at ",
+                                rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                }
+                if (length(ret.val.gt) < 2) {
+                    stop(paste0("There are less than two genotype calls at ",
+                                rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                }
             }
 
             vcf$AD[r, c, ] <- ret.val.ad
@@ -751,6 +758,27 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## heterozygous, or unknown. Now the entries will be converted to 0
 
     full.path  # implicit return
+}
+
+
+GenotypeFromDepth <-  function(allelic.depths) {
+    ad <- allelic.depths
+    ## TODO(Jason): add options for read error and genotyping error this. I'm
+    ## not sure if that should be a required feature of this fuction or another
+    ## function
+    if (length(ad) != 2) {
+        stop("GenotypeFromDepth does not support non-biallelic reads")
+    }
+    if (all(ad == 0)) {
+        genotype <- c(NA, NA)
+    } else if (all(ad != 0)) {
+        genotype <- c(0, 1)
+    } else if (ad[1] == 0) {
+        genotype <- c(1, 1)
+    } else {  # ad[2] == 0
+        genotype <- c(0, 0)
+    }
+    genotype  # implicit return
 }
 
 
