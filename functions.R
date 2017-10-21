@@ -62,7 +62,7 @@ generatePath <- function(path.tracker, boolean.indices) {
         path[i] <- sum(powers[boolean.indices])
         slice <- path.tracker[, i, ]
         slice.optimal <- slice[boolean.indices, , drop=F]
-        boolean.indices <- apply(slice.optimal, 2, vec.or)
+        boolean.indices <- as.logical(apply(slice.optimal, 2, vec.or))
     }
     path  # return path
 }
