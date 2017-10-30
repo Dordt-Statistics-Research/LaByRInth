@@ -233,7 +233,6 @@ VCF <- function(file, prefs) {
     vcf <- list()
     class(vcf) <- "vcf"
 
-    writeLines("Reading vcf file")
     vcf$variants <- readLines(file)
     isComment <- sapply(vcf$variants, function(line){substr(line,1,1) == "#"})
 
@@ -277,7 +276,6 @@ VCF <- function(file, prefs) {
     vcf$chrom.names <- unique(vcf$variants[, "CHROM"])
 
     ## AD and GT section
-    writeLines("Converting genotype and allelic depth data")
     ## Third dim = 2 because all sites must be biallelic
     vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
     vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
@@ -541,30 +539,16 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 ## TODO(Jason): Allow user to spefify threshold of probability to call a
 ## genotype without haplotype information. E.g. if there is not good
 ## TODO(Jason): Write a vcf cleaning/filtering function that both writes out the
-## cleaned vcf to disk and return the object.
-LabyrinthImpute <- function(file, parents) {
-    require(parallel)
-
-    prefs <- InitializePreferences()
-    prefs$parents <- parents
-
-    LabyrinthImputeHelper(VCF(file), prefs)
-}
-
-
-## TODO(Jason): Remove LabyrinthImputeHelper
 ## TODO(Jason): Save rds version of file to impute again??
-## TODO(Jason): Instead of printing the large table can I do a progress bar one
-## step at a time?
-LabyrinthImputeHelper <- function(vcf, prefs) {
+LabyrinthImpute <- function(file, parents, prefs=NULL) {
     start.time <- Sys.time()
+    pseudo.start.time <- start.time
 
-    if (!inherits(vcf, "vcf")) {
-        stop("vcf must be of class 'vcf'")
+    if (is.null(prefs)) {
+        prefs <- GetDefaultPreferences()
     }
-    if (!inherits(prefs, "prefs")) {
-        stop("prefs must be of class 'prefs'")
-    }
+
+    ValidatePreferences(prefs)
 
     ## Determine whether to run in parallel and how many cores to use
     if (prefs$parallel) {
@@ -582,19 +566,6 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
         }
     }
 
-    ## TODO(Jason): don't impute the parents
-
-    chroms <- vcf$chrom.names
-    variants <- vcf$variant.names
-    parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
-
-    ## Console output code
-    ## TODO(Jason): modify output to reflect parents not being imputed
-    n.chrom <- length(chroms)
-    n.variants <- length(variants)
-    n.sites <- nrow(parent.geno)
-    prefs$n.jobs <- n.variants * n.chrom
-
     writeLines("\n")
     writeLines("+---------------------------------------------------------------------+")
     writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation              |")
@@ -604,16 +575,36 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
     writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
     writeLines("+---------------------------------------------------------------------+")
     writeLines("")
-    writeLines(paste0(" *  Running in ", ifelse(prefs$parallel, "parallel", "serial")))
+    writeLines(paste0(" *  Running in ", ifelse(prefs$parallel,
+               paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
+    writeLines(paste0(" *  Loading VCF file ", file))
+
+    vcf <- VCF(file, prefs)
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
+
+    chroms <- vcf$chrom.names
+    variants <- vcf$variant.names
+    parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
+    n.chrom <- length(chroms)
+    n.variants <- length(variants)
+    n.sites <- nrow(parent.geno)
+    prefs$n.jobs <- n.variants * n.chrom
+
+    ## TODO(Jason): modify output to reflect parents not being imputed
     writeLines(paste0(" *  Imputing ",
-                      n.variants, " variants at ",
+                      (n.variants - 2), " variants at ",  # parents aren't imputed
                       n.chrom, " chromosomes (",
                       n.sites, " sites)"))
     writeLines(paste0(" *  ", prefs$n.jobs,
                       " imputations will run (",
-                      n.variants, " x ", n.chrom, ")"))
+                      (n.variants - 2), " x ", n.chrom, ")"))  # no parents
 
-    ## Code from https://stackoverflow.com/questions/27726134/
+    ## Progress monitor code from https://stackoverflow.com/questions/27726134/
     ## how-to-track-progress-in-mclapply-in-r-in-parallel-package
     ## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
     ## in the progress.env environment
@@ -635,17 +626,25 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
 
     colnames(result) <- variants
     rownames(result) <- rownames(parent.geno)
-    writeLines(" *  Results imputed")
+
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  Imputation completed in ", round(runtime, 2), " ", units, "\n"))
 
     if (prefs$write) {
-        ## TODO(Jason): add comment to header about LaByRInth imputation
-
         ## Replace spaces and colons in the date with dashes
-        vcf.out <- paste0("../vcf_files/LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
-        writeLines(paste0(" *  Writing output to ", vcf.out))
+        if (is.null(prefs$out.file)) {
+            prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
+        } else {
+            prefs$out.file <- make.names(prefs$out.file)
+        }
+        writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
         ## TODO(Jason): don't use sink()
-        sink(vcf.out)
+        sink(prefs$out.file)
         writeLines(vcf$header[1])  # Add header
         writeLines("##LaByRInth=<ID=Imputation,Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">")
         writeLines("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
@@ -735,12 +734,18 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
             }
         }
         sink()  # turn off sink
+        end.time <- Sys.time()
+        time <- difftime(end.time, pseudo.start.time)
+        pseudo.start.time <- end.time
+        runtime <- as.numeric(time)
+        units <- attr(time, "units")
+        writeLines(paste0(" *  File write completed in ", round(runtime, 2), " ", units, "\n"))
     }
     end.time <- Sys.time()
     time <- difftime(end.time, start.time)
     runtime <- as.numeric(time)
     units <- attr(time, "units")
-    writeLines(paste(" *  Completed in", round(runtime, 2), units, "\n\n"))
+    writeLines(paste0(" *  LaByRInth completed in ", round(runtime, 2), " ", units, "\n\n"))
     invisible(result)  # implicit return
 }
 
