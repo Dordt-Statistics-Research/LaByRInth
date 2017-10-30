@@ -738,12 +738,12 @@ LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
 
     chroms <- vcf$chrom.names
 
-    do.call(c, prefs$lapply(chroms, function(chrom) {
+    do.call(c, prefs$lapply(chroms, function(chrom) {  # c is the concatenate R function
         result <- LabyrinthImputeChrom(vcf, sample, chrom, parent.geno, prefs)
-        writeBin(1/prefs$n.jobs, prefs$fifo)
+        writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
         if (!prefs$parallel) {  # if running in serial mode
             prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
-}  # else the forked process handles this
+        }  # else the forked process handles this
         result  # implicit return
     }, mc.preschedule=FALSE, mc.cores=prefs$cores))
 }
