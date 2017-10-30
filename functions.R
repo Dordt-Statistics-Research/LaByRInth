@@ -37,6 +37,27 @@ vec.or <- function(vec) {
 }
 
 
+vcf.to.numeric <- function(str.vec) {
+    sapply(str.vec, function(str) {
+        if (check.int(str)) {
+            as.numeric(str)
+        } else if (str == ".") {
+            NA_integer_
+        } else {
+            stop("Attempted to convert invalid VCF string")
+        }
+    })
+}
+
+
+## A way to check if a string contains only numeric characters. Code comes from
+## stackoverflow.com/questions/13301437/how-to-check-if-the-value-is-numeric
+check.int <- function(vec){
+    sapply(vec, function(N) {
+        !length(grep("[^[:digit:]]", as.character(N)))})
+}
+
+
 ##' Generate a path from a path tracker
 ##'
 ##' Given a path tracker (which is a specific type of array produced by viterbi
@@ -271,7 +292,7 @@ VCF <- function(file, ADtoGT=TRUE) {
         }
         for (c in 1:n.variants) {
             ## Separate out AD field and split it into two read depths
-            ret.val.ad <- as.numeric(str.split(
+            ret.val.ad <- vcf.to.numeric(str.split(
                 str.split(samples[r, c], ":")[field.indices["AD"]], ","))
             if (length(ret.val.ad) > 2) {
                 stop(paste0("There are more than two observed alleles at ",
@@ -288,7 +309,7 @@ VCF <- function(file, ADtoGT=TRUE) {
                 ## Separate out GT field and split it into two calls
                 ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
                 ret.val.gt <- gsub("\\|", "/", ret.val.gt)
-                ret.val.gt <- as.numeric(str.split(ret.val.gt, "/"))
+                ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
                 if (length(ret.val.gt) > 2) {
                     stop(paste0("There are more than two genotype calls at ",
                                 rownames(samples)[r], " for variant ", colnames(samples)[c]))
