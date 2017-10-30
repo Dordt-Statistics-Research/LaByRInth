@@ -226,7 +226,7 @@ Increment <- function(x, max, min = 1) {
 ##' @param file the path to the vcf file
 ##' @return the vcf object created from the file
 ##' @author Jason Vander Woude
-VCF <- function(file, ADtoGT=TRUE) {
+VCF <- function(file, prefs) {
     ## TODO(Jason): add filtering step to remove non-biallelic calls or talk to
     ## Jesse about how those should be handled
 
@@ -253,7 +253,7 @@ VCF <- function(file, ADtoGT=TRUE) {
     field.names <- str.split(formatExample, ":")
 
     ## Verify that required fields are in the VCF
-    if (ADtoGT) {
+    if (prefs$use.only.ad) {
         required.fields <- "AD"  # could also use GQ
     } else {
         required.fields <- c("GT", "AD")  # could also use GQ
@@ -303,7 +303,7 @@ VCF <- function(file, ADtoGT=TRUE) {
                             rownames(samples)[r], " for variant ", colnames(samples)[c]))
             }
 
-            if (ADtoGT) {
+            if (prefs$use.only.ad) {
                 ret.val.gt <- GenotypeFromDepth(ret.val.ad)
             } else {
                 ## Separate out GT field and split it into two calls
@@ -930,6 +930,8 @@ ValidatePreferences <- function(prefs) {
     }
     if (!is.logical(parallel)) {
         stop("parallel must be of type logical")
+    if (!is.logical(prefs$use.only.ad) || is.na(prefs$use.only.ad)) {
+        stop("'use.only.ad' must be a non-NA logical")
     }
     if (!is.integer(cores) || !(cores >= 1)) {
         stop("cores should be an integer greater than or equal to 1")
