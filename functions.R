@@ -135,13 +135,6 @@ viterbi <- function(probs, dists, prefs) {
                     probs.tracker[i] + log(transProb(i, state, dist, prefs))
                 })
 
-                ## which partial paths have the highest probability of moving to state
-                ## 'state'? The value that is saved at this site in the
-                ## paths.tracker is the value whose binary representation
-                ## indicates which of the states at the previous sites had paths
-                ## that will extend to this site and be optimal. we need to use
-                ## -1 to convert from R's 1-based indexing to the more standard
-                ## and mathematical 0-based indexing
                 optimal.indices <- extension.probs==max(extension.probs)
                 paths.tracker[state, site, ] <<- optimal.indices # use <<- to assign outside of scope
                 max(extension.probs) + log(probs[site, state])  # return new probability
