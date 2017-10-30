@@ -849,11 +849,11 @@ GenotypeFromDepth <-  function(allelic.depths) {
     ## not sure if that should be a required feature of this fuction or another
     ## function
     #####browser(expr=length(ad)!=2)
-    if (length(ad) != 2 && !is.na(ad)) {
+    if (length(ad) != 2 && !all(is.na(ad))) {
         stop("GenotypeFromDepth does not support non-biallelic reads")
     }
 
-    if (is.na(ad)) {
+    if (all(is.na(ad))) {
         genotype <- NA  # Why am I not using c(NA, NA) instead of NA
     } else if (all(ad == 0)) {
         genotype <- NA  # Why am I not using c(NA, NA) instead of NA
