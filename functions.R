@@ -99,7 +99,7 @@ viterbi <- function(probs, dists, prefs) {
     ## This is what the generatePath function will need
 
     paths.tracker[, 1, ] <- diag(TRUE, nstates)
-  
+
     if (path.size != 1) {  # if the path size is 1 just use the emission probs
         for (site in 2:path.size) {  # for each site in the path
 
@@ -122,7 +122,7 @@ viterbi <- function(probs, dists, prefs) {
                 ## -1 to convert from R's 1-based indexing to the more standard
                 ## and mathematical 0-based indexing
                 optimal.indices <- extension.probs==max(extension.probs)
-                paths.tracker[state, site, ] <<- optimal.indices
+                paths.tracker[state, site, ] <<- optimal.indices # use <<- to assign outside of scope
                 max(extension.probs) + log(probs[site, state])  # return new probability
             })
         }
@@ -357,9 +357,16 @@ ResolveHomozygotes <- function(vcf, samples) {
     ## sites in the sample should be homozygous and different from each
     ## other. Right now we are turning some of the sites to NA's, but we aren't
     ## doing that for both parents simultaneously
+
     ## TODO(Jason): We can set the parents to NA now, but they should be set
     ## back to the original call before turning the children imputation states
     ## back into genotype calls
+
+    ## TODO(Jason): This is the step where we are making an absolute claim on
+    ## the true genotype of the parents which means we should be accounting for
+    ## a possible read error here. If the allelic depths are 1,100 for example,
+    ## we are currently claiming that the site is heterozygous when in reality
+    ## it is probably homozygous with a read error
     genotype <- Get(vcf, "GT", samples)
     allele.counts <- Get(vcf, "AD", samples, vcf$chrom.names)
     ret.val <- genotype[, , 1]  # initilize to first slice in 3rd dim
@@ -411,8 +418,7 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
     class(ret.val) <- "prob"
 
     for (row in 1:nrow(ret.val)) {
-
-        ## the '1' in [i, 1, ] is because there is only 1 sample
+        ## the '1' in [i, 1, ] is because there is only 1
         geno.calls <- gt[row, 1, ]
         allele.counts <- ad[row, 1, ]
 
@@ -467,6 +473,10 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
             ## Assumes biallelic TODO(Jason): make more general by creating
             ## alt.prob on the fly for each alternate if the site is not
             ## biallelic?
+
+            ## TODO(Jason): This seems incorrect. If the parent is unknown (NA)
+            ## then why should the probability of being that parent be the max
+            ## of alt.prob and ref.prob?
             for (state in 1:(prefs$states - 1)) {
                 if (is.na(parent.geno[row, state])) {
                     ret.val[row, state] <- normalize(max(alt.prob, ref.prob))
@@ -555,6 +565,7 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
     parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
 
     ## Console output code
+    ## TODO(Jason): modify output to reflect parents not being imputed
     n.chrom <- length(chroms)
     n.variants <- length(variants)
     n.sites <- nrow(parent.geno)
@@ -587,7 +598,7 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
     assign("progress", 0.0, envir=progress.env)
     prefs$prog.env <- progress.env
 
-        ## Actually run the imputation
+    ## Actually run the imputation
     result <- do.call(cbind,
                       prefs$lapply(
                           variants, function(variant) {
@@ -718,8 +729,11 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         as.numeric(str.split(name, ":")[2])
     })
 
+    ## This is the sites where both parents were called (not NA) and where they
+    ## are different from each other. It is a boolean vector indicating whether
+    ## the site is relevant, thus the length is the same as the length of the
+    ## final imputation for this sample and chromosome
     relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
-    ## <- GetRelevantProbabiltiesIndex(emission.probs)
 
     ## If there are not enough markers according to user preference (or if there
     ## are 0), then do not do the imputation and return a path of NA's of the
@@ -753,10 +767,22 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         }
     }
 
-    ## At this stage full.path has entries of 1, 2, 3, or NA which indicates
-    ## respectively if a site is homozygous parent 1, homozygous parent 2,
-    ## heterozygous, or unknown. Now the entries will be converted to 0
+    ## At this stage full.path has entries of 1 through 7, or NA which indicates
+    ## the call at that site according to the following table
+    ## 1: Homozygous and the allele is the same as parent 1
+    ## 2: Homozygous and the allele is the same as parent 2
+    ## 4: Heterozygous
+    ## -------------------------------------------------------------------------
+    ## In the same way that binary counting works, we can use these 3 'basis'
+    ## values to explain what other numbers indicate. This is shown below
+    ## -------------------------------------------------------------------------
+    ## 3 (1+2): Homozygous, but the actual allele is unknown
+    ## 5 (1+4): One of the alleles matches parent 1, but the other is unknown
+    ## 6 (2+4): One of the alleles matches parent 2, but the other is unknown
+    ## 7 (1+2+4): Nothing is known about the alleles
+    ## NA: The site was not imputed
 
+    #####browser()
     full.path  # implicit return
 }
 
