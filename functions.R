@@ -61,7 +61,7 @@ check.int <- function(vec){
 ##' Generate a path from a path tracker
 ##'
 ##' Given a path tracker (which is a specific type of array produced by viterbi
-##'     algorithm) and indices representing the final hidden state of the path,
+##'     algorithm) and indices representing the final hidden states of the path,
 ##'     compute the paths that ended in those states. The returned path will be
 ##'     a vector of integers where integers which are powers of 2 represent the
 ##'     the state with the 0-based index which is the log_2 of the number.
@@ -85,14 +85,16 @@ generatePath <- function(path.tracker, boolean.indices) {
         slice.optimal <- slice[boolean.indices, , drop=F]
         boolean.indices <- as.logical(apply(slice.optimal, 2, vec.or))
     }
-    path  # return path
+    path  # implicitly return path
 }
 
 
 ##' Find the most probable paths using the viterbi algorithm
 ##'
 ##' See http://homepages.ulb.ac.be/~dgonze/TEACHING/viterbi.pdf for details
-##'     about the viterbi algorithm and understanding this implementation
+##'     about the viterbi algorithm and understanding this implementation. This
+##'     imlementation is designed to handle multiple paths with identical
+##'     probabilities.
 ##' @title
 ##' @param probs emission probabilities
 ##' @param dists vector of distances between sites
@@ -106,7 +108,7 @@ viterbi <- function(probs, dists, prefs) {
     ## 3D array
     paths.tracker <- array(NA, dim=c(nstates, path.size, nstates))
 
-    ## This will keep track of the overall probabilites of each of the {nstates}
+    ## This will keep track of the overall probabilities of each of the {nstates}
     ## final paths, so that the probability of the final paths do not have to be
     ## computed again. The probabilities are initialized to the emission
     ## probabilities of the first site of the probs matrix which is the first
@@ -118,7 +120,6 @@ viterbi <- function(probs, dists, prefs) {
 
     ## Hard code the first column to the vector 1,2,...,nstates as an index
     ## This is what the generatePath function will need
-
     paths.tracker[, 1, ] <- diag(TRUE, nstates)
 
     if (path.size != 1) {  # if the path size is 1 just use the emission probs
@@ -130,14 +131,15 @@ viterbi <- function(probs, dists, prefs) {
             probs.tracker <- sapply(1:nstates, function(state) {
 
                 extension.probs <- sapply(1:nstates, function(i) {
-                    ## Probability of being at state i before and transitioning to
-                    ## the 'state' state
+                    ## log of the probability of being at state i before and
+                    ## transitioning to the 'state' state
                     probs.tracker[i] + log(transProb(i, state, dist, prefs))
                 })
 
                 optimal.indices <- extension.probs==max(extension.probs)
-                paths.tracker[state, site, ] <<- optimal.indices # use <<- to assign outside of scope
-                max(extension.probs) + log(probs[site, state])  # return new probability
+                ## use <<- to assign to a variable outside the current scope
+                paths.tracker[state, site, ] <<- optimal.indices
+                max(extension.probs) + log(probs[site, state])  # return prob
             })
         }
     }
@@ -145,7 +147,7 @@ viterbi <- function(probs, dists, prefs) {
     ## The code above has already computed the optimal path, but that
     ## information is encoded within the paths.tracker matrix and needs to be
     ## extracted. That is what generatePath will do when passed the path.tracker
-    ## matrix and the index of the optimal path.
+    ## matrix and the indices of the optimal path.
     generatePath(paths.tracker, probs.tracker==max(probs.tracker))  # return best path
 }
 
@@ -153,7 +155,7 @@ viterbi <- function(probs, dists, prefs) {
 ##' Find the transission probability between hidden states
 ##'
 ##' Use the equations specified in the LB-Impute paper to compute the
-##'     transmission probability between two sites
+##'     transmission probability between two sites.
 ##' @title
 ##' @param a first site
 ##' @param b second site
@@ -176,44 +178,9 @@ transProb <- function(a, b, dist, prefs) {
 }
 
 
-##' Increment a vector as if it were the digits of a number
-##'
-##' Given a vector, try to increment the last index by 1 unless that would cause
-##'     it to be greater than max in which case the last index will be set to
-##'     min and the previous index incremented in this same manner.
-##' @title
-##' @param x the vector
-##' @param max the maximum value that any element should have
-##' @param min the minimum value that any element should have
-##' @return the incremented vector
-##' @author Jason Vander Woude
-Increment <- function(x, max, min = 1) {
-    if (min >= max) {
-        stop("max must be greater than min")
-    }
-    if (any(x > max)) {
-        stop("x has elements greater than max")
-    }
-    if (any(x < min)) {
-        stop("x has elements less than min")
-    }
-
-    i <- length(x)
-
-    if (all(x == max)) {  # all elements of x are equal to max
-        x <- rep(min, i)  # return a list of min's
-    } else if (x[i] < max) {  # typical case
-        x[i] <- x[i] + 1  # increase the last element
-    } else {  # last element is max
-        x <- c(increment(x[-i], max, min), min)
-    }
-    x
-}
-
-
 ##' Extract the information from a vcf file and save it as a vcf object
 ##'
-##' The returned vcf object will have the following variants, header.lines,
+##' The returned vcf object will have the following: variants, header.lines,
 ##'     variant.names, chrom.names, GT, AD.
 ##' @title
 ##' @param file the path to the vcf file
@@ -465,7 +432,7 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
                 alt.calls <- 0
             }
 
-            ## probability constraints from LB-Impute original
+            ## probability constraints from original LB-Impute code
             max.allowed <- 1 - (2 * prefs$genotype.err)
             min.allowed <- prefs$genotype.err
 
@@ -511,7 +478,6 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
 
 ## Determine which rows are real calls
 GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
-    #####browser()
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
@@ -560,13 +526,14 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
     }
 
     writeLines("\n")
-    writeLines("+---------------------------------------------------------------------+")
-    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation              |")
-    writeLines("| Copyright 2017 Jason Vander Woude, Nathan Ryder                     |")
-    writeLines("| Licensed under the Apache License, Version 2.0                      |")
-    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
-    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
-    writeLines("+---------------------------------------------------------------------+")
+    writeLines("+------------------------------------------------------------------------+")
+    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation                 |")
+    writeLines("| Copyright 2017 Jason Vander Woude, Nathan Ryder                        |")
+    writeLines("| Licensed under the Apache License, Version 2.0                         |")
+    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth            |")
+    writeLines("| Based on LB-Impute: https://github.com/dellaporta-laboratory/LB-Impute |")
+    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187)    |")
+    writeLines("+------------------------------------------------------------------------+")
     writeLines("")
     writeLines(paste0(" *  Running in ", ifelse(prefs$parallel,
                paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
