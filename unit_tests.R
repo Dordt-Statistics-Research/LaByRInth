@@ -16,7 +16,7 @@
     ## Logistics
     prefs$quiet             <- FALSE
     prefs$cores             <- 4
-    prefs$parallel          <- FALSE
+    prefs$parallel          <- TRUE
     prefs$write             <- TRUE
 
 ## end prefs
@@ -57,7 +57,8 @@ array(reorder(alphabet, 3), dim=c(2,2,3))
 
 
 ## vcf
-vcfobj <- VCF(file="../LakinFuller_GBSv2_20170509.vcf")
+#vcfobj <- VCF(file="../LakinFuller_GBSv2_20170509.vcf")
+vcfobj <- VCF(file="../vcf_files/vcf25x2.vcf")
 resolved.parents <- ResolveHomozygotes(vcfobj, test.prefs$parents)
 parent.6b.depths <- Get(vcfobj, "AD", test.prefs$parents, "6B")
 lakin.6b.depths <- Get(vcfobj, "AD", "LAKIN", "6B")
@@ -185,8 +186,59 @@ generatePath(path.tracker, c(F,F,T))
 ## 5: one of the alleles is from parent 1 and the other is unknown
 ## 6: one of the alleles is form parent 2 and the other is unknown
 ## 7: unknown (./.)
-Display(list(test.impute[, 1]))
+Display(list( test.impute[, 1]))
 writeLines("\n")
 Display(list(test.impute[, 2]))
 writeLines("\n")
 Display(list(test.impute[, 3]))
+
+
+
+
+## Small Test Imputation
+options(width = 160)
+
+#### Prefs initialization
+prefs <- list()
+class(prefs)            <- "prefs"
+
+#### Algorithm parameters
+prefs$parents           <- c("LAKIN", "FULLER")
+prefs$resolve.conflicts <- FALSE
+prefs$recomb.double     <- FALSE
+prefs$read.err          <- 0.05
+prefs$genotype.err      <- 0.05
+prefs$recomb.err        <- 0.05
+prefs$recomb.dist       <- 100000
+prefs$min.markers       <- 1
+prefs$states            <- length(prefs$parents) + 1
+
+#### Logistics
+prefs$quiet             <- FALSE
+prefs$cores             <- 4
+prefs$parallel          <- TRUE
+prefs$write             <- TRUE
+
+#### Run the imputation
+#vcf.obj <- VCF(file="../vcf_files/vcf_5x1.vcf")
+#vcf.obj <- VCF(file="../vcf_files/vcf_25x1_simple_sequential.vcf")
+#vcf.obj <- VCF(file="../vcf_files/vcf_25x1_simple_magnitude_sequential.vcf")
+#vcf.obj <- VCF(file="../vcf_files/vcf_25x1_simple_magnitude_sequential_lakin_misread.vcf")
+#vcf.obj <- VCF(file="../vcf_files/sandesh_lakin_fuller_clean.vcf")
+#vcf.obj <- VCF(file="../vcf_files/vcf_25x2.vcf")
+vcf.obj <- VCF(file="../vcf_files/sandesh_lakin_fuller_clean_5_variant.vcf")
+test.impute <- LabyrinthImputeHelper(vcf.obj, prefs)
+
+parent.geno <- ResolveHomozygotes(vcf.obj, prefs$parents)
+sample <- "U6202-080"
+chrom <- "1A"
+data <- Get(vcf.obj, "GT", sample, chrom)
+
+lakin <- Get(vcf.obj, "GT", "LAKIN", chrom)
+fuller <- Get(vcf.obj, "GT", "FULLER", chrom)
+
+test.chrom.impute <- LabyrinthImputeChrom(vcf.obj, sample, chrom, parent.geno, prefs)
+
+Display(list(parent.geno[,"LAKIN"]))
+Display(list(parent.geno[,"FULLER"]))
+Display(list(test.chrom.impute))
