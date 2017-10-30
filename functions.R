@@ -612,16 +612,19 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
 
     colnames(result) <- variants
     rownames(result) <- rownames(parent.geno)
+    writeLines(" *  Results imputed")
 
     if (prefs$write) {
-        ## Replace spaces and colons with dashes
-        vcf.out <- paste0("../LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
-        writeLines(" *  Results imputed")
+        ## TODO(Jason): add comment to header about LaByRInth imputation
+
+        ## Replace spaces and colons in the date with dashes
+        vcf.out <- paste0("../vcf_files/LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
         writeLines(paste0(" *  Writing output to ", vcf.out))
 
         ## TODO(Jason): don't use sink()
         sink(vcf.out)
         writeLines(vcf$header[1])  # Add header
+        writeLines("##LaByRInth=<ID=Imputation,Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">")
         writeLines("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
         names <- vcf$header[length(vcf$header)]
         writeLines(names)  # Add header
@@ -665,7 +668,35 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
                 } else if (call == 4) {
                     text <- "0/1"
                 } else if (call %in% c(3,5,6,7)) {
-                    text <- "./."
+                    if (call == 3) {
+                        text <- "X/X"
+                    } else if (call == 5) {
+                        parent.call <- parent.geno[i, 1]  # 6 indicates parent 1
+                        if (is.na(parent.call)) {
+                            ## TODO(Jason): I'm not sure what to do here
+                            text <- "./."
+                        } else if (parent.call == 0) {
+                            text <- "0/."
+                        } else if (parent.call == 1) {
+                            text <- "./1"
+                        } else {
+                            stop("Unexpected imputation result for value 5")
+                        }
+                    } else if (call == 6) {
+                        parent.call <- parent.geno[i, 2]  # 6 indicates parent 2
+                        if (is.na(parent.call)) {
+                            ## TODO(Jason): I'm not sure what to do here
+                            text <- "./."
+                        } else if (parent.call == 0) {
+                            text <- "0/."
+                        } else if (parent.call == 1) {
+                            text <- "./1"
+                        } else {
+                            stop("Unexpected imputation result for value 6")
+                        }
+                    } else if (call == 7) {
+                        text <- "?/?"
+                    }
                     ## writeLines(" *  Optimal path resolution not yet implemented. Calling as ./.")
                 } else {
                     stop(paste("Invalid genotype call:", call))
