@@ -232,10 +232,11 @@ VCF <- function(file, ADtoGT=TRUE) {
     field.names <- str.split(formatExample, ":")
 
     ## Verify that required fields are in the VCF
-    if (ADtoGT):
+    if (ADtoGT) {
         required.fields <- "AD"  # could also use GQ
-    else:
+    } else {
         required.fields <- c("GT", "AD")  # could also use GQ
+    }
     if (!all(required.fields %in% field.names)) {
         stop(paste("VCF file does not contain all required fields.",
                    "Required fields are", toString(required.fields)))
@@ -453,7 +454,7 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
             }
 
             ## probability constraints from LB-Impute original
-            max.allowed <- 1 - (2 * prefs$genotype.err)  
+            max.allowed <- 1 - (2 * prefs$genotype.err)
             min.allowed <- prefs$genotype.err
 
             ## Calculate the emission probabilities for this site
