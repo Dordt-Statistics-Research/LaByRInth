@@ -868,7 +868,7 @@ GenotypeFromDepth <-  function(allelic.depths) {
 }
 
 
-InitializePreferences <- function() {
+GetDefaultPreferences <- function() {
     prefs <- list()
     class(prefs)            <- "prefs"
 
@@ -882,14 +882,25 @@ InitializePreferences <- function() {
     prefs$recomb.dist       <- 100000
     prefs$min.markers       <- 1
     prefs$states            <- length(prefs$parents) + 1
+    prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
+                                     # AD info
+    prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
+                                        # VCF file
+    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                     # switched in the output so that parent 1
+                                     # is always reference and parent 2 is
+                                     # always alternate
 
     ## Logistics
     prefs$quiet             <- FALSE
     prefs$cores             <- 4
-    prefs$parallel          <- FALSE
+    prefs$parallel          <- TRUE
+    prefs$write             <- TRUE
+    prefs$out.file          <- NULL
 
     prefs  # implicit return
 }
+
 
 ##' Checking preferences for the correct variable type
 ##'
@@ -902,39 +913,45 @@ ValidatePreferences <- function(prefs) {
     if (!inherits(prefs, "prefs")) {
         stop("prefs must be of class 'prefs'")
     }
-    if (length(parents) != 2) {
+    if (length(prefs$parents) != 2) {
         stop("exactly 2 parents must be specified")
     }
-    if (!is.logical(resolve.conflicts)) {
-        stop("resolve.conflicts must be of type logical")
+    if (!is.logical(prefs$resolve.conflicts)) {
+        stop("'resolve.conflicts' must be of type logical")
     }
-    if (!is.logical(recomb.double)) {
-        stop("recomb.double must be of type logical")
+    if (!is.logical(prefs$recomb.double)) {
+        stop("'recomb.double' must be of type logical")
     }
-    if (!(0 <= read.err && read.err < 1) ||
-        !(0 <= genotype.err && genotype.err < 1) ||
-        !(0 <= recomb.err && recomb.err < 1)) {
-        stop("error values must be between 0 and 1")
+    if (!(0 <= prefs$read.err && prefs$read.err < 1) ||
+        !(0 <= prefs$genotype.err && prefs$genotype.err < 1) ||
+        !(0 <= prefs$recomb.err && prefs$recomb.err < 1)) {
+        stop("'error' values must be between 0 and 1")
     }
-    if (!is.numeric(recomb.dist) || !(recomb.dist > 0)) {
-        stop("recombination distance must be a number greater than 0")
+    if (!is.numeric(prefs$recomb.dist) || !(prefs$recomb.dist > 0)) {
+        stop("recombination distance ('recomb.dist') must be a number greater than 0")
     }
-    if (!is.numeric(min.markers) || !(min.markers >= 1)) {
-        stop("min.markers must be a number greater than or equal to 1")
+    if (!is.numeric(prefs$min.markers) || !(prefs$min.markers >= 1)) {
+        stop("'min.markers' must be a number greater than or equal to 1")
     }
-    if (prefs$states != length(parents) + 1) {
+    if (prefs$states != length(prefs$parents) + 1) {
         stop("illegal number of states")
     }
-    if (!is.logical(quiet)) {
-        stop("quiet must be of type logical")
+    if (!is.logical(prefs$quiet)) {
+        stop("'quiet' must be of type logical")
     }
-    if (!is.logical(parallel)) {
-        stop("parallel must be of type logical")
+    if (!is.logical(prefs$parallel)) {
+        stop("'parallel' must be of type logical")
+    }
+    if (!is.numeric(prefs$cores) ||
+        !(prefs$cores >= 1) ||
+        ceiling(prefs$cores) != (prefs$cores)) {
+        stop("'cores' should be an integer greater than or equal to 1")
+    }
     if (!is.logical(prefs$use.only.ad) || is.na(prefs$use.only.ad)) {
         stop("'use.only.ad' must be a non-NA logical")
     }
-    if (!is.integer(cores) || !(cores >= 1)) {
-        stop("cores should be an integer greater than or equal to 1")
+    if (!is.logical(prefs$write) || is.na(prefs$write)) {
+        stop("'write' must be a non-NA logical")
     }
 }
 
