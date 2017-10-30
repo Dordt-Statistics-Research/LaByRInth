@@ -664,22 +664,6 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
                 if (is.na(call)) {
                     text <- "./."
                 } else if (call %in% 1:2) {
-                    ## TODO(Jason): Discuss what should be done here. Sometimes it
-                    ## will impute and say that the site is from parent 1 even
-                    ## though parent 1 is NA. Consider 1A:1159442 and U6202-088. It
-                    ## was imputed to match LAKIN, but LAKIN is NA in the
-                    ## parent.geno because LAKIN was called heterozygous
-                    ## 1/0:3,7. But U6202-088 was called 1/1:0,5 suggesting that it
-                    ## is pretty likely homozygous alternate. It seems like we
-                    ## should be utilizing this information maybe like TIGER (see
-                    ## LB-Impute paper) does. Let these calls show up in the output
-                    ## file as NA's like is being done now to see how often they
-                    ## occur. It seems like there is a lot of room for improvement
-                    ## here. We will have to look at and understand the emission
-                    ## probabilities better though. Is it valid to have sites that
-                    ## look like ./1 to represent that we confidently know what one
-                    ## of the two alleles is but not the other?
-
                     text <- ref.geno[i, call]
                 } else if (call == 4) {
                     text <- "0/1"
@@ -871,7 +855,6 @@ GetDefaultPreferences <- function() {
     class(prefs)            <- "prefs"
 
     ## Algorithm parameters
-    prefs$parents           <- c("LAKIN", "FULLER")
     prefs$resolve.conflicts <- FALSE
     prefs$recomb.double     <- FALSE
     prefs$read.err          <- 0.05
