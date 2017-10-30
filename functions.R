@@ -499,12 +499,14 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
 
 ## Determine which rows are real calls
 GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
+    #####browser()
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
     rows <- vcf$variants[, "CHROM"] %in% chromosomes
     apply(parent.geno[rows, , drop=F], 1, function(calls) {
-        !anyNA(calls)
+        ## parents should be distinct and non-NA
+        !anyNA(calls) && length(calls) == length(unique(calls))
     })
 }
 
@@ -636,7 +638,8 @@ LabyrinthImputeHelper <- function(vcf, prefs) {
         ref.geno <- Get(vcf, "GT", prefs$parents)
         ref.geno <- apply(ref.geno, 1:2, function(genotypes) {
             ## Concatenate the genotypes with a slash between
-            paste0(genotypes, collapse="/")
+            text <- paste0(genotypes, collapse="/")
+            text <- gsub("NA", ".", text)
         })
 
         for (i in 1:n.sites) {
@@ -824,11 +827,15 @@ GenotypeFromDepth <-  function(allelic.depths) {
     ## TODO(Jason): add options for read error and genotyping error this. I'm
     ## not sure if that should be a required feature of this fuction or another
     ## function
-    if (length(ad) != 2) {
+    #####browser(expr=length(ad)!=2)
+    if (length(ad) != 2 && !is.na(ad)) {
         stop("GenotypeFromDepth does not support non-biallelic reads")
     }
-    if (all(ad == 0)) {
-        genotype <- c(NA, NA)
+
+    if (is.na(ad)) {
+        genotype <- NA  # Why am I not using c(NA, NA) instead of NA
+    } else if (all(ad == 0)) {
+        genotype <- NA  # Why am I not using c(NA, NA) instead of NA
     } else if (all(ad != 0)) {
         genotype <- c(0, 1)
     } else if (ad[1] == 0) {
