@@ -189,26 +189,32 @@ transProb <- function(a, b, dist, prefs) {
 VCF <- function(file, prefs) {
     ## TODO(Jason): add filtering step to remove non-biallelic calls or talk to
     ## Jesse about how those should be handled
+    ## TODO(Jason): add stop checks throughout so that someone with a bad VCF
+    ## can identify the issue without having to understand this code
 
     vcf <- list()
     class(vcf) <- "vcf"
+    vcf$variants <- data.table::fread(file, autostart=prefs$num.head.rows)
+    colnames(vcf$variants)[1] <- "CHROM"
 
-    vcf$variants <- readLines(file)
-    isComment <- sapply(vcf$variants, function(line){substr(line,1,1) == "#"})
+    ## vcf$variants <- readLines(file)
+    ## isComment <- sapply(vcf$variants, function(line){substr(line,1,1) == "#"})
 
-    ## Remove the header, but save so it can be restored later
-    vcf$header.lines <- vcf$variants[isComment]
-    vcf$variants <- vcf$variants[!isComment]
-    ## Make table
-    vcf$variants <- do.call(rbind,
-                            lapply(vcf$variants,
-                                   function(line){str.split(line, "\t")}))
+    ## ## Remove the header, but save so it can be restored later
+    ## vcf$header.lines <- vcf$variants[isComment]
+    ## vcf$variants <- vcf$variants[!isComment]
+    ## ## Make table
+    ## vcf$variants <- do.call(rbind,
+    ##                         lapply(vcf$variants,
+    ##                                function(line){str.split(line, "\t")}))
 
-    header <- vcf$header.lines[length(vcf$header.lines)]  #get column heading
-    header <- substr(header, 2, nchar(header)) #remove leading '#'
-    colnames(vcf$variants) <- str.split(header, "\t")
+    ## header <- vcf$header.lines[length(vcf$header.lines)]  #get column heading
+    ## header <- substr(header, 2, nchar(header)) #remove leading '#'
+    ## colnames(vcf$variants) <- str.split(header, "\t")
 
-    formatExample <- vcf$variants[1, "FORMAT"]
+    ## formatExample <- vcf$variants[1, "FORMAT"]
+
+    formatExample <- vcf$variants$FORMAT[1]
     field.names <- str.split(formatExample, ":")
 
     ## Verify that required fields are in the VCF
@@ -230,18 +236,33 @@ VCF <- function(file, prefs) {
     n.sites <- nrow(vcf$variants)
 
     samples <- vcf$variants[ , (format.col + 1):ncol(vcf$variants)]
-    rownames(samples) <- paste0(vcf$variants[, "CHROM"], ":", vcf$variants[, "POS"])
+    rownames(samples) <- paste0(vcf$variants$CHROM, ":", vcf$variants$POS)
 
     vcf$variant.names <- colnames(samples)
-    vcf$chrom.names <- unique(vcf$variants[, "CHROM"])
+    vcf$chrom.names <- unique(vcf$variants$CHROM)
 
     ## AD and GT section
     ## Third dim = 2 because all sites must be biallelic
     vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
     vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
 
+    indexAD <- field.indices["AD"]
+    indexGT <- field.indices["GT"]
+
+    AD1 <- sapply(1:n.sites, function(r) {
+        if (length(str.split(vcf$variants$ALT, ",")) != 1 ) {
+            rep(NA_integer_, n.variants)
+            #writeLines(paste(" *  Removing", rownames(samples)[r]))
+        }
+        sapply(1:n.variants, function(c) {
+            
+        })
+    })
+
+
+    ## TODO(Jason): get rid of this for loop and parallelize
     for (r in 1:n.sites) {
-        if (length(str.split(vcf$variants[r, "ALT"], ",")) != 1 ) {
+        if (length(str.split(vcf$variants$ALT, ",")) != 1 ) {
             vcf$AD[r, , ] <- NA_integer_
             vcf$GT[r, , ] <- NA_integer_
             writeLines(paste(" *  Removing", rownames(samples)[r],
@@ -251,7 +272,7 @@ VCF <- function(file, prefs) {
         for (c in 1:n.variants) {
             ## Separate out AD field and split it into two read depths
             ret.val.ad <- vcf.to.numeric(str.split(
-                str.split(samples[r, c], ":")[field.indices["AD"]], ","))
+                str.split(as.character(samples[r, c]), ":")[indexAD], ","))
             if (length(ret.val.ad) > 2) {
                 stop(paste0("There are more than two observed alleles at ",
                             rownames(samples)[r], " for variant ", colnames(samples)[c]))
@@ -265,7 +286,7 @@ VCF <- function(file, prefs) {
                 ret.val.gt <- GenotypeFromDepth(ret.val.ad)
             } else {
                 ## Separate out GT field and split it into two calls
-                ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
+                ret.val.gt <- str.split(samples[r,c], ":")[indexGT]
                 ret.val.gt <- gsub("\\|", "/", ret.val.gt)
                 ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
                 if (length(ret.val.gt) > 2) {
@@ -507,6 +528,7 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
         prefs <- GetDefaultPreferences()
     }
 
+    prefs$parents <- parents
     ValidatePreferences(prefs)
 
     ## Determine whether to run in parallel and how many cores to use
@@ -817,11 +839,12 @@ GenotypeFromDepth <-  function(allelic.depths) {
 }
 
 
-GetDefaultPreferences <- function() {
+GetDefaultPreferences <- function(parents=NULL) {
     prefs <- list()
     class(prefs)            <- "prefs"
 
     ## Algorithm parameters
+    prefs$parents           <- parents
     prefs$resolve.conflicts <- FALSE
     prefs$recomb.double     <- FALSE
     prefs$read.err          <- 0.05
@@ -829,7 +852,9 @@ GetDefaultPreferences <- function() {
     prefs$recomb.err        <- 0.05
     prefs$recomb.dist       <- 100000
     prefs$min.markers       <- 1
-    prefs$states            <- length(prefs$parents) + 1
+    prefs$states            <- 3     # Algorithm currently only supports 3
+                                     # states which are homozygous parent 1 or 2
+                                     # or heterozygous
     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
                                      # AD info
     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
@@ -837,7 +862,9 @@ GetDefaultPreferences <- function() {
     prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
                                      # switched in the output so that parent 1
                                      # is always reference and parent 2 is
-                                     # always alternate
+                                        # always alternate
+    prefs$num.head.rows     <- 30    # An upper bound on the number of header
+                                     # rows in the VCF file
 
     ## Logistics
     prefs$quiet             <- FALSE
@@ -882,7 +909,7 @@ ValidatePreferences <- function(prefs) {
         stop("'min.markers' must be a number greater than or equal to 1")
     }
     if (prefs$states != length(prefs$parents) + 1) {
-        stop("illegal number of states")
+        stop(paste0("illegal number of states (", prefs$states, ")"))
     }
     if (!is.logical(prefs$quiet)) {
         stop("'quiet' must be of type logical")
@@ -900,6 +927,9 @@ ValidatePreferences <- function(prefs) {
     }
     if (!is.logical(prefs$write) || is.na(prefs$write)) {
         stop("'write' must be a non-NA logical")
+    }
+    if (!is.numeric(prefs$num.head.rows) || is.na(prefs$num.head.rows)) {
+        stop("'num.head.rows' must be a non-NA numeric")
     }
 }
 
