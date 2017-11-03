@@ -217,7 +217,8 @@ VCF <- function(file, prefs) {
 
     ## Remove the header, but save so it can be restored later
     vcf$header.lines <- vcf$variants[isComment]
-    vcf$variants <- vcf$variants[!isComment]
+    vcf$variant.lines <- vcf$variants[!isComment]
+    vcf$variants <- vcf$variant.lines
     ## Make table
     vcf$variants <- do.call(rbind,
                             lapply(vcf$variants,
