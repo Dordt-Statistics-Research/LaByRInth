@@ -712,6 +712,97 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
 }
 
 
+## TODO(Jason): add option to switch ref and alt when filtering
+LabyrinthFilter <- function(file, parents, prefs=NULL) {
+    start.time <- Sys.time()
+    pseudo.start.time <- start.time
+
+    if (is.null(prefs)) {
+        prefs <- GetDefaultPreferences()
+    }
+
+    prefs$parents <- parents
+    ValidatePreferences(prefs)
+
+    ## Determine whether to run in parallel and how many cores to use
+    if (prefs$parallel) {
+        require(parallel)
+        prefs$lapply <- function(...,
+                                 mc.preschedule=F,
+                                 mc.cores=prefs$cores) {
+            mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+        }
+    } else {
+        prefs$lapply <- function(...,
+                                 mc.preschedule=F,
+                                 mc.cores=prefs$cores) {
+            lapply(...)
+        }
+    }
+
+    print.labyrinth.header()
+
+    writeLines(paste0(" *  Running filter in ", ifelse(prefs$parallel,
+               paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
+    writeLines(paste0(" *  Loading VCF file ", file))
+
+    vcf <- VCF(file, prefs)
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
+
+    parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
+    chroms <- vcf$chrom.names
+    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chroms, parent.geno, prefs)
+    n.sites <- length(relevant.sites)
+    prefs$n.jobs <- n.sites
+
+    ## Progress monitor code from https://stackoverflow.com/questions/27726134/
+    ## how-to-track-progress-in-mclapply-in-r-in-parallel-package
+    ## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
+    ## in the progress.env environment
+    progress.env <- new.env()
+    prefs$fifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prefs$prog.env <- progress.env
+
+    if (is.null(prefs$out.file)) {
+        ## Replace spaces and colons in the date with dashes
+        prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
+    } else {
+        prefs$out.file <- make.names(prefs$out.file)
+    }
+    writeLines(paste0(" *  Writing results to ", prefs$out.file))
+
+    sink(prefs$out.file)
+    writeLines(vcf$header.lines)
+    sapply(1:n.sites, function(site.num) {
+        if (relevant.sites[site.num]) {
+            writeLines(vcf$variant.lines[site.num])
+        }
+        writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
+    })
+    close(prefs$fifo)
+    sink()  # turn off sink
+
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  Filter and file write completed in ", round(runtime, 2), " ", units, "\n"))
+
+    end.time <- Sys.time()
+    time <- difftime(end.time, start.time)
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  LaByRInth completed in ", round(runtime, 2), " ", units, "\n\n"))
+}
+
+
 LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
     ## TODO(Jason): Talk to Tintle about why the imputation looks so bad when
     ## imputing the parents. Shouldn't it be mostly correct? It is only about
