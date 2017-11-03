@@ -527,6 +527,7 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
         prefs <- GetDefaultPreferences()
     }
 
+    prefs$parents <- parents
     ValidatePreferences(prefs)
 
     ## Determine whether to run in parallel and how many cores to use
@@ -842,7 +843,7 @@ GetDefaultPreferences <- function() {
     prefs$recomb.err        <- 0.05
     prefs$recomb.dist       <- 100000
     prefs$min.markers       <- 1
-    prefs$states            <- length(prefs$parents) + 1
+    prefs$states            <- 3     # currently only support for 2 parents
     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
                                      # AD info
     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
