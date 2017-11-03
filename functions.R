@@ -578,7 +578,6 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
     n.sites <- nrow(parent.geno)
     prefs$n.jobs <- n.variants * n.chrom
 
-    ## TODO(Jason): modify output to reflect parents not being imputed
     writeLines(paste0(" *  Imputing ",
                       (n.variants - 2), " variants at ",  # parents aren't imputed
                       n.chrom, " chromosomes (",
@@ -914,7 +913,6 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## 7 (1+2+4): Nothing is known about the alleles
     ## NA: The site was not imputed
 
-    #####browser()
     full.path  # implicit return
 }
 
@@ -924,7 +922,7 @@ GenotypeFromDepth <-  function(allelic.depths) {
     ## TODO(Jason): add options for read error and genotyping error this. I'm
     ## not sure if that should be a required feature of this fuction or another
     ## function
-    #####browser(expr=length(ad)!=2)
+
     if (length(ad) != 2 && !all(is.na(ad))) {
         stop("GenotypeFromDepth does not support non-biallelic reads")
     }
