@@ -50,6 +50,25 @@ vcf.to.numeric <- function(str.vec) {
 }
 
 
+print.labyrinth.header <- function() {
+    writeLines("\n")
+    writeLines("+---------------------------------------------------------------------+")
+    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation              |")
+    writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
+    writeLines("| Licensed under the Apache License, Version 2.0                      |")
+    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
+    writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
+    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
+    writeLines("+---------------------------------------------------------------------+")
+    writeLines("")
+}
+
+
+print.labyrinth <- function(...) {
+    writeLines(paste0(" *  ", ...))
+}
+
+
 ## A way to check if a string contains only numeric characters. Code comes from
 ## stackoverflow.com/questions/13301437/how-to-check-if-the-value-is-numeric
 check.int <- function(vec){
@@ -525,21 +544,14 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
         }
     }
 
-    writeLines("\n")
-    writeLines("+------------------------------------------------------------------------+")
-    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation                 |")
-    writeLines("| Copyright 2017 Jason Vander Woude, Nathan Ryder                        |")
-    writeLines("| Licensed under the Apache License, Version 2.0                         |")
-    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth            |")
-    writeLines("| Based on LB-Impute: https://github.com/dellaporta-laboratory/LB-Impute |")
-    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187)    |")
-    writeLines("+------------------------------------------------------------------------+")
-    writeLines("")
-    writeLines(paste0(" *  Running in ", ifelse(prefs$parallel,
+    print.labyrinth.header()
+
+    writeLines(paste0(" *  Running imputation in ", ifelse(prefs$parallel,
                paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
     writeLines(paste0(" *  Loading VCF file ", file))
 
     vcf <- VCF(file, prefs)
+
     end.time <- Sys.time()
     time <- difftime(end.time, pseudo.start.time)
     pseudo.start.time <- end.time
