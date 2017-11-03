@@ -260,6 +260,13 @@ VCF <- function(file, prefs) {
     vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
     vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
 
+    progress.env <- new.env()
+    prefs$fifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prefs$prog.env <- progress.env
+    prefs$n.jobs <- n.sites*n.variants
+    ##InitiateProgress(prefs, n.jobs=n.sites*n.variants)
+
     for (r in 1:n.sites) {
         if (length(str.split(vcf$variants[r, "ALT"], ",")) != 1 ) {
             vcf$AD[r, , ] <- NA_integer_
@@ -297,6 +304,8 @@ VCF <- function(file, prefs) {
                                 rownames(samples)[r], " for variant ", colnames(samples)[c]))
                 }
             }
+
+            MakeProgress(prefs)
 
             vcf$AD[r, c, ] <- ret.val.ad
             vcf$GT[r, c, ] <- ret.val.gt
@@ -640,6 +649,13 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
             text <- gsub("NA", ".", text)
         })
 
+        ## TODO(Jason): this won't work unless I find a way around sink()
+        ## progress.env <- new.env()
+        ## prefs$fifo <- ProgressMonitor(progress.env)
+        ## assign("progress", 0.0, envir=progress.env)
+        ## prefs$prog.env <- progress.env
+        ## prefs$n.jobs <- n.sites
+
         for (i in 1:n.sites) {
             ## Write prefix columns with tab seperation
             cat(paste0(prefix[i, ], collapse="\t"))
@@ -694,6 +710,8 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
             if (i != n.sites) {  # add newline if not last row
                 cat("\n")
             }
+
+            ## MakeProgress(prefs)
         }
         sink()  # turn off sink
         end.time <- Sys.time()
@@ -1013,6 +1031,10 @@ ValidatePreferences <- function(prefs) {
 }
 
 
+## Progress monitor code from https://stackoverflow.com/questions/27726134/
+## how-to-track-progress-in-mclapply-in-r-in-parallel-package
+## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
+## in the progress.env environment
 ProgressMonitor <- function(env) {
     local({
         f <- fifo(tempfile(), open="w+b", blocking=T)
@@ -1034,6 +1056,25 @@ ProgressMonitor <- function(env) {
 PrintProgress <- function(f, curr.prog) {
     msg <- readBin(f, "double")
     progress <- curr.prog + as.numeric(msg)
-    cat(sprintf(" *  Imputation progress: %.2f%%\r", progress * 100))
+    cat(sprintf(paste0(" *  ",  "Progress: %.2f%%\r"), progress * 100))
     progress  # implicit return
+}
+
+
+## TODO(Jason): Get this function to work; problem likely environments
+InitiateProgress <- function(prefs, n.jobs) {
+    ## progress.env <- new.env()
+    ## prefs$fifo <- ProgressMonitor(progress.env)
+    ## assign("progress", 0.0, envir=progress.env)
+    ## prefs$prog.env <- progress.env
+    ## prefs$n.jobs <- n.jobs
+    ## assign("prefs$n.jobs", n.jobs, envir=.GlobalEnv)
+}
+
+
+MakeProgress <- function(prefs) {
+    writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
+    if (!prefs$parallel) {  # if running in serial mode
+        prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress, "Loading")
+    }  # else the forked process handles this
 }
