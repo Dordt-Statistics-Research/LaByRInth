@@ -1036,11 +1036,12 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## are different from each other. It is a boolean vector indicating whether
     ## the site is relevant, thus the length is the same as the length of the
     ## final imputation for this sample and chromosome
-    #relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
-    informative.sites <- apply(emission.probs, 1, function(row) {
-        !all(row == row[1])
-    })
-    relevant.sites <- informative.sites
+    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+
+    ## informative.sites <- apply(emission.probs, 1, function(row) {
+    ##     !all(row == row[1])
+    ## })
+    ## relevant.sites <- informative.sites
 
     if (length(relevant.sites) != length(informative.sites)) {
         stop("Site index arrays differ")
@@ -1069,7 +1070,7 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         path.index <- 1
         filler <- NA_integer_
         ## The missing calls that were not relevant will be filled back in
-        ## to create the full path from the
+        ## to create the full path from the relevant part of the path
         for (i in seq_along(relevant.sites)) {
             if (relevant.sites[i]) {  # if the site was relevant
                 full.path[i] <- path[path.index]  # set to next call
