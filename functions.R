@@ -473,7 +473,7 @@ VCF <- function(file, prefs) {
     prefs$fifo <- ProgressMonitor(progress.env)
     assign("progress", 0.0, envir=progress.env)
     prefs$prog.env <- progress.env
-    prefs$n.jobs <- n.sites*n.variants
+    prefs$n.jobs <- n.sites
     ##InitiateProgress(prefs, n.jobs=n.sites*n.variants)
 
     for (r in 1:n.sites) {
@@ -514,11 +514,12 @@ VCF <- function(file, prefs) {
                 }
             }
 
-            MakeProgress(prefs)
-
             vcf$AD[r, c, ] <- ret.val.ad
             vcf$GT[r, c, ] <- ret.val.gt
         }
+
+        MakeProgress(prefs)
+
     }
     colnames(vcf$AD) <- colnames(samples)
     rownames(vcf$AD) <- rownames(samples)
@@ -1282,6 +1283,6 @@ InitiateProgress <- function(prefs, n.jobs) {
 MakeProgress <- function(prefs) {
     writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
     if (!prefs$parallel) {  # if running in serial mode
-        prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress, "Loading")
+        prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
     }  # else the forked process handles this
 }
