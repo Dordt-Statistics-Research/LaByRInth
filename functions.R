@@ -395,7 +395,7 @@ transProb <- function(a, b, dist, prefs) {
     if (a == b) {
         ## If there is no recombination
         0.5 * (1 + exp(-dist/prefs$recomb.dist))
-    } else if (a %in% 1:2 && b %in% 1:2 && !prefs$recomb.double) {
+    } else if (a %in% 1:2 && b %in% 1:2 && prefs$recomb.double) {
         ## Double recomb occurred and has square of probability of single recomb
         ## This only works for biparental
         (0.5 * (1 - exp(-dist/prefs$recomb.dist)))**2
@@ -1157,17 +1157,17 @@ GetDefaultPreferences <- function() {
 
     ## Algorithm parameters
     prefs$resolve.conflicts <- FALSE
-    prefs$recomb.double     <- FALSE
+    prefs$recomb.double     <- TRUE
     prefs$read.err          <- 0.05
     prefs$genotype.err      <- 0.05
     prefs$recomb.err        <- 0.05
-    prefs$recomb.dist       <- 100000
-    prefs$min.markers       <- 1
+    prefs$recomb.dist       <- 1000000
+    prefs$min.markers       <- 7
     prefs$states            <- 3     # currently only support for 2 parents
     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
                                      # AD info
     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
-                                        # VCF file
+                                     # VCF file
     prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
                                      # switched in the output so that parent 1
                                      # is always reference and parent 2 is
@@ -1178,7 +1178,7 @@ GetDefaultPreferences <- function() {
     prefs$cores             <- 4
     prefs$parallel          <- TRUE
     prefs$write             <- TRUE
-    prefs$out.file          <- NULL
+    prefs$out.file          <- ""
 
     prefs  # implicit return
 }
