@@ -830,12 +830,16 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
         ## Replace spaces and colons in the date with dashes
         if (is.null(prefs$out.file)) {
             ## Write to the same directory as before, but prepend "LaByRInth" to the name
-            name <- str.split(file, "/")
-            name <- name[length(name)]
-            prefs$out.file <- paste0(gsub("[/][^/]*$", "/", file), "LaByRInth_", name)
+            qualified.name <- str.split(file, "/")
+            name <- qualified.name[length(qualified.name)]
+            if (grepl("/", qualified.name)) {
+                prefs$out.file <- paste0(gsub("[/][^/]*$", "/", file), "LaByRInth_", name)
+            } else {
+                prefs$out.file <- paste0("LaByRInth_", name)
+            }
             #prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
         } else {
-            prefs$out.file <- make.names(prefs$out.file)
+            #prefs$out.file <- make.names(prefs$out.file)
         }
         writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
