@@ -620,16 +620,22 @@ ResolveHomozygotes <- function(vcf, samples) {
 ##' @param prefs a preferences object
 ##' @return a matrix of posterior probabilities
 ##' @author Jason Vander Woude
-GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
+GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
     if (length(sample) != 1) {
         stop("Length of sample must be 1")
     }
+    if (length(chrom) != 1) {
+        stop("Length of sample must be 1")
+    }
 
-    gt <- Get(vcf, "GT", sample, chromosomes)
-    ad <- Get(vcf, "AD", sample, chromosomes)
+    chrom.indices <- grepl(paste0(chrom, ":"), rownames(parent.geno))
+    parent.geno <- parent.geno[chrom.indices, ]
+
+    gt <- Get(vcf, "GT", sample, chrom)
+    ad <- Get(vcf, "AD", sample, chrom)
 
     ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = prefs$states)
     rownames(ret.val) <- rownames(gt)
