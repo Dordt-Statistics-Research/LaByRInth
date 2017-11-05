@@ -1074,7 +1074,16 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## are different from each other. It is a boolean vector indicating whether
     ## the site is relevant, thus the length is the same as the length of the
     ## final imputation for this sample and chromosome
-    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+    #relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+    informative.sites <- apply(emission.probs, 1, function(row) {
+        !all(row == row[1])
+    })
+    relevant.sites <- informative.sites
+
+    if (length(relevant.sites) != length(informative.sites)) {
+        stop("Site index arrays differ")
+    }
+    #relevant.sites <- relevant.sites & informative.sites
 
     ## If there are not enough markers according to user preference (or if there
     ## are 0), then do not do the imputation and return a path of NA's of the
@@ -1096,6 +1105,7 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         full.path <- relevant.sites
 
         path.index <- 1
+        filler <- NA_integer_
         ## The missing calls that were not relevant will be filled back in
         ## to create the full path from the
         for (i in seq_along(relevant.sites)) {
@@ -1103,7 +1113,17 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
                 full.path[i] <- path[path.index]  # set to next call
                 path.index <- path.index + 1  # increment call index
             } else {
-                full.path[i] <- NA_integer_
+                ## If we can safely decrement the index and elements are same
+                if (path.index > 1 &&
+                    path.index <= length(path) &&
+                    !is.na(path[path.index - 1]) &&
+                    !is.na(path[path.index]) &&
+                    path[path.index - 1] == path[path.index]) {
+                    filler <- path[path.index]
+                } else {
+                    filler <- NA_integer_
+                }
+                full.path[i] <- filler
             }
         }
     }
