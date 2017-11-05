@@ -32,14 +32,32 @@ make.diff <- function(image1, image2, out.image) {
 }
 
 
-## temp <- function() {
-##     chroms <-  c("1A", "1B", "1D", "2A", "2B", "2D", "3A", "3B", "3D", "4A", "4B", "4D", "5A", "5B", "5D", "6A", "6B", "6D", "7A", "7B", "7D", "UN")
-##     for (chrom in chroms) {
-##         make.diff(paste0("LaByRInth_", chrom, ".pgm"),
-##                   paste0("LB-Impute_", chrom, ".pgm"),
-##                   paste0("Diff_",      chrom, ".ppm"))
-##     }
-## }
+strip.vcf <- function(file) {
+    lines <- readLines(file)
+
+    name <- str.split(file, "/")
+    name <- name[length(name)]
+    out.file <- paste0(gsub("[/][^/]*$", "/", file), "stripped_", name)
+
+    sink(out.file)
+    sapply(lines, function(line) {
+        components <- str.split(line, "\t")
+        writeLines(paste0(sapply(components, function(component){
+            str.split(component, ":")[1]
+        }), collapse="\t"))
+    })
+    sink()
+}
+
+
+temp <- function() {
+    chroms <-  c("1A", "1B", "1D", "2A", "2B", "2D", "3A", "3B", "3D", "4A", "4B", "4D", "5A", "5B", "5D", "6A", "6B", "6D", "7A", "7B", "7D", "UN")
+    for (chrom in chroms) {
+        make.diff(paste0("LaByRInth_", chrom, ".pgm"),
+                  paste0("LB-Impute_", chrom, ".pgm"),
+                  paste0("Diff_",      chrom, ".ppm"))
+    }
+}
 
 ## make.diff.dir <- function(dir) {
 ##     files <- list.files(dir)
