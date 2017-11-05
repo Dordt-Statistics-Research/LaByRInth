@@ -1,3 +1,14 @@
+translate <- function(sample) {
+    ## make the following replacements
+    ## 1 -> 0
+    ## 2 -> 1
+    ## 4 -> 2
+    ## anything else -> 5
+    ifelse(is.na(sample), 5, ifelse(sample==1, 0, ifelse(sample==2, 1, ifelse(sample==4, 2, 5))))
+}
+
+
+
 ##' Produce an image showing the difference between two others
 ##'
 ##' Input consists of two pgm type images representing the genotype calls of the
@@ -80,15 +91,12 @@ vcf.to.pgm <- function(vcf, parents, file) {
 
     none <- 5
 
-    sink(file)
-    writeLines("P2")
-    writeLines(paste(ncol, nrow, none))
-
     data2 <- sapply(1:nrow(data), function(row) {
         zero <- which(as.character(parent.data[row, ])=="0/0")
         one <- which(as.character(parent.data[row, ])=="1/1")
         if (length(zero)==0 || length(one)==0) {
-            writeLines(paste0(rep(none, length(data[row, ])), collapse=" "))
+            res <- rep(none, length(data[row, ]))
+            #writeLines(paste0(rep(none, length(data[row, ])), collapse=" "))
         } else {
             res <- mclapply(data[row, ], function(call) {
                 if (call=="0/0") {
@@ -104,9 +112,15 @@ vcf.to.pgm <- function(vcf, parents, file) {
                 }
                 val  # implicit return
             }, mc.cores=4)
-            writeLines(paste0(res, collapse=" "))
+            #writeLines(paste0(res, collapse=" "))
         }
+        res  # implicit return
     })
+    #browser()
+    sink(file)
+    writeLines("P2")
+    writeLines(paste(ncol, nrow, none))
+    tmp <- apply(data2, 1, function(row){writeLines(paste0(row, collapse=" "))})
     sink()
 }
 
@@ -122,7 +136,7 @@ vcf.to.pgm <- function(vcf, parents, file) {
 ##' @param image.dir location to save the images
 ##' @return
 ##' @author Jason Vander Woude
-make.image <- function(result, image.dir, parents) {
+make.image.dir <- function(result, image.dir, parents) {
 
     translate <- function(sample) {
         ## make the following replacements
@@ -130,10 +144,10 @@ make.image <- function(result, image.dir, parents) {
         ## 2 -> 1
         ## 4 -> 2
         ## anything else -> 5
-        ifelse(sample==1, 0, ifelse(sample==2, 1, ifelse(sample==4, 2, 5)))
+        ifelse(is.na(sample), 5, ifelse(sample==1, 0, ifelse(sample==2, 1, ifelse(sample==4, 2, 5))))
     }
 
-    browser()
+    #browser()
     sites <- rownames(result)
     chroms <- unique(sapply(sites, function(site) {str.split(site, ":")[1]}))
     variants <- colnames(result)[! colnames(result) %in% parents]
@@ -153,6 +167,35 @@ make.image <- function(result, image.dir, parents) {
     }
 
     sink(paste0(image.dir, "/LaByRInth_all.pgm"))
+    ncol <- nrow(result)
+    writeLines("P2")
+    writeLines(paste(ncol, nrow, "5"))
+    for (variant in variants) {
+        calls <- result[, variant]
+        writeLines(paste0(translate(calls), collapse=" "))
+    }
+    sink()
+}
+
+
+make.image <- function(result, image.file, parents) {
+
+    translate <- function(sample) {
+        ## make the following replacements
+        ## 1 -> 0
+        ## 2 -> 1
+        ## 4 -> 2
+        ## anything else -> 5
+        ifelse(is.na(sample), 5, ifelse(sample==1, 0, ifelse(sample==2, 1, ifelse(sample==4, 2, 5))))
+    }
+
+    #browser()
+    sites <- rownames(result)
+    chroms <- unique(sapply(sites, function(site) {str.split(site, ":")[1]}))
+    variants <- colnames(result)[! colnames(result) %in% parents]
+    nrow <- length(variants)
+
+    sink(image.file)
     ncol <- nrow(result)
     writeLines("P2")
     writeLines(paste(ncol, nrow, "5"))
