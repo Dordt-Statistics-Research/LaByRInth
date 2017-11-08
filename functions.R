@@ -791,7 +791,7 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
 
     if (prefs$write) {
         ## Replace spaces and colons in the date with dashes
-        if (is.null(prefs$out.file)) {
+        if (prefs$out.file == "") {
             ## Write to the same directory as before, but prepend "LaByRInth" to the name
             qualified.name <- str.split(file, "/")
             name <- qualified.name[length(qualified.name)]
