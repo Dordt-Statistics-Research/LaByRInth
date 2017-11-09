@@ -25,7 +25,7 @@ The following is the list of LaByRInth functions that are designed for you to us
 
 This is the main function to do an imputation. Its function definition is this:
 
-```
+```r
 LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
                             leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
                             recomb.double=TRUE, read.err=0.05,
