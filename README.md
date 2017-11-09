@@ -9,7 +9,7 @@ The original purpose of the project was to port LB-Impute from Java to R to make
 # Install
 
 All of the code required to use LaByRInth currently exists in a single file in the project called `functions.R`. After <a href="https://github.com/Dordt-Statistics-Research/LaByRInth/archive/master.zip">downloading</a> and unzipping LaByRInth, simply add `functions.R` into your project directory. Then, in you can load all of the LaByRInth functions into an R script by including this line in your R script:
-```
+```r
 source("functions.R")
 ```
 
@@ -38,7 +38,7 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
 
 This function will filter a VCF file. That is, it will remove all of the sites from the file in which the parents are not homozygous within and polymorphic between. This can be used before running LabyrinthImpute, though it is not strictly necessary to do so. Specifically, if `leave.all.calls` is set to false, LabyrinthImpute will produce the same result on the original file and the filtered file (but it will take more time if you choose to cleaning the file first). The difference will be if you have `leave.all.calls` set as true, which may be useful for purposes of comparing the results to the original file. If this is the case, it may make sense to filter the file first. Its function definition is as follows:
 
-```
+```r
 LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
                             leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
                             recomb.double=TRUE, read.err=0.05,
@@ -99,7 +99,7 @@ Currently this option does nothing. Eventually, if it is true, the console outpu
 
 These functions can be used to generate a <a href="https://en.wikipedia.org/wiki/Netpbm_format">pgm</a> image file from a vcf file or LaByRInth result respectively. This can be useful to easily see a visual representation of the sample genomes without having to use other software. The ouptut will be a pgm image that has a black pixel for any site that is homozygous and matches `parents[1]`; a dark grey pixel for any site that is homozygous and matches `parents[2]`; a light grey pixel for any site that is heterozygous; and a white pixel for any site that is not called. Creating an image from the result of LabyrinthImpute will be much faster than creating an image from a VCF file.
 
-```
+```r
 vcf.to.pgm <- function(vcf.file, parents, out.file)
 
 result.to.pgm <- function(labyrinth.result, parents, out.file)
@@ -123,7 +123,7 @@ This is the name of the file where the resulting image will be saved. The file n
 
 This will produce a red and green <a href="https://en.wikipedia.org/wiki/Netpbm_format">ppm</a> image file showing which pixels of two pgm image files differ. Green indicates the respective pixel is the same, and red indicates that the pixel differs between the images. This is useful for graphically seeing how an imputation looks compared to the original file or comparing imputations with different parameters or even two different programs.
 
-```
+```r
 make.diff.ppm <- function(image1, image2, out.image) {
 ```
 
@@ -146,7 +146,7 @@ This is the name of the file where the resulting image will be saved. The file n
 
 In this example, assume that the parents are named "parent_1" and "parent_2" in the VCF file "example_01.vcf" and that you want the output to be saved as "example_01_result.vcf". Then the following code is all that is needed.
 
-```
+```r
 # load the LaByRInth functions
 source("functions.R")
 
@@ -163,7 +163,7 @@ LabyrinthImpute("example_01.vcf", parents, "example_01_result.vcf")
 
 Now assume that you first want to filter the file first so that you can compare the results of the imputation with the original VCF file.
 
-```
+```r
 source("functions.R")
 
 parents <- c("parent_1", "parent_2")
@@ -181,7 +181,7 @@ LabyrinthImpute("example_02_filtered.vcf", parents, "example_01_result.vcf")
 
 LaByRInth allows for saving the result as an object in R. Eventually, the exact nature of this structure will be documented, but if you would like to use this feature you can see the details in the source code for `functions.R`.
 
-```
+```r
 source("functions.R")
 
 parents <- c("parent_1", "parent_2")
@@ -206,3 +206,7 @@ make.diff.ppm("image_A.pgm", "image_B.pgm", "difference_A_B.ppm")
 # Known Bugs
 
 1. LaByRInth uses the `sink()` function in R, and if you are using LaByRInth interactively in an R session, and you stop seeing any output at all it is possible that something has gone wrong. Try typing "sink()" and hitting <kbd>Enter</kbd> in the terminal/console/prompt repeatededly until R presents an error message. You may have to do this 3-4 times.
+
+2. Another result of `sink()` is that you will typically see a warning message like the following when LabyrinthImpute finishes. This is "normal" and it should not pose a concern, though it will be fixed.
+> Warning message:
+> closing unused connection 3 (/tmp/Rtmp08zWwM/file4b7e6a870b6c)
