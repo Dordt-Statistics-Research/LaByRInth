@@ -19,7 +19,7 @@ translate <- function(sample) {
 ##' @param out.image path to ppm image representing the difference
 ##' @return
 ##' @author Jason Vander Woude
-make.diff <- function(image1, image2, out.image) {
+make.diff.ppm <- function(image1, image2, out.image) {j
     im1 <- data.table:::fread(image1)
     im2 <- data.table:::fread(image2)
 
@@ -69,8 +69,8 @@ temp <- function() {
     }
 }
 
-vcf.to.pgm <- function(vcf, parents, file) {
-    data <- data.table:::fread(vcf, blank.lines.skip=TRUE)
+vcf.to.pgm <- function(vcf.file, parents, out.file) {
+    data <- data.table:::fread(vcf.file, blank.lines.skip=TRUE)
     parent.data <- data[, parents, with=FALSE]
     format.col <- which(colnames(data)=="FORMAT")
     data <- data[, (format.col+1):ncol(data)]
@@ -105,7 +105,7 @@ vcf.to.pgm <- function(vcf, parents, file) {
         }
         res  # implicit return
     })
-    sink(file)
+    sink(out.file)
     writeLines("P2")
     writeLines(paste(ncol, nrow, none))
     tmp <- apply(data2, 1, function(row){writeLines(paste0(row, collapse=" "))})
@@ -155,19 +155,19 @@ make.image.dir <- function(result, image.dir, parents) {
 }
 
 
-make.image <- function(result, image.file, parents) {
+result.to.pgm <- function(labyrinth.result, parents, out.file) {
 
-    sites <- rownames(result)
+    sites <- rownames(labyrinth.result)
     chroms <- unique(sapply(sites, function(site) {str.split(site, ":")[1]}))
-    variants <- colnames(result)[! colnames(result) %in% parents]
+    variants <- colnames(labyrinth.result)[! colnames(labyrinth.result) %in% parents]
     nrow <- length(variants)
 
-    sink(image.file)
-    ncol <- nrow(result)
+    sink(out.file)
+    ncol <- nrow(labyrinth.result)
     writeLines("P2")
     writeLines(paste(ncol, nrow, "5"))
     for (variant in variants) {
-        calls <- result[, variant]
+        calls <- labyrinth.result[, variant]
         writeLines(paste0(translate(calls), collapse=" "))
     }
     sink()
@@ -705,15 +705,53 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 ## TODO(Jason): Allow user to spefify threshold of probability to call a
 ## genotype without haplotype information. E.g. if there is not good
 
-LabyrinthImpute <- function(file, parents, prefs=NULL) {
+## TODO(Jason): Try writing an empty file immediately in case they give a bad
+## destination and provide nice directory DNE message or file exists message
+LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
+                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
+                            recomb.double=TRUE, read.err=0.05,
+                            genotype.err=0.05, recomb.dist=1e6,
+                            write=TRUE, parallel=TRUE, cores=4,
+                            quiet=FALSE) {
+
+    ## Create a preferences objects containing all preferences
+    prefs <- list()
+    class(prefs)            <- "prefs"
+
+    ## Algorithm parameters
+    prefs$recomb.double     <- recomb.double
+    prefs$read.err          <- read.err
+    prefs$genotype.err      <- genotype.err
+    prefs$recomb.dist       <- recomb.dist
+    ## should the GT info be inferred from the AD info
+    prefs$use.only.ad       <- use.only.ad
+    ## Should non-imputed sites be in the output VCF file
+    prefs$leave.all.calls   <- leave.all.calls
+    prefs$parents           <- parents
+
+    prefs$states            <- 3     # currently only support for 2 parents
+    ## TODO(Jason): implement this feature
+    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                     # switched in the output so that parent 1
+                                     # is always reference and parent 2 is
+                                     # always alternate
+
+    ## Logistic parameters
+    prefs$quiet             <- quiet
+    prefs$cores             <- cores
+    prefs$parallel          <- paralel
+    prefs$write             <- write
+    prefs$out.file          <- out.file
+
+    prefs  # implicit return
+
     start.time <- Sys.time()
     pseudo.start.time <- start.time
 
-    if (is.null(prefs)) {
-        prefs <- GetDefaultPreferences()
-    }
+    ## if (is.null(prefs)) {
+    ##     prefs <- GetDefaultPreferences()
+    ## }
 
-    prefs$parents <- parents
     ValidatePreferences(prefs)
 
     ## Determine whether to run in parallel and how many cores to use
@@ -750,7 +788,7 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
     chroms <- vcf$chrom.names
     variants <- vcf$variant.names
     parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
-    n.chrom <- length(chroms)
+    n.chrom <- flength(chroms)
     n.variants <- length(variants)
     n.sites <- nrow(parent.geno)
     prefs$n.jobs <- n.variants * n.chrom
@@ -906,16 +944,50 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
 
 
 ## TODO(Jason): add option to switch ref and alt when filtering
-LabyrinthFilter <- function(file, parents, prefs=NULL) {
+LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
+                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
+                            recomb.double=TRUE, read.err=0.05,
+                            genotype.err=0.05, recomb.dist=1e6,
+                            write=TRUE, parallel=TRUE, cores=4,
+                            quiet=FALSE) {
+
+    ## Create a preferences objects containing all preferences
+    prefs <- list()
+    class(prefs)            <- "prefs"
+
+    ## Algorithm parameters
+    prefs$recomb.double     <- recomb.double
+    prefs$read.err          <- read.err
+    prefs$genotype.err      <- genotype.err
+    prefs$recomb.dist       <- recomb.dist
+    ## should the GT info be inferred from the AD info
+    prefs$use.only.ad       <- use.only.ad
+    ## Should non-imputed sites be in the output VCF file
+    prefs$leave.all.calls   <- leave.all.calls
+    prefs$parents           <- parents
+
+    prefs$states            <- 3     # currently only support for 2 parents
+    ## TODO(Jason): implement this feature
+    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                     # switched in the output so that parent 1
+                                     # is always reference and parent 2 is
+                                     # always alternate
+
+    ## Logistic parameters
+    prefs$quiet             <- quiet
+    prefs$cores             <- cores
+    prefs$parallel          <- paralel
+    prefs$write             <- write
+    prefs$out.file          <- out.file
+
+    ValidatePreferences(prefs)
+
     start.time <- Sys.time()
     pseudo.start.time <- start.time
 
-    if (is.null(prefs)) {
-        prefs <- GetDefaultPreferences()
-    }
-
-    prefs$parents <- parents
-    ValidatePreferences(prefs)
+    ## if (is.null(prefs)) {
+    ##     prefs <- GetDefaultPreferences()
+    ## }
 
     ## Determine whether to run in parallel and how many cores to use
     if (prefs$parallel) {
@@ -1054,7 +1126,7 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## are 0), then do not do the imputation and return a path of NA's of the
     ## correct length
     n.relevant.sites <- sum(relevant.sites)  # boolean addition
-    if (n.relevant.sites < max(1, prefs$min.markers)) {
+    if (n.relevant.sites < 1) {
         full.path <- rep(NA_integer_, length(relevant.sites))
     } else {
         names(relevant.sites) <- NULL  # Makes debugging easier
@@ -1134,37 +1206,34 @@ GenotypeFromDepth <-  function(allelic.depths) {
 }
 
 
-GetDefaultPreferences <- function() {
-    prefs <- list()
-    class(prefs)            <- "prefs"
+## GetDefaultPreferences <- function() {
+##     prefs <- list()
+##     class(prefs)            <- "prefs"
 
-    ## Algorithm parameters
-    prefs$resolve.conflicts <- FALSE
-    prefs$recomb.double     <- TRUE
-    prefs$read.err          <- 0.05
-    prefs$genotype.err      <- 0.05
-    prefs$recomb.err        <- 0.05
-    prefs$recomb.dist       <- 1000000
-    prefs$min.markers       <- 7
-    prefs$states            <- 3     # currently only support for 2 parents
-    prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
-                                     # AD info
-    prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
-                                     # VCF file
-    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
-                                     # switched in the output so that parent 1
-                                     # is always reference and parent 2 is
-                                     # always alternate
+##     ## Algorithm parameters
+##     prefs$recomb.double     <- TRUE
+##     prefs$read.err          <- 0.05
+##     prefs$genotype.err      <- 0.05
+##     prefs$recomb.dist       <- 1000000
+##     prefs$states            <- 3     # currently only support for 2 parents
+##     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
+##                                      # AD info
+##     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
+##                                      # VCF file
+##     prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+##                                      # switched in the output so that parent 1
+##                                      # is always reference and parent 2 is
+##                                      # always alternate
 
-    ## Logistic parameters
-    prefs$quiet             <- FALSE
-    prefs$cores             <- 4
-    prefs$parallel          <- TRUE
-    prefs$write             <- TRUE
-    prefs$out.file          <- ""
+##     ## Logistic parameters
+##     prefs$quiet             <- FALSE
+##     prefs$cores             <- 4
+##     prefs$parallel          <- TRUE
+##     prefs$write             <- TRUE
+##     prefs$out.file          <- ""
 
-    prefs  # implicit return
-}
+##     prefs  # implicit return
+## }
 
 
 ##' Checking preferences for the correct variable type
@@ -1175,28 +1244,22 @@ GetDefaultPreferences <- function() {
 ##' @return 
 ##' @author Jason Vander Woude and Nathan Ryder
 ValidatePreferences <- function(prefs) {
+    ## TODO(Jason): check for NA logicals
     if (!inherits(prefs, "prefs")) {
         stop("prefs must be of class 'prefs'")
     }
     if (length(prefs$parents) != 2) {
         stop("exactly 2 parents must be specified")
     }
-    if (!is.logical(prefs$resolve.conflicts)) {
-        stop("'resolve.conflicts' must be of type logical")
-    }
     if (!is.logical(prefs$recomb.double)) {
         stop("'recomb.double' must be of type logical")
     }
     if (!(0 <= prefs$read.err && prefs$read.err < 1) ||
-        !(0 <= prefs$genotype.err && prefs$genotype.err < 1) ||
-        !(0 <= prefs$recomb.err && prefs$recomb.err < 1)) {
+        !(0 <= prefs$genotype.err && prefs$genotype.err < 1)) {
         stop("'error' values must be between 0 and 1")
     }
     if (!is.numeric(prefs$recomb.dist) || !(prefs$recomb.dist > 0)) {
         stop("recombination distance ('recomb.dist') must be a number greater than 0")
-    }
-    if (!is.numeric(prefs$min.markers) || !(prefs$min.markers >= 1)) {
-        stop("'min.markers' must be a number greater than or equal to 1")
     }
     if (prefs$states != length(prefs$parents) + 1) {
         stop("illegal number of states")
