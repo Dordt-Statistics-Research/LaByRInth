@@ -13,6 +13,28 @@
 ## limitations under the License.
 
 
+ensure_writability <- function(filename) {
+  # The '/' is literal.
+  # The '[^/]*' will match any character other than '/' any number of time.
+  # The '$' only matches the end of the line
+  # Basically, this strips any trailing characters and the last '/' to get
+  # the directory of the file
+  dir <- gsub("/[^/]*$", "", filename)
+  if (!dir.exists(dir))
+    dir.create(dir, recursive=T)
+}
+
+
+# Function that will call the standard writeLines
+# function after first ensuring that the directory
+# being saved to exists. If the directory does not
+# exist it is created.
+force_write_lines <- function(data, filename) {
+  ensure_writability(filename)
+  writeLines(data, filename)
+}
+
+
 translate <- function(sample) {
     ## make the following replacements
     ## 1 -> 0
@@ -244,7 +266,7 @@ vcf.to.numeric <- function(str.vec) {
 print.labyrinth.header <- function() {
     writeLines("\n")
     writeLines("+---------------------------------------------------------------------+")
-    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation              |")
+    writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
     writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
     writeLines("| Licensed under the Apache License, Version 2.0                      |")
     writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
@@ -754,7 +776,7 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
     ## Logistic parameters
     prefs$quiet             <- quiet
     prefs$cores             <- cores
-    prefs$parallel          <- paralel
+    prefs$parallel          <- parallel
     prefs$write             <- write
     prefs$out.file          <- out.file
 
@@ -803,7 +825,7 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
     chroms <- vcf$chrom.names
     variants <- vcf$variant.names
     parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
-    n.chrom <- flength(chroms)
+    n.chrom <- length(chroms)
     n.variants <- length(variants)
     n.sites <- nrow(parent.geno)
     prefs$n.jobs <- n.variants * n.chrom
@@ -848,7 +870,9 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
             ## Write to the same directory as before, but prepend "LaByRInth" to the name
             qualified.name <- str.split(file, "/")
             name <- qualified.name[length(qualified.name)]
-            if (grepl("/", qualified.name)) {
+            if (grepl("/", file)) {
+                ## replace everything after and including the last '/' with '/'
+                ## then concatonate that directory with "LaByRInth_" and name
                 prefs$out.file <- paste0(gsub("[/][^/]*$", "/", file), "LaByRInth_", name)
             } else {
                 prefs$out.file <- paste0("LaByRInth_", name)
@@ -991,7 +1015,7 @@ LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
     ## Logistic parameters
     prefs$quiet             <- quiet
     prefs$cores             <- cores
-    prefs$parallel          <- paralel
+    prefs$parallel          <- parallel
     prefs$write             <- write
     prefs$out.file          <- out.file
 
@@ -1049,11 +1073,19 @@ LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
     assign("progress", 0.0, envir=progress.env)
     prefs$prog.env <- progress.env
 
-    if (is.null(prefs$out.file)) {
-        ## Replace spaces and colons in the date with dashes
-        prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
-    } else {
-        prefs$out.file <- make.names(prefs$out.file)
+
+
+    if (prefs$out.file == "") {
+        ## Write to the same directory as before, but prepend "LaByRInth" to the name
+        qualified.name <- str.split(file, "/")
+        name <- qualified.name[length(qualified.name)]
+        if (grepl("/", file)) {
+            ## replace everything after and including the last '/' with '/'
+            ## then concatonate that directory with "LaByRInth_" and name
+            prefs$out.file <- paste0(gsub("[/][^/]*$", "/", file), "filtered_", name)
+        } else {
+            prefs$out.file <- paste0("filtered_", name)
+        }
     }
     writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
