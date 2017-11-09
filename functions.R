@@ -1,3 +1,194 @@
+## Copyright 2017 Jason Vander Woude and Nathan Ryder
+##
+## Licensed under the Apache License, Version 2.0 (the "License");
+## you may not use this file except in compliance with the License.
+## You may obtain a copy of the License at
+##
+##     http://www.apache.org/licenses/LICENSE-2.0
+##
+## Unless required by applicable law or agreed to in writing, software
+## distributed under the License is distributed on an "AS IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+## See the License for the specific language governing permissions and
+## limitations under the License.
+
+
+translate <- function(sample) {
+    ## make the following replacements
+    ## 1 -> 0
+    ## 2 -> 1
+    ## 4 -> 2
+    ## anything else -> 5
+    ifelse(is.na(sample), 5, ifelse(sample==1, 0, ifelse(sample==2, 1, ifelse(sample==4, 2, 5))))
+}
+
+
+##' Produce an image showing the difference between two others
+##'
+##' Input consists of two pgm type images representing the genotype calls of the
+##'      vcf. The output is a red and green image where a red pixel indicates
+##'      that the two input ima
+##' @title
+##' @param image1 path to first pgm image
+##' @param image2 path to second pgm image
+##' @param out.image path to ppm image representing the difference
+##' @return
+##' @author Jason Vander Woude
+make.diff.ppm <- function(image1, image2, out.image) {j
+    im1 <- data.table:::fread(image1)
+    im2 <- data.table:::fread(image2)
+
+    if (nrow(im1) != nrow(im2)) {
+        stop("heights of images do not match")
+    }
+    if (ncol(im1) != ncol(im2)) {
+        stop("widths of images do not match")
+    }
+
+    diff.image <- im1==im2
+    sink(out.image)
+    writeLines("P3")
+    writeLines(paste(ncol(im1), nrow(im1), "1"))  # the last one indicates that RGB values will be 0 or 1
+    invisible(apply(ifelse(diff.image, "0 1 0", "1 0 0"), 1, function(row) {writeLines(paste0(row, collapse=" "))}))
+    sink()
+
+    perc.diff <- 100 * sum(!diff.image) / (ncol(diff.image) * nrow(diff.image))
+    writeLines(sprintf("There is a %.2f%% difference in the files", perc.diff))
+}
+
+
+strip.vcf <- function(file) {
+    lines <- readLines(file)
+
+    name <- str.split(file, "/")
+    name <- name[length(name)]
+    out.file <- paste0(gsub("[/][^/]*$", "/", file), "stripped_", name)
+
+    sink(out.file)
+    sapply(lines, function(line) {
+        components <- str.split(line, "\t")
+        writeLines(paste0(sapply(components, function(component){
+            str.split(component, ":")[1]
+        }), collapse="\t"))
+    })
+    sink()
+}
+
+
+temp <- function() {
+    chroms <-  c("1A", "1B", "1D", "2A", "2B", "2D", "3A", "3B", "3D", "4A", "4B", "4D", "5A", "5B", "5D", "6A", "6B", "6D", "7A", "7B", "7D", "UN")
+    for (chrom in chroms) {
+        make.diff(paste0("LaByRInth_", chrom, ".pgm"),
+                  paste0("LB-Impute_", chrom, ".pgm"),
+                  paste0("Diff_",      chrom, ".ppm"))
+    }
+}
+
+vcf.to.pgm <- function(vcf.file, parents, out.file) {
+    data <- data.table:::fread(vcf.file, blank.lines.skip=TRUE)
+    parent.data <- data[, parents, with=FALSE]
+    format.col <- which(colnames(data)=="FORMAT")
+    data <- data[, (format.col+1):ncol(data)]
+    data <- data[, !colnames(data) %in% parents, with=FALSE]
+    ncol <- nrow(data)
+    nrow <- ncol(data)
+    data <- apply(data, 1:2, function(x){str.split(as.character(x), ":")[1]})
+    parent.data <- apply(parent.data, 1:2, function(x){str.split(as.character(x), ":")[1]})
+
+    none <- 5
+
+    data2 <- sapply(1:nrow(data), function(row) {
+        zero <- which(as.character(parent.data[row, ])=="0/0")
+        one <- which(as.character(parent.data[row, ])=="1/1")
+        if (length(zero)==0 || length(one)==0) {
+            res <- rep(none, length(data[row, ]))
+        } else {
+            res <- mclapply(data[row, ], function(call) {
+                if (call=="0/0") {
+                    val <- zero-1
+                } else if (call=="1/1") {
+                    val <- one-1
+                } else if (call=="0/1") {
+                    val <- 2
+                } else if (call=="1/0") {
+                    val <- 2
+                } else {
+                    val <- none
+                }
+                val  # implicit return
+            }, mc.cores=4)
+        }
+        res  # implicit return
+    })
+    sink(out.file)
+    writeLines("P2")
+    writeLines(paste(ncol, nrow, none))
+    tmp <- apply(data2, 1, function(row){writeLines(paste0(row, collapse=" "))})
+    sink()
+}
+
+
+##' Create an image representing an imputation result
+##'
+##' Generate an image where a black pixel represents a call for parent 1, a dark
+##'      grey pixel represents a call for parent 2, a light grey pixel
+##'      represents a call for heterozygous, and a white pixel represents a call
+##'      that was not made.
+##' @title
+##' @param result result of LabyrinthImpute
+##' @param image.dir location to save the images
+##' @return
+##' @author Jason Vander Woude
+make.image.dir <- function(result, image.dir, parents) {
+    sites <- rownames(result)
+    chroms <- unique(sapply(sites, function(site) {str.split(site, ":")[1]}))
+    variants <- colnames(result)[! colnames(result) %in% parents]
+    nrow <- length(variants)
+
+    for (chrom in chroms) {
+        chrom.result <- result[grepl(chrom, sites), ]
+        ncol <- nrow(chrom.result)
+        sink(paste0(image.dir, "/LaByRInth_", chrom, ".pgm"))
+        writeLines("P2")
+        writeLines(paste(ncol, nrow, "5"))
+        for (variant in variants) {
+            calls <- chrom.result[, variant]
+            writeLines(paste0(translate(calls), collapse=" "))
+        }
+        sink()
+    }
+
+    sink(paste0(image.dir, "/LaByRInth_all.pgm"))
+    ncol <- nrow(result)
+    writeLines("P2")
+    writeLines(paste(ncol, nrow, "5"))
+    for (variant in variants) {
+        calls <- result[, variant]
+        writeLines(paste0(translate(calls), collapse=" "))
+    }
+    sink()
+}
+
+
+result.to.pgm <- function(labyrinth.result, parents, out.file) {
+
+    sites <- rownames(labyrinth.result)
+    chroms <- unique(sapply(sites, function(site) {str.split(site, ":")[1]}))
+    variants <- colnames(labyrinth.result)[! colnames(labyrinth.result) %in% parents]
+    nrow <- length(variants)
+
+    sink(out.file)
+    ncol <- nrow(labyrinth.result)
+    writeLines("P2")
+    writeLines(paste(ncol, nrow, "5"))
+    for (variant in variants) {
+        calls <- labyrinth.result[, variant]
+        writeLines(paste0(translate(calls), collapse=" "))
+    }
+    sink()
+}
+
+
 str.to.num <- function(str, sep) {
     as.numeric(str.split(str, sep))
 }
@@ -47,6 +238,25 @@ vcf.to.numeric <- function(str.vec) {
             stop("Attempted to convert invalid VCF string")
         }
     })
+}
+
+
+print.labyrinth.header <- function() {
+    writeLines("\n")
+    writeLines("+---------------------------------------------------------------------+")
+    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation              |")
+    writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
+    writeLines("| Licensed under the Apache License, Version 2.0                      |")
+    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
+    writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
+    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
+    writeLines("+---------------------------------------------------------------------+")
+    writeLines("")
+}
+
+
+print.labyrinth <- function(...) {
+    writeLines(paste0(" *  ", ...))
 }
 
 
@@ -167,7 +377,7 @@ transProb <- function(a, b, dist, prefs) {
     if (a == b) {
         ## If there is no recombination
         0.5 * (1 + exp(-dist/prefs$recomb.dist))
-    } else if (a %in% 1:2 && b %in% 1:2 && !prefs$recomb.double) {
+    } else if (a %in% 1:2 && b %in% 1:2 && prefs$recomb.double) {
         ## Double recomb occurred and has square of probability of single recomb
         ## This only works for biparental
         (0.5 * (1 - exp(-dist/prefs$recomb.dist)))**2
@@ -187,8 +397,9 @@ transProb <- function(a, b, dist, prefs) {
 ##' @return the vcf object created from the file
 ##' @author Jason Vander Woude
 VCF <- function(file, prefs) {
-    ## TODO(Jason): add filtering step to remove non-biallelic calls or talk to
-    ## Jesse about how those should be handled
+    ## TODO(Jason): Save rds version of vcd to impute again with different prefs
+
+    ## TODO(Jason): add filtering step to remove non-biallelic calls
 
     vcf <- list()
     class(vcf) <- "vcf"
@@ -196,9 +407,13 @@ VCF <- function(file, prefs) {
     vcf$variants <- readLines(file)
     isComment <- sapply(vcf$variants, function(line){substr(line,1,1) == "#"})
 
-    ## Remove the header, but save so it can be restored later
+    ## Remove the header, but save so it can be restored later if desired. In
+    ## the current implementation, the output vcf file does not contain the
+    ## original header except the first line which should specify the version
     vcf$header.lines <- vcf$variants[isComment]
-    vcf$variants <- vcf$variants[!isComment]
+    vcf$variant.lines <- vcf$variants[!isComment]
+    vcf$variants <- vcf$variant.lines
+
     ## Make table
     vcf$variants <- do.call(rbind,
                             lapply(vcf$variants,
@@ -239,6 +454,14 @@ VCF <- function(file, prefs) {
     ## Third dim = 2 because all sites must be biallelic
     vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
     vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
+
+    progress.env <- new.env()
+    prefs$fifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prefs$prog.env <- progress.env
+    prefs$n.jobs <- n.sites
+    ## TODO(Jason): clean up the progress code
+    ##InitiateProgress(prefs, n.jobs=n.sites*n.variants)
 
     for (r in 1:n.sites) {
         if (length(str.split(vcf$variants[r, "ALT"], ",")) != 1 ) {
@@ -281,6 +504,9 @@ VCF <- function(file, prefs) {
             vcf$AD[r, c, ] <- ret.val.ad
             vcf$GT[r, c, ] <- ret.val.gt
         }
+
+        MakeProgress(prefs)
+
     }
     colnames(vcf$AD) <- colnames(samples)
     rownames(vcf$AD) <- rownames(samples)
@@ -333,20 +559,30 @@ ResolveHomozygotes <- function(vcf, samples) {
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
-    ## TODO(Jason): The original alorithm was designed such that all parental
-    ## sites in the sample should be homozygous and different from each
-    ## other. Right now we are turning some of the sites to NA's, but we aren't
-    ## doing that for both parents simultaneously
-
     ## TODO(Jason): We can set the parents to NA now, but they should be set
     ## back to the original call before turning the children imputation states
-    ## back into genotype calls
+    ## back into genotype calls (I think). That is we don't want to call all
+    ## children as NA just because one of the parents was unknown. This may not
+    ## be an issue since we are filtering the parents, but if we upgrade the
+    ## code to handle non-HWPB (homozygous within and polymorphic between) this
+    ## may become important
 
     ## TODO(Jason): This is the step where we are making an absolute claim on
     ## the true genotype of the parents which means we should be accounting for
-    ## a possible read error here. If the allelic depths are 1,100 for example,
-    ## we are currently claiming that the site is heterozygous when in reality
-    ## it is probably homozygous with a read error
+    ## a possible read error here. If the allelic depths are 1 and 100 for
+    ## example, we are currently claiming that the site is heterozygous when in
+    ## reality it is probably homozygous with a read error. In addition, if we
+    ## are more sure about the parents at a site, we should be more heavily
+    ## weighting the emission probabilities at that site in the viterbi. Right
+    ## now all sites have equal weight, but it is possible that there are times
+    ## we get the parents wrong. Again this is probably not a huge concern with
+    ## the code as is, but especially if we begin utilizing non-HWPB data, this
+    ## is a feature that should be incorporated.
+
+    ## TODO(Jason): Again, if utilizing non-HWPB data, firs remove false
+    ## homozygosity because otherwise variants will only be caled homozygous of
+    ## the variant seen or heterozygous even if they were actually called
+    ## homozygous of the other.
     genotype <- Get(vcf, "GT", samples)
     allele.counts <- Get(vcf, "AD", samples, vcf$chrom.names)
     ret.val <- genotype[, , 1]  # initilize to first slice in 3rd dim
@@ -381,24 +617,39 @@ ResolveHomozygotes <- function(vcf, samples) {
 ##' @param prefs a preferences object
 ##' @return a matrix of posterior probabilities
 ##' @author Jason Vander Woude
-GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
+GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
     }
     if (length(sample) != 1) {
         stop("Length of sample must be 1")
     }
+    if (length(chrom) != 1) {
+        stop("Length of sample must be 1")
+    }
 
-    gt <- Get(vcf, "GT", sample, chromosomes)
-    ad <- Get(vcf, "AD", sample, chromosomes)
+    chrom.indices <- grepl(paste0(chrom, ":"), rownames(parent.geno))
+    parent.geno <- parent.geno[chrom.indices, ]
+
+    gt <- Get(vcf, "GT", sample, chrom)
+    ad <- Get(vcf, "AD", sample, chrom)
 
     ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = prefs$states)
     rownames(ret.val) <- rownames(gt)
     colnames(ret.val) <- c(colnames(parent.geno), "HETEROZYGOUS")
     class(ret.val) <- "prob"
 
+    ## probability constraints from original LB-Impute code
+    max.allowed <- 1 - (2 * prefs$genotype.err)
+    min.allowed <- prefs$genotype.err
+    rerr <- prefs$read.err
+
     for (row in 1:nrow(ret.val)) {
-        ## the '1' in [i, 1, ] is because there is only 1
+        ## gt and ad are both 3D structures where the first index is the site,
+        ## the second index is the sample/variety, and the third index allows
+        ## getting the various genotypes (e.g. a 0 in both indices of the last
+        ## dimension represents 0/0). The '1' in [row, 1, ] is because there is
+        ## guaranteed to be only one sample
         geno.calls <- gt[row, 1, ]
         allele.counts <- ad[row, 1, ]
 
@@ -407,41 +658,22 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
         } else if (any(is.na(geno.calls))) {
             stop("Some but not all genotype calls are NA")  # TODO(Jason): remove
         } else {
-            ## TODO(Jason): check this against the strange entries noted in
-            ## the notes file
-
-            ## ## 0 means reference by the vcf standards
-            ## ref.indices <- which(geno.calls == 0)
-            ## ## 1 means first alternate by the vcf standards
-            ## alt.indices <- which(geno.calls == 1)
-
-            ## ref.calls <- sum(allele.counts[ref.indices])
-            ## alt.calls <- sum(allele.counts[alt.indices])
-
             ref.calls <- allele.counts[1]
             alt.calls <- allele.counts[2]
 
-            ## Due some to strange entries in the vcf files it is possible
-            ## that both genotypes are the same number thus one of the
-            ## alleles will have no indices and summing over those NA
-            ## indices will yield NA's
-            if (is.na(ref.calls)) {
-                ref.calls <- 0
-            }
-            if (is.na(alt.calls)) {
-                alt.calls <- 0
-            }
-
-            ## probability constraints from original LB-Impute code
-            max.allowed <- 1 - (2 * prefs$genotype.err)
-            min.allowed <- prefs$genotype.err
+            ## I think this is outdated code, but I'll leave it for awhile just
+            ## in case
+            ## if (is.na(ref.calls)) {
+            ##     ref.calls <- 0
+            ## }
+            ## if (is.na(alt.calls)) {
+            ##     alt.calls <- 0
+            ## }
 
             ## Calculate the emission probabilities for this site
-            rerr <- prefs$read.err
             ref.prob <- (1 - rerr)**ref.calls * (rerr)**alt.calls
             alt.prob <- (1 - rerr)**alt.calls * (rerr)**ref.calls
             hom.prob <- (0.5)**(ref.calls + alt.calls)  # homozygous
-
             max.prob <- max(ref.prob, alt.prob, hom.prob)
 
             normalize <- function(x) {
@@ -449,10 +681,6 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
                 ## (max.allowed - min.allowed)
                 x / max.prob * max.allowed + min.allowed
             }
-
-            ## Assumes biallelic TODO(Jason): make more general by creating
-            ## alt.prob on the fly for each alternate if the site is not
-            ## biallelic?
 
             ## TODO(Jason): This seems incorrect. If the parent is unknown (NA)
             ## then why should the probability of being that parent be the max
@@ -471,12 +699,12 @@ GetProbabilities <- function(vcf, sample, chromosomes, parent.geno, prefs) {
             ret.val[row, prefs$states] <- normalize(hom.prob)
         }
     }
-
     ret.val  # implicit return
 }
 
 
-## Determine which rows are real calls
+## Determine which rows/sites have parents that are HWPB (homozygous within and
+## polymorphic between)
 GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
     if (! inherits(vcf, "vcf")) {
         stop("vcf must be of class 'vcf'")
@@ -489,23 +717,55 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 }
 
 
-## TODO(Jason not Nathan) Add a set of parameters for MC (to control
-## parallelization)
-## TODO(Jason): remove false homozygosity because otherwise variants will only
-## be caled homozygous of the variant seen or heterozygous even if they were
-## actually called homozygous of the other.
-## TODO(Jason): Allow reading of VCF file to keep read quality information.
 ## TODO(Jason): Allow user to spefify threshold of probability to call a
 ## genotype without haplotype information. E.g. if there is not good
-## TODO(Jason): Write a vcf cleaning/filtering function that both writes out the
-## TODO(Jason): Save rds version of file to impute again??
-LabyrinthImpute <- function(file, parents, prefs=NULL) {
+
+## TODO(Jason): Try writing an empty file immediately in case they give a bad
+## destination and provide nice directory DNE message or file exists message
+LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
+                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
+                            recomb.double=TRUE, read.err=0.05,
+                            genotype.err=0.05, recomb.dist=1e6,
+                            write=TRUE, parallel=TRUE, cores=4,
+                            quiet=FALSE) {
+
+    ## Create a preferences objects containing all preferences
+    prefs <- list()
+    class(prefs)            <- "prefs"
+
+    ## Algorithm parameters
+    prefs$recomb.double     <- recomb.double
+    prefs$read.err          <- read.err
+    prefs$genotype.err      <- genotype.err
+    prefs$recomb.dist       <- recomb.dist
+    ## should the GT info be inferred from the AD info
+    prefs$use.only.ad       <- use.only.ad
+    ## Should non-imputed sites be in the output VCF file
+    prefs$leave.all.calls   <- leave.all.calls
+    prefs$parents           <- parents
+
+    prefs$states            <- 3     # currently only support for 2 parents
+    ## TODO(Jason): implement this feature
+    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                     # switched in the output so that parent 1
+                                     # is always reference and parent 2 is
+                                     # always alternate
+
+    ## Logistic parameters
+    prefs$quiet             <- quiet
+    prefs$cores             <- cores
+    prefs$parallel          <- paralel
+    prefs$write             <- write
+    prefs$out.file          <- out.file
+
+    prefs  # implicit return
+
     start.time <- Sys.time()
     pseudo.start.time <- start.time
 
-    if (is.null(prefs)) {
-        prefs <- GetDefaultPreferences()
-    }
+    ## if (is.null(prefs)) {
+    ##     prefs <- GetDefaultPreferences()
+    ## }
 
     ValidatePreferences(prefs)
 
@@ -525,21 +785,14 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
         }
     }
 
-    writeLines("\n")
-    writeLines("+------------------------------------------------------------------------+")
-    writeLines("| LaByRInth: Low-coverage Biallelic R-package Imputation                 |")
-    writeLines("| Copyright 2017 Jason Vander Woude, Nathan Ryder                        |")
-    writeLines("| Licensed under the Apache License, Version 2.0                         |")
-    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth            |")
-    writeLines("| Based on LB-Impute: https://github.com/dellaporta-laboratory/LB-Impute |")
-    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187)    |")
-    writeLines("+------------------------------------------------------------------------+")
-    writeLines("")
-    writeLines(paste0(" *  Running in ", ifelse(prefs$parallel,
+    print.labyrinth.header()
+
+    writeLines(paste0(" *  Running imputation in ", ifelse(prefs$parallel,
                paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
     writeLines(paste0(" *  Loading VCF file ", file))
 
     vcf <- VCF(file, prefs)
+
     end.time <- Sys.time()
     time <- difftime(end.time, pseudo.start.time)
     pseudo.start.time <- end.time
@@ -550,12 +803,11 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
     chroms <- vcf$chrom.names
     variants <- vcf$variant.names
     parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
-    n.chrom <- length(chroms)
+    n.chrom <- flength(chroms)
     n.variants <- length(variants)
     n.sites <- nrow(parent.geno)
     prefs$n.jobs <- n.variants * n.chrom
 
-    ## TODO(Jason): modify output to reflect parents not being imputed
     writeLines(paste0(" *  Imputing ",
                       (n.variants - 2), " variants at ",  # parents aren't imputed
                       n.chrom, " chromosomes (",
@@ -574,13 +826,9 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
     prefs$prog.env <- progress.env
 
     ## Actually run the imputation
-    result <- do.call(cbind,
-                      prefs$lapply(
-                          variants, function(variant) {
-                              result <- LabyrinthImputeSample(vcf, variant, parent.geno, prefs)
-                              ## print(result)
-                              result
-                          }, mc.preschedule=FALSE, mc.cores=prefs$cores))
+    result <- do.call(cbind, prefs$lapply(variants, function(variant) {
+        LabyrinthImputeSample(vcf, variant, parent.geno, prefs)
+    }, mc.preschedule=FALSE, mc.cores=prefs$cores))
 
     close(prefs$fifo)
 
@@ -596,11 +844,17 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
 
     if (prefs$write) {
         ## Replace spaces and colons in the date with dashes
-        if (is.null(prefs$out.file)) {
-            prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
-        } else {
-            prefs$out.file <- make.names(prefs$out.file)
+        if (prefs$out.file == "") {
+            ## Write to the same directory as before, but prepend "LaByRInth" to the name
+            qualified.name <- str.split(file, "/")
+            name <- qualified.name[length(qualified.name)]
+            if (grepl("/", qualified.name)) {
+                prefs$out.file <- paste0(gsub("[/][^/]*$", "/", file), "LaByRInth_", name)
+            } else {
+                prefs$out.file <- paste0("LaByRInth_", name)
+            }
         }
+
         writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
         ## TODO(Jason): don't use sink()
@@ -622,6 +876,15 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
             text <- gsub("NA", ".", text)
         })
 
+        ## TODO(Jason): this won't work unless I find a way around sink()
+        ## progress.env <- new.env()
+        ## prefs$fifo <- ProgressMonitor(progress.env)
+        ## assign("progress", 0.0, envir=progress.env)
+        ## prefs$prog.env <- progress.env
+        ## prefs$n.jobs <- n.sites
+
+        ## TODO(Jason): this should be cleaned up and there should be an option
+        ## to use or not use partion imputation
         for (i in 1:n.sites) {
             ## Write prefix columns with tab seperation
             cat(paste0(prefix[i, ], collapse="\t"))
@@ -664,7 +927,6 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
                     } else if (call == 7) {
                         text <- "?/?"
                     }
-                    ## writeLines(" *  Optimal path resolution not yet implemented. Calling as ./.")
                 } else {
                     stop(paste("Invalid genotype call:", call))
                 }
@@ -676,6 +938,8 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
             if (i != n.sites) {  # add newline if not last row
                 cat("\n")
             }
+
+            ## MakeProgress(prefs)
         }
         sink()  # turn off sink
         end.time <- Sys.time()
@@ -694,12 +958,133 @@ LabyrinthImpute <- function(file, parents, prefs=NULL) {
 }
 
 
+## TODO(Jason): add option to switch ref and alt when filtering
+LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
+                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
+                            recomb.double=TRUE, read.err=0.05,
+                            genotype.err=0.05, recomb.dist=1e6,
+                            write=TRUE, parallel=TRUE, cores=4,
+                            quiet=FALSE) {
+
+    ## Create a preferences objects containing all preferences
+    prefs <- list()
+    class(prefs)            <- "prefs"
+
+    ## Algorithm parameters
+    prefs$recomb.double     <- recomb.double
+    prefs$read.err          <- read.err
+    prefs$genotype.err      <- genotype.err
+    prefs$recomb.dist       <- recomb.dist
+    ## should the GT info be inferred from the AD info
+    prefs$use.only.ad       <- use.only.ad
+    ## Should non-imputed sites be in the output VCF file
+    prefs$leave.all.calls   <- leave.all.calls
+    prefs$parents           <- parents
+
+    prefs$states            <- 3     # currently only support for 2 parents
+    ## TODO(Jason): implement this feature
+    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                     # switched in the output so that parent 1
+                                     # is always reference and parent 2 is
+                                     # always alternate
+
+    ## Logistic parameters
+    prefs$quiet             <- quiet
+    prefs$cores             <- cores
+    prefs$parallel          <- paralel
+    prefs$write             <- write
+    prefs$out.file          <- out.file
+
+    ValidatePreferences(prefs)
+
+    start.time <- Sys.time()
+    pseudo.start.time <- start.time
+
+    ## if (is.null(prefs)) {
+    ##     prefs <- GetDefaultPreferences()
+    ## }
+
+    ## Determine whether to run in parallel and how many cores to use
+    if (prefs$parallel) {
+        require(parallel)
+        prefs$lapply <- function(...,
+                                 mc.preschedule=F,
+                                 mc.cores=prefs$cores) {
+            mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+        }
+    } else {
+        prefs$lapply <- function(...,
+                                 mc.preschedule=F,
+                                 mc.cores=prefs$cores) {
+            lapply(...)
+        }
+    }
+
+    print.labyrinth.header()
+
+    writeLines(paste0(" *  Running filter in ", ifelse(prefs$parallel,
+               paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
+    writeLines(paste0(" *  Loading VCF file ", file))
+
+    vcf <- VCF(file, prefs)
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
+
+    parent.geno <- ResolveHomozygotes(vcf, prefs$parents)
+    chroms <- vcf$chrom.names
+    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chroms, parent.geno, prefs)
+    n.sites <- length(relevant.sites)
+    prefs$n.jobs <- n.sites
+
+    ## Progress monitor code from https://stackoverflow.com/questions/27726134/
+    ## how-to-track-progress-in-mclapply-in-r-in-parallel-package
+    ## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
+    ## in the progress.env environment
+    progress.env <- new.env()
+    prefs$fifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prefs$prog.env <- progress.env
+
+    if (is.null(prefs$out.file)) {
+        ## Replace spaces and colons in the date with dashes
+        prefs$out.file <- paste0("LaByRInth_", gsub("[ :]", "-", date()), "_.vcf")
+    } else {
+        prefs$out.file <- make.names(prefs$out.file)
+    }
+    writeLines(paste0(" *  Writing results to ", prefs$out.file))
+
+    sink(prefs$out.file)
+    writeLines(vcf$header.lines)
+    sapply(1:n.sites, function(site.num) {
+        if (relevant.sites[site.num]) {
+            writeLines(vcf$variant.lines[site.num])
+        }
+        writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
+    })
+    close(prefs$fifo)
+    sink()  # turn off sink
+
+    end.time <- Sys.time()
+    time <- difftime(end.time, pseudo.start.time)
+    pseudo.start.time <- end.time
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  Filter and file write completed in ", round(runtime, 2), " ", units, "\n"))
+
+    end.time <- Sys.time()
+    time <- difftime(end.time, start.time)
+    runtime <- as.numeric(time)
+    units <- attr(time, "units")
+    writeLines(paste0(" *  LaByRInth completed in ", round(runtime, 2), " ", units, "\n\n"))
+}
+
+
 LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
-    ## TODO(Jason): Talk to Tintle about why the imputation looks so bad when
-    ## imputing the parents. Shouldn't it be mostly correct? It is only about
-    ## 65% correct. Nevermind, the fact that there is no chance of a parent
-    ## being heterozygous is probably what the difference is since we cleaned
-    ## them up
+
     if (sample %in% prefs$parents) {
         ## Find which parent number it is and repeat that number as many times
         ## as necessary. i.e. parent 1 will retrun 11111...11111
@@ -738,13 +1123,25 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## are different from each other. It is a boolean vector indicating whether
     ## the site is relevant, thus the length is the same as the length of the
     ## final imputation for this sample and chromosome
+
     relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+    #writeLines(paste0(chrom, " ", sample, ": ", paste0(relevant.sites, collapse="")))
+
+    informative.sites <- apply(emission.probs, 1, function(row) {
+        !all(row == row[1])
+    })
+    ## relevant.sites <- informative.sites
+
+    if (length(relevant.sites) != length(informative.sites)) {
+        stop("Site index arrays differ")
+    }
+    relevant.sites <- relevant.sites & informative.sites
 
     ## If there are not enough markers according to user preference (or if there
     ## are 0), then do not do the imputation and return a path of NA's of the
     ## correct length
     n.relevant.sites <- sum(relevant.sites)  # boolean addition
-    if (n.relevant.sites < max(1, prefs$min.markers)) {
+    if (n.relevant.sites < 1) {
         full.path <- rep(NA_integer_, length(relevant.sites))
     } else {
         names(relevant.sites) <- NULL  # Makes debugging easier
@@ -760,14 +1157,25 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         full.path <- relevant.sites
 
         path.index <- 1
+        filler <- NA_integer_
         ## The missing calls that were not relevant will be filled back in
-        ## to create the full path from the
+        ## to create the full path from the relevant part of the path
         for (i in seq_along(relevant.sites)) {
             if (relevant.sites[i]) {  # if the site was relevant
                 full.path[i] <- path[path.index]  # set to next call
                 path.index <- path.index + 1  # increment call index
             } else {
-                full.path[i] <- NA_integer_
+                ## If we can safely decrement the index and elements are same
+                if (path.index > 1 &&
+                    path.index <= length(path) &&
+                    !is.na(path[path.index - 1]) &&
+                    !is.na(path[path.index]) &&
+                    path[path.index - 1] == path[path.index]) {
+                    filler <- path[path.index]
+                } else {
+                    filler <- NA_integer_
+                }
+                full.path[i] <- filler
             }
         }
     }
@@ -787,17 +1195,13 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## 7 (1+2+4): Nothing is known about the alleles
     ## NA: The site was not imputed
 
-    #####browser()
     full.path  # implicit return
 }
 
 
 GenotypeFromDepth <-  function(allelic.depths) {
     ad <- allelic.depths
-    ## TODO(Jason): add options for read error and genotyping error this. I'm
-    ## not sure if that should be a required feature of this fuction or another
-    ## function
-    #####browser(expr=length(ad)!=2)
+
     if (length(ad) != 2 && !all(is.na(ad))) {
         stop("GenotypeFromDepth does not support non-biallelic reads")
     }
@@ -817,37 +1221,34 @@ GenotypeFromDepth <-  function(allelic.depths) {
 }
 
 
-GetDefaultPreferences <- function() {
-    prefs <- list()
-    class(prefs)            <- "prefs"
+## GetDefaultPreferences <- function() {
+##     prefs <- list()
+##     class(prefs)            <- "prefs"
 
-    ## Algorithm parameters
-    prefs$resolve.conflicts <- FALSE
-    prefs$recomb.double     <- FALSE
-    prefs$read.err          <- 0.05
-    prefs$genotype.err      <- 0.05
-    prefs$recomb.err        <- 0.05
-    prefs$recomb.dist       <- 100000
-    prefs$min.markers       <- 1
-    prefs$states            <- length(prefs$parents) + 1
-    prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
-                                     # AD info
-    prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
-                                        # VCF file
-    prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
-                                     # switched in the output so that parent 1
-                                     # is always reference and parent 2 is
-                                     # always alternate
+##     ## Algorithm parameters
+##     prefs$recomb.double     <- TRUE
+##     prefs$read.err          <- 0.05
+##     prefs$genotype.err      <- 0.05
+##     prefs$recomb.dist       <- 1000000
+##     prefs$states            <- 3     # currently only support for 2 parents
+##     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
+##                                      # AD info
+##     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
+##                                      # VCF file
+##     prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+##                                      # switched in the output so that parent 1
+##                                      # is always reference and parent 2 is
+##                                      # always alternate
 
-    ## Logistics
-    prefs$quiet             <- FALSE
-    prefs$cores             <- 4
-    prefs$parallel          <- TRUE
-    prefs$write             <- TRUE
-    prefs$out.file          <- NULL
+##     ## Logistic parameters
+##     prefs$quiet             <- FALSE
+##     prefs$cores             <- 4
+##     prefs$parallel          <- TRUE
+##     prefs$write             <- TRUE
+##     prefs$out.file          <- ""
 
-    prefs  # implicit return
-}
+##     prefs  # implicit return
+## }
 
 
 ##' Checking preferences for the correct variable type
@@ -858,28 +1259,22 @@ GetDefaultPreferences <- function() {
 ##' @return 
 ##' @author Jason Vander Woude and Nathan Ryder
 ValidatePreferences <- function(prefs) {
+    ## TODO(Jason): check for NA logicals
     if (!inherits(prefs, "prefs")) {
         stop("prefs must be of class 'prefs'")
     }
     if (length(prefs$parents) != 2) {
         stop("exactly 2 parents must be specified")
     }
-    if (!is.logical(prefs$resolve.conflicts)) {
-        stop("'resolve.conflicts' must be of type logical")
-    }
     if (!is.logical(prefs$recomb.double)) {
         stop("'recomb.double' must be of type logical")
     }
     if (!(0 <= prefs$read.err && prefs$read.err < 1) ||
-        !(0 <= prefs$genotype.err && prefs$genotype.err < 1) ||
-        !(0 <= prefs$recomb.err && prefs$recomb.err < 1)) {
+        !(0 <= prefs$genotype.err && prefs$genotype.err < 1)) {
         stop("'error' values must be between 0 and 1")
     }
     if (!is.numeric(prefs$recomb.dist) || !(prefs$recomb.dist > 0)) {
         stop("recombination distance ('recomb.dist') must be a number greater than 0")
-    }
-    if (!is.numeric(prefs$min.markers) || !(prefs$min.markers >= 1)) {
-        stop("'min.markers' must be a number greater than or equal to 1")
     }
     if (prefs$states != length(prefs$parents) + 1) {
         stop("illegal number of states")
@@ -904,6 +1299,10 @@ ValidatePreferences <- function(prefs) {
 }
 
 
+## Progress monitor code from https://stackoverflow.com/questions/27726134/
+## how-to-track-progress-in-mclapply-in-r-in-parallel-package
+## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
+## in the progress.env environment
 ProgressMonitor <- function(env) {
     local({
         f <- fifo(tempfile(), open="w+b", blocking=T)
@@ -925,6 +1324,25 @@ ProgressMonitor <- function(env) {
 PrintProgress <- function(f, curr.prog) {
     msg <- readBin(f, "double")
     progress <- curr.prog + as.numeric(msg)
-    cat(sprintf(" *  Imputation progress: %.2f%%\r", progress * 100))
+    cat(sprintf(paste0(" *  ",  "Progress: %.2f%%\r"), progress * 100))
     progress  # implicit return
+}
+
+
+## TODO(Jason): Get this function to work; problem likely environments
+InitiateProgress <- function(prefs, n.jobs) {
+    ## progress.env <- new.env()
+    ## prefs$fifo <- ProgressMonitor(progress.env)
+    ## assign("progress", 0.0, envir=progress.env)
+    ## prefs$prog.env <- progress.env
+    ## prefs$n.jobs <- n.jobs
+    ## assign("prefs$n.jobs", n.jobs, envir=.GlobalEnv)
+}
+
+
+MakeProgress <- function(prefs) {
+    writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
+    if (!prefs$parallel) {  # if running in serial mode
+        prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
+    }  # else the forked process handles this
 }
