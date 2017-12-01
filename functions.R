@@ -13,6 +13,9 @@
 ## limitations under the License.
 
 
+library(abind)
+
+
 ensure_writability <- function(filename) {
   # The '/' is literal.
   # The '[^/]*' will match any character other than '/' any number of time.
@@ -1285,10 +1288,10 @@ GenotypeFromDepth <-  function(allelic.depths) {
 
 ##' Checking preferences for the correct variable type
 ##'
-##' 
-##' @title 
-##' @param prefs 
-##' @return 
+##'
+##' @title
+##' @param prefs
+##' @return
 ##' @author Jason Vander Woude and Nathan Ryder
 ValidatePreferences <- function(prefs) {
     ## TODO(Jason): check for NA logicals
@@ -1377,4 +1380,49 @@ MakeProgress <- function(prefs) {
     if (!prefs$parallel) {  # if running in serial mode
         prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
     }  # else the forked process handles this
+}
+
+
+WriteVCF <- function(vcf, f) {
+    con <- file(f)
+    writeLines(make.vcf.lines(vcf), con)
+    close(con)
+}
+
+
+ad.to.str <- function(ad.layer) {
+    text <- paste0(ad.layer, collapse=",")
+    #text <- gsub("NA", ".", text)
+}
+
+gt.to.str <- function(gt.layer) {
+    text <- paste0(gt.layer, collapse="/")
+    text <- gsub("NA", ".", text)
+}
+
+ad.to.dp.str <- function(ad.layer) {
+    text <- as.character(sum(ad.layer))
+    #text <- gsub("NA", ".", text)
+}
+
+make.vcf.lines <- function(vcf) {
+    ad.str <- apply(vcf$AD, 1:2, ad.to.str)
+    gt.str <- apply(vcf$GT, 1:2, gt.to.str)
+    dp.str <- apply(vcf$AD, 1:2, ad.to.dp.str)
+
+    combined <- abind(gt.str, ad.str, dp.str, along=3)
+    data.strings <- apply(combined, 1:2, paste0, collapse=":")
+
+    names <- str.split(vcf$header[length(vcf$header)], "\t")
+    prefix.strings <- vcf$variants[, 1:which(names=="INFO")]
+
+    content.strings <- cbind(prefix.strings, "GT:AD:DP", data.strings)
+    all.strings <- rbind(names, content.strings)
+
+    lines <- apply(all.strings, 1, paste0, collapse="\t")
+
+    c(vcf$header[1],
+               "##LaByRInth=<ID=Imputation,\"Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">",
+               "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
+               lines) # implicit return
 }
