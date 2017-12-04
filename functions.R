@@ -421,7 +421,7 @@ transProb <- function(a, b, dist, prefs) {
 ##' @param file the path to the vcf file
 ##' @return the vcf object created from the file
 ##' @author Jason Vander Woude
-VCF <- function(file, prefs) {
+VCF <- function(file, prefs, required=c("AD","GT")) {
     ## TODO(Jason): Save rds version of vcd to impute again with different prefs
 
     ## TODO(Jason): add filtering step to remove non-biallelic calls
@@ -451,18 +451,18 @@ VCF <- function(file, prefs) {
     formatExample <- vcf$variants[1, "FORMAT"]
     field.names <- str.split(formatExample, ":")
 
-    ## Verify that required fields are in the VCF
-    if (prefs$use.only.ad) {
-        required.fields <- "AD"  # could also use GQ
-    } else {
-        required.fields <- c("GT", "AD")  # could also use GQ
-    }
-    if (!all(required.fields %in% field.names)) {
-        stop(paste("VCF file does not contain all required fields.",
-                   "Required fields are", toString(required.fields)))
-    }
-    field.indices <- match(required.fields, field.names)
-    names(field.indices) <- required.fields
+    ## ## Verify that required fields are in the VCF
+    ## if (prefs$use.only.ad) {
+    ##     required.fields <- "AD"  # could also use GQ
+    ## } else {
+    ##     required.fields <- c("GT", "AD")  # could also use GQ
+    ## }
+    ## if (!all(required.fields %in% field.names)) {
+    ##     stop(paste("VCF file does not contain all required fields.",
+    ##                "Required fields are", toString(required.fields)))
+    ## }
+    ## field.indices <- match(required.fields, field.names)
+    ## names(field.indices) <- required.fields
 
     ## The "FORMAT" column is the last one before the variants start
     format.col <- match("FORMAT", colnames(vcf$variants))
@@ -477,8 +477,30 @@ VCF <- function(file, prefs) {
 
     ## AD and GT section
     ## Third dim = 2 because all sites must be biallelic
-    vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
-    vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
+    available.fields <- c()
+    if ("AD" %in% field.names) {
+        vcf$AD <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
+        vcf$DP <- matrix(NA_integer_, nrow=n.sites, ncol=n.variants)
+        colnames(vcf$AD) <- colnames(samples)
+        rownames(vcf$AD) <- rownames(samples)
+        colnames(vcf$DP) <- colnames(samples)
+        rownames(vcf$DP) <- rownames(samples)
+        available.fields <- c(available.fields, "AD")
+    }
+    if ("GT" %in% field.names) {
+        vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
+        ## vcf$GT.coded <- matrix(NA_integer_, nrow=n.sites, ncol=n.variants)
+        colnames(vcf$GT) <- colnames(samples)
+        rownames(vcf$GT) <- rownames(samples)
+        ## colnames(vcf$GT.coded) <- colnames(samples)
+        ## rownames(vcf$GT.coded) <- rownames(samples)
+        available.fields <- c(available.fields, "GT")
+    } else {
+        stop("VCF format requires that a GT (genotype) field be included")
+    }
+    ## Set up index array to get field position by name
+    field.indices <- match(available.fields, field.names)
+    names(field.indices) <- available.fields
 
     progress.env <- new.env()
     prefs$fifo <- ProgressMonitor(progress.env)
@@ -489,6 +511,7 @@ VCF <- function(file, prefs) {
     ##InitiateProgress(prefs, n.jobs=n.sites*n.variants)
 
     for (r in 1:n.sites) {
+        ## make sure site is biallelic
         if (length(str.split(vcf$variants[r, "ALT"], ",")) != 1 ) {
             vcf$AD[r, , ] <- NA_integer_
             vcf$GT[r, , ] <- NA_integer_
@@ -497,46 +520,48 @@ VCF <- function(file, prefs) {
             next()
         }
         for (c in 1:n.variants) {
-            ## Separate out AD field and split it into two read depths
-            ret.val.ad <- vcf.to.numeric(str.split(
-                str.split(samples[r, c], ":")[field.indices["AD"]], ","))
-            if (length(ret.val.ad) > 2) {
-                stop(paste0("There are more than two observed alleles at ",
-                            rownames(samples)[r], " for variant ", colnames(samples)[c]))
-            }
-            if (length(ret.val.ad) < 2 && !is.na(ret.val.ad)) {
-                stop(paste0("There are less than two observed alleles at ",
-                            rownames(samples)[r], " for variant ", colnames(samples)[c]))
-            }
-
-            if (prefs$use.only.ad) {
-                ret.val.gt <- GenotypeFromDepth(ret.val.ad)
-            } else {
-                ## Separate out GT field and split it into two calls
-                ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
-                ret.val.gt <- gsub("\\|", "/", ret.val.gt)
-                ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
-                if (length(ret.val.gt) > 2) {
-                    stop(paste0("There are more than two genotype calls at ",
+            if ("AD" %in% field.names) {
+                ## Separate out AD field and split it into two read depths
+                ret.val.ad <- vcf.to.numeric(str.split(
+                    str.split(samples[r, c], ":")[field.indices["AD"]], ","))
+                if (length(ret.val.ad) > 2) {
+                    stop(paste0("There are more than two observed alleles at ",
                                 rownames(samples)[r], " for variant ", colnames(samples)[c]))
                 }
-                if (length(ret.val.gt) < 2) {
-                    stop(paste0("There are less than two genotype calls at ",
+                if (length(ret.val.ad) < 2 && !is.na(ret.val.ad)) {
+                    stop(paste0("There are less than two observed alleles at ",
                                 rownames(samples)[r], " for variant ", colnames(samples)[c]))
                 }
+                vcf$AD[r, c, ] <- ret.val.ad
+                vcf$DG <- sum(ret.val.ad)
             }
 
-            vcf$AD[r, c, ] <- ret.val.ad
-            vcf$GT[r, c, ] <- ret.val.gt
+            if ("GT" %in% field.names) {
+                if (prefs$use.only.ad && "AD" %in% field.names) {
+                    ret.val.gt <- GenotypeFromDepth(ret.val.ad)
+                    vcf$GT[r, c, ] <- ret.val.gt
+                    vcf$GT.coded <- CodifyGT(ret.val.gt)
+                } else { ## TODO(Jason): warn of else condition outside loop
+                    ## Separate out GT field and split it into two calls
+                    ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
+                    ret.val.gt <- gsub("\\|", "/", ret.val.gt)  # replace '|' with '/'
+                    ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
+                    if (length(ret.val.gt) > 2) {
+                        stop(paste0("There are more than two genotype calls at ",
+                                    rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                    }
+                    if (length(ret.val.gt) < 2) {
+                        stop(paste0("There are less than two genotype calls at ",
+                                    rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                    }
+                    vcf$GT[r, c, ] <- ret.val.gt
+                }
+            }
         }
 
         MakeProgress(prefs)
 
     }
-    colnames(vcf$AD) <- colnames(samples)
-    rownames(vcf$AD) <- rownames(samples)
-    colnames(vcf$GT) <- colnames(samples)
-    rownames(vcf$GT) <- rownames(samples)
 
     vcf  # implicit return
 }
