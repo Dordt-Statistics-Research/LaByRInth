@@ -1451,3 +1451,70 @@ make.vcf.lines <- function(vcf) {
                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
                lines) # implicit return
 }
+AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
+    four.d.data <- abind(imp$GT, orig$GT, mask$GT, along=4)
+
+    ## df <- data.frame(num=rep(NA_integer_, N), txt=rep("", N),  # as many cols as you need
+    ##              stringsAsFactors=FALSE)          # you don't know levels yet
+
+    find.masked.sites <- function(slice) {
+        correct <- 1
+        partial <- 2
+        skipped <- 3
+        wrong   <- 4
+        ## Assume orignal VCF file had no partial calls (i.e. "./1" or "0/.")
+        i <- slice[,1]  # imp
+        o <- slice[,2]  # orig
+        m <- slice[,3]  # mask
+        if (all(is.na(m)) && !any(is.na(o))) {
+            ## i <- sort(slice$imp[is.na(slice$imp)]
+            if (all(is.na(i))) {
+                skipped
+            } else if (any(is.na(i))) {
+                non.na.i <- i[!is.na(i)]  # will be length 1 since i is length 2
+                if (non.na.i %in% o) {
+                    partial
+                } else {
+                    wrong
+                }
+            } else if (all(sort(i) == sort(o))) {
+                correct
+            } else {
+                wrong
+            }
+        } else {
+            0
+        }
+    }
+
+    find.depth <- function(strip) {
+        if (strip[1]) {
+            sum(strip[2:length(strip)])
+        } else {
+            0
+        }
+    }
+
+    masked.sites <- apply(four.d.data, 1:2, find.masked.sites)
+    print("found masked sites")
+
+    mask.w.ad <- abind(masked.sites, orig$AD, along=3)
+
+    depths <- as.numeric(apply(mask.w.ad, 1:2, find.depth))  # matrix to vector
+    qualities <- as.numeric(masked.sites)  # matrix to vector
+
+    relevant <- which(qualities!=0)
+
+    depths <- depths[relevant]
+    qualities <- qualities[relevant]
+    browser()
+    df <- data.frame(depth=depths,
+                     quality=factor(qualities,
+                                    levels=1:4,
+                                    labels = c("correct",
+                                               "partial",
+                                               "skipped",
+                                               "wrong")))
+
+    df
+}
