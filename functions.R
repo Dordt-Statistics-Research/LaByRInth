@@ -1451,6 +1451,17 @@ make.vcf.lines <- function(vcf) {
                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
                lines) # implicit return
 }
+
+
+CodifyGT <- function(gt) {
+    ## gt is a vector of genotypes
+    switch(type,
+           mean = 1,
+           median = 2,
+           trimmed = 3)
+}
+
+
 AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
     four.d.data <- abind(imp$GT, orig$GT, mask$GT, along=4)
 
