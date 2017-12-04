@@ -926,7 +926,7 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
                     text <- "0/1"
                 } else if (call %in% c(3,5,6,7)) {
                     if (call == 3) {
-                        text <- "X/X"
+                        text <- "./." # used to be X/X
                     } else if (call == 5) {
                         parent.call <- parent.geno[i, 1]  # 6 indicates parent 1
                         if (is.na(parent.call)) {
