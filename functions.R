@@ -13,6 +13,7 @@
 ## limitations under the License.
 
 
+## TODO(Jason): only require parallel on functions that use it (use lapply if not available)
 library(abind)
 
 
@@ -110,6 +111,7 @@ temp <- function() {
 }
 
 vcf.to.pgm <- function(vcf.file, parents, out.file) {
+    require(parallel)
     data <- data.table:::fread(vcf.file, blank.lines.skip=TRUE)
     parent.data <- data[, parents, with=FALSE]
     format.col <- which(colnames(data)=="FORMAT")
@@ -260,7 +262,7 @@ vcf.to.numeric <- function(str.vec) {
         } else if (str == ".") {
             NA_integer_
         } else {
-            stop("Attempted to convert invalid VCF string")
+            stop(paste("Attempted to convert invalid VCF string:", str))
         }
     })
 }
@@ -540,7 +542,7 @@ VCF <- function(file, prefs, required=c("AD","GT")) {
                 if (prefs$use.only.ad && "AD" %in% field.names) {
                     ret.val.gt <- GenotypeFromDepth(ret.val.ad)
                     vcf$GT[r, c, ] <- ret.val.gt
-                    vcf$GT.coded <- CodifyGT(ret.val.gt)
+                    #vcf$GT.coded <- CodifyGT(ret.val.gt)
                 } else { ## TODO(Jason): warn of else condition outside loop
                     ## Separate out GT field and split it into two calls
                     ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
@@ -1453,31 +1455,36 @@ make.vcf.lines <- function(vcf) {
 }
 
 
-CodifyGT <- function(gt) {
-    ## gt is a vector of genotypes
-    switch(type,
-           mean = 1,
-           median = 2,
-           trimmed = 3)
-}
+## CodifyGT <- function(gt) {
+##     ## gt is a vector of genotypes
+##     switch(type,
+##            mean = 1,
+##            median = 2,
+##            trimmed = 3)
+## }
 
 
 AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
+    ## TODO(Jason): without an original mask matrix it is impossible to tell
+    ## what percent of masked sites were imputed correctly. But it is possible
+    ## to tell the percent on non-NA masked sites which is really what we care about
     four.d.data <- abind(imp$GT, orig$GT, mask$GT, along=4)
 
     ## df <- data.frame(num=rep(NA_integer_, N), txt=rep("", N),  # as many cols as you need
     ##              stringsAsFactors=FALSE)          # you don't know levels yet
 
     find.masked.sites <- function(slice) {
-        correct <- 1
-        partial <- 2
-        skipped <- 3
-        wrong   <- 4
+        correct  <- 1
+        partial  <- 2
+        skipped  <- 3
+        wrong    <- 4
+        unmasked <- 5
         ## Assume orignal VCF file had no partial calls (i.e. "./1" or "0/.")
         i <- slice[,1]  # imp
         o <- slice[,2]  # orig
         m <- slice[,3]  # mask
-        if (all(is.na(m)) && !any(is.na(o))) {
+        if (all(is.na(m)) && !all(is.na(o))) { # all masked are na, no original are na
+            ##browser()
             ## i <- sort(slice$imp[is.na(slice$imp)]
             if (all(is.na(i))) {
                 skipped
@@ -1494,11 +1501,13 @@ AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
                 wrong
             }
         } else {
-            0
+            ##print(slice)
+            unmasked
         }
     }
 
     find.depth <- function(strip) {
+        ##browser()
         if (strip[1]) {
             sum(strip[2:length(strip)])
         } else {
@@ -1506,6 +1515,7 @@ AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
         }
     }
 
+#    browser()
     masked.sites <- apply(four.d.data, 1:2, find.masked.sites)
     print("found masked sites")
 
@@ -1514,12 +1524,13 @@ AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
     depths <- as.numeric(apply(mask.w.ad, 1:2, find.depth))  # matrix to vector
     qualities <- as.numeric(masked.sites)  # matrix to vector
 
-    relevant <- which(qualities!=0)
+    relevant <- which(qualities!=5)
+#    relevant <- which(qualities!=-1)  # all sites
 
     depths <- depths[relevant]
     qualities <- qualities[relevant]
-    browser()
     df <- data.frame(depth=depths,
+#                     quality=qualities)
                      quality=factor(qualities,
                                     levels=1:4,
                                     labels = c("correct",
