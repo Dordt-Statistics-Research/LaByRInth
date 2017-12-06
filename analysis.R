@@ -48,6 +48,7 @@ lakin.fuller.vcf$AD[mask, , ] <- 0
 
 lab <- VCF("./analysis/imp_LaByRInth_lf_masked_0001.vcf", prefs)
 lb <- VCF("./analysis/imp_LB_lf_masked_0001.vcf", prefs)
+#mask <- VCF("./analysis/lf_masked_0001.vcf", prefs)
 
 
 c1 <- factor(c(1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4), labels=c("correct", "partial", "skipped", "wrong"))
@@ -122,3 +123,165 @@ png("./analysis/imp_LB_lf_masked_0001_AD.png", width=960, height=540)
 ggplot(subset(df_LB, as.numeric(quality)!=3), aes(depth, fill=quality)) + geom_histogram(binwidth=2) + scale_fill_manual(values=colors, drop=FALSE)
 dev.off()
 
+
+lab <- readRDS("./analysis/imp_LaByRInth_lf_masked_0001.rds")
+lb <- readRDS("./analysis/imp_LB_lf_masked_0001.rds")
+mask <- readRDS("./analysis/lf_masked_0001.rds")
+
+
+dir <- "./analysis/filtered_lakin_fuller/mask_0001"
+fi <- function(name) {paste0(dir, "/", name)}
+f <- fi("imputed_infoLaB.vcf")
+v <- VCF(f, prefs)
+saveRDS(v, fi("imputed_infoLaB.rds"))
+
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_infoLaB.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+
+savePlot <- function(analyzed, id, dir, name, width=960, height=540) {
+    require(ggplot2)
+    colors <- c("#29ECF3", "#CDFF00", "#FFFFFF", "#B70000")
+    file <- paste0(dir, "/", id, "_", name, ".png")
+    print(file)
+
+    f_aa <- function(){ggplot(analyzed, aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)}
+    f_ab <- function(){ggplot(subset(analyzed, as.numeric(quality)!=3), aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)}
+    f_ac <- function(){ggplot(analyzed, aes(depth, fill=quality)) + geom_histogram(binwidth=1) + scale_fill_manual(values=colors, drop=FALSE)}
+    f_ad <- function(){ggplot(subset(analyzed, as.numeric(quality)!=3), aes(depth, fill=quality)) + geom_histogram(binwidth=1) + scale_fill_manual(values=colors, drop=FALSE)}
+
+    f <- switch(id,
+                "AA" = f_aa,
+                "AB" = f_ab,
+                "AC" = f_ac,
+                "AD" = f_ad)
+
+    #png(file, width=960, height=540)
+    f()
+    ggsave(file)
+    #dev.off()
+}
+
+
+
+#------------------------------------------------------------------------------#
+dir <- "./analysis/filtered_lakin_fuller/mask_0001"
+fi <- function(name) {paste0(dir, "/", name)}
+
+orig <- readRDS(fi("../orig.rds"))
+mask <- readRDS(fi("masked.rds"))
+
+algorithms <- c("LB", "LaByRInth", "infoLaB")
+analyses <- lapply(algorithms, function(alg) {
+    imp <- readRDS(fi(paste0("imputed_", alg, ".rds")))
+    AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+})
+
+for (id in c("AA", "AB", "AC", "AD")) {
+    for (i in 1:length(algorithms)) {
+        alg <- algorithms[i]
+        savePlot(analyses[[i]], id, dir, paste0("imputed_", alg))
+    }
+}
+
+#savePlot(analyses[[1]], "AD", dir, "junk")
+
+buildMask <- function(vcf, out.file) {
+    ## n.samples <- dim(imputed_vcf$GT)[1]  # length of primary dim
+    ## n.sites <- dim(imputed_vcf$GT)[2]  # length of primary dim
+    ## n.entries <- prod(dim(imputed_vcf$GT))  # length of primary dim
+    ## n.mask <- n.samples * 3
+
+    ## print(paste("# of samples:       ", n.samples))
+    ## print(paste("# of entries:       ", n.entries))
+    ## print(paste("# of masked entries:", n.mask))
+    ## entries <- sample(x=seq(n.entries), size=n.mask)
+
+    ## data <- rep(0, n.entries)
+    ## data[entries] <- 1
+    ## mask <- matrix(data, nrow=n.samples, ncol=n.sites)
+
+    ## mask  # implicit return
+    n.mask <- 30  # how many masked sites per sample
+    n.samples <- dim(vcf$GT)[1]  # length of primary dim
+    mask <- sample(x=seq(n.samples), size=n.mask)
+
+    vcf$GT[mask, , ] <- NA
+    vcf$AD[mask, , ] <- 0
+
+    saveRDS(vcf, out.file)
+}
+
+null_analysis <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=orig)
+
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_LaByRInth.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+
+
+dir <- "./analysis/filtered_lakin_fuller/mask_0002"
+buildMask(readRDS(fi("../orig.rds")), fi("masked.rds"))
+WriteVCF(readRDS(fi("masked.rds")), fi("masked.vcf"))
+
+infolab <- VCF(fi("imputed_infoLaB.vcf"), prefs)
+saveRDS(infolab, fi("imputed_infoLaB.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_infoLaB.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+
+
+#------------------------------------------------------------------------------#
+# sandesh mask
+#------------------------------------------------------------------------------#
+dir <- "./analysis/filtered_lakin_fuller/mask_0003"
+sandesh <- VCF(fi("masked.vcf"), prefs)
+saveRDS(sandesh, fi("masked.rds"))
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_infoLaB.vcf"))
+
+lab <- VCF(fi("imputed_infoLaB.vcf"), prefs)
+saveRDS(lab, fi("imputed_infoLaB.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_infoLaB.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+ggplot(analyze, aes(depth, fill=quality)) + geom_histogram(binwidth=1) + scale_fill_manual(values=colors, drop=FALSE)
+ggplot(analyze, aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze, id, dir, "imputed_infoLaB")
+}
+
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_LaByRInth.vcf"))
+
+lab <- VCF(fi("imputed_LaByRInth.vcf"), prefs)
+saveRDS(lab, fi("imputed_LaByRInth.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_LaByRInth.rds"))
+analyze2 <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze2, id, dir, "imputed_LaByRInth")
+}
+
+
+
+
+lb <- VCF(fi("imputed_LB.vcf"), prefs)
+saveRDS(lb, fi("imputed_LB.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_LB.rds"))
+analyze3 <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze3, id, dir, "imputed_LB")
+}
