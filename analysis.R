@@ -300,3 +300,33 @@ for (id in c("AA", "AB", "AC", "AD")) {
     savePlot(analyze4, id, dir, "imputed_LaByRInth_2")
 }
 
+
+
+
+
+dir <- "./analysis/filtered_lakin_fuller/mask_0004"
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_LaByRInth.vcf")) # commit e22a701 (v0.0.1)
+
+lab <- VCF(fi("imputed_LaByRInth.vcf"), prefs) # commit dev
+saveRDS(lab, fi("imputed_LaByRInth.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_LaByRInth.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze, id, dir, "imputed_LaByRInth")
+}
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_infoLaB.vcf")) # info branch
+
+lab <- VCF(fi("imputed_infoLaB.vcf"), prefs) # commit dev
+saveRDS(lab, fi("imputed_infoLaB.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_infoLaB.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze, id, dir, "imputed_infoLaB")
+}
