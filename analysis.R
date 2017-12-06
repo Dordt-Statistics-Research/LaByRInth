@@ -285,3 +285,18 @@ analyze3 <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
 for (id in c("AA", "AB", "AC", "AD")) {
     savePlot(analyze3, id, dir, "imputed_LB")
 }
+
+
+
+temp2 <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), prefs) # run on commit 790fe16
+lab2 <- VCF(fi("imputed_LaByRInth_2.vcf"), prefs)
+saveRDS(lab, fi("imputed_LaByRInth_2.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_LaByRInth_2.rds"))
+analyze4 <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+for (id in c("AA", "AB", "AC", "AD")) {
+    savePlot(analyze4, id, dir, "imputed_LaByRInth_2")
+}
+
