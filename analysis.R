@@ -147,7 +147,7 @@ savePlot <- function(analyzed, id, dir, name, width=960, height=540) {
     file <- paste0(dir, "/", id, "_", name, ".png")
     print(file)
 
-    f_aa <- function(){ggplot(analyzed, aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)}
+    f_aa <- function(){ggplot(analyzed, aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)+ guides(fill = guide_legend(reverse = TRUE))}
     f_ab <- function(){ggplot(subset(analyzed, as.numeric(quality)!=3), aes(depth, fill=quality)) + geom_histogram(binwidth=1, position="fill") + scale_fill_manual(values=colors, drop=FALSE)}
     f_ac <- function(){ggplot(analyzed, aes(depth, fill=quality)) + geom_histogram(binwidth=1) + scale_fill_manual(values=colors, drop=FALSE)}
     f_ad <- function(){ggplot(subset(analyzed, as.numeric(quality)!=3), aes(depth, fill=quality)) + geom_histogram(binwidth=1) + scale_fill_manual(values=colors, drop=FALSE)}
@@ -323,6 +323,8 @@ temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_infoL
 lab <- VCF(fi("imputed_infoLaB.vcf"), prefs) # commit dev
 saveRDS(lab, fi("imputed_infoLaB.rds"))
 
+saveRDS(VCF(fi("imputed_infoLaB.vcf"), prefs), fi("imputed_infoLaB.rds"))
+
 orig = readRDS(fi("../orig.rds"))
 mask = readRDS(fi("masked.rds"))
 imp  = readRDS(fi("imputed_infoLaB.rds"))
@@ -330,3 +332,15 @@ analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
 for (id in c("AA", "AB", "AC", "AD")) {
     savePlot(analyze, id, dir, "imputed_infoLaB")
 }
+
+
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi("imputed_infoLaB.vcf"))
+
+lab <- VCF(fi("imputed_infoLaB.vcf"), prefs)
+saveRDS(lab, fi("imputed_infoLaB.rds"))
+
+orig = readRDS(fi("../orig.rds"))
+mask = readRDS(fi("masked.rds"))
+imp  = readRDS(fi("imputed_infoLaB.rds"))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)

@@ -1186,18 +1186,32 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
     ## the site is relevant, thus the length is the same as the length of the
     ## final imputation for this sample and chromosome
 
-    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
-    #writeLines(paste0(chrom, " ", sample, ": ", paste0(relevant.sites, collapse="")))
 
-    informative.sites <- apply(emission.probs, 1, function(row) {
-        !all(row == row[1])
-    })
+#------------------------------------------------------------------------------#
+## -    #relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+## -    informative.sites <- apply(emission.probs, 1, function(row) {
+## -        !all(row == row[1])
+## -    })
+## -    relevant.sites <- informative.sites
+
+## +    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+## +
+## +    ## informative.sites <- apply(emission.probs, 1, function(row) {
+## +    ##     !all(row == row[1])
+## +    ## })
+#------------------------------------------------------------------------------#
+
+    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+    ## informative.sites <- apply(emission.probs, 1, function(row) {
+    ##     !all(row == row[1])
+    ## })
     ## relevant.sites <- informative.sites
 
-    if (length(relevant.sites) != length(informative.sites)) {
-        stop("Site index arrays differ")
-    }
-    relevant.sites <- relevant.sites & informative.sites
+    ## if (length(relevant.sites) != length(informative.sites)) {
+    ##     stop("Site index arrays differ")
+    ## }
+    ## relevant.sites <- relevant.sites & informative.sites
+
 
     ## If there are not enough markers according to user preference (or if there
     ## are 0), then do not do the imputation and return a path of NA's of the
