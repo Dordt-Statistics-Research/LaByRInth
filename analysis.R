@@ -330,3 +330,70 @@ analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
 for (id in c("AA", "AB", "AC", "AD")) {
     savePlot(analyze, id, dir, "imputed_infoLaB")
 }
+
+
+
+
+
+
+
+
+
+
+
+
+dir <- "./analysis/filtered_lakin_fuller/mask_0006"
+fi <- function(name) {paste0(dir, "/", name)}
+
+
+orig <- readRDS(fi("../orig.rds"))
+n.sites <- length(orig$GT[, 1, 1])  # length of secondary dim
+n.samples <- length(orig$GT[1, , 1])  # length of secondary dim
+
+mask <- sample(x=seq(n.samples), size=n.sites, replace=TRUE)
+## sapply(seq(n.sites), function(site) {
+##     orig$GT[site, mask[site], ] <- NA
+##     orig$AD[site, mask[site], ] <- 0
+## })
+
+for (i in seq(n.sites)) {orig$GT[i, mask[i], ] <- NA}
+for (i in seq(n.sites)) {orig$AD[i, mask[i], ] <- 0}
+
+saveRDS(orig, fi("masked.rds")) ##################################### RERUN ################
+WriteVCF(orig, fi("masked.vcf"))
+
+
+
+
+
+
+algorithm <- "LaByRInth"
+base.file.name <- paste0("imputed_", algorithm)
+rds.file.name <- paste0(base.file.name, ".rds")
+vcf.file.name <- paste0(base.file.name, ".vcf")
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi(vcf.file.name))
+lab <- VCF(fi(vcf.file.name), prefs)
+saveRDS(lab, fi(rds.file.name))
+orig <- readRDS(fi("../orig.rds"))
+mask <- readRDS(fi("masked.rds"))
+imp <- readRDS(fi(rds.file.name))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+saveRDS(analyze, fi(paste0("analyze.rds", algorithm)))
+
+
+
+############ 
+algorithm <- "LaByRInth_89e6569"
+base.file.name <- paste0("imputed_", algorithm)
+rds.file.name <- paste0(base.file.name, ".rds")
+vcf.file.name <- paste0(base.file.name, ".vcf")
+
+temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi(vcf.file.name))
+lab <- VCF(fi(vcf.file.name), prefs)
+saveRDS(lab, fi(rds.file.name))
+orig <- readRDS(fi("../orig.rds"))
+mask <- readRDS(fi("masked.rds"))
+imp <- readRDS(fi(rds.file.name))
+analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
+saveRDS(analyze, fi(paste0("analyze.rds", algorithm)))
