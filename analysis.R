@@ -384,16 +384,51 @@ saveRDS(analyze, fi(paste0("analyze.rds", algorithm)))
 
 
 ############ 
-algorithm <- "LaByRInth_89e6569"
+algorithm <- "LaByRInth_dev-emission"
 base.file.name <- paste0("imputed_", algorithm)
 rds.file.name <- paste0(base.file.name, ".rds")
 vcf.file.name <- paste0(base.file.name, ".vcf")
+internal.file.name <- paste0("internal_", algorithm, ".rds")
 
 temp <- LabyrinthImpute(fi("masked.vcf"), c("LAKIN","FULLER"), fi(vcf.file.name))
+saveRDS(temp, fi(internal.file.name))
 lab <- VCF(fi(vcf.file.name), prefs)
 saveRDS(lab, fi(rds.file.name))
 orig <- readRDS(fi("../orig.rds"))
 mask <- readRDS(fi("masked.rds"))
 imp <- readRDS(fi(rds.file.name))
 analyze <- AnalyzeImputationsRDS(imp=imp, orig=orig, mask=mask)
-saveRDS(analyze, fi(paste0("analyze.rds", algorithm)))
+saveRDS(analyze, fi(paste0("analyze", algorithm, ".rds")))
+
+
+get.gt <- function(vcf) {
+    type <- apply(vcf$GT, 1:2, function(vec) {
+        if (any(is.na(vec))) {
+            NA
+        } else if (vec[1]==vec[2]) {
+            if (vec[1]==0) {
+                0
+            } else {
+                1
+            }
+        } else {
+            0.5
+        }
+    })
+    type
+}
+
+
+# https://stats.stackexchange.com/questions/262410/snps-linkage-disequilibrium-in-r/262425
+r2 <- function(d1, d2) {summary(lm(d1 ~ d2))$r.squared}
+k <- c((-5):(-1),1:5)
+y <- sapply(6:(nrow(x)-5), function(i) {max(sapply(k, function(j) {r2(x[i+j,], x[i,])}))})
+z <- c(0,0,0,0,0,y,0,0,0,0,0)
+
+
+check <- function(i, inc, max) {
+    
+    if (i - inc >= 1) {
+        
+    }
+}
