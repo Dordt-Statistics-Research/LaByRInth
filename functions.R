@@ -722,16 +722,30 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
             ##     alt.calls <- 0
             ## }
 
+
+            ## x <- apply(mask$GT, 1:2, function(vec) {vec[1]==vec[2]})
+            ## > length(x)
+            ## [1] 3195264
+            ## > sum(x)
+            ## [1] NA
+            ## > sum(x, na.rm=T)
+            ## [1] 1936888
+            ## > sum(x==0, na.rm=T)
+            ## [1] 178873
+            ## > 178873 / (1936888+178873)
+            ## [1] 0.0845431
+
+
             ## Calculate the emission probabilities for this site
-            ref.prob <- (1 - rerr)**ref.calls * (rerr)**alt.calls
-            alt.prob <- (1 - rerr)**alt.calls * (rerr)**ref.calls
-            hom.prob <- (0.5)**(ref.calls + alt.calls)  # homozygous
-            max.prob <- max(ref.prob, alt.prob, hom.prob)
+            ref.prob <- 0.475 * (1 - rerr)**ref.calls * (rerr)**alt.calls
+            alt.prob <- 0.475 * (1 - rerr)**alt.calls * (rerr)**ref.calls
+            hom.prob <- 0.050 * (0.5)**(ref.calls + alt.calls)  # homozygous
+            sum.prob <- sum(ref.prob, alt.prob, hom.prob)
 
             normalize <- function(x) {
                 ## TODO(Jason): Correction: max.allowed should be swapped with
                 ## (max.allowed - min.allowed)
-                x / max.prob * max.allowed + min.allowed
+                x / sum.prob
             }
 
             ## TODO(Jason): This seems incorrect. If the parent is unknown (NA)
