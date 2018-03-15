@@ -12,57 +12,77 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-GENOME <- "genome"
-
 get.sites <- function(file) {
     read.csv(file, header=FALSE)[,1]
 }
 
-get.recomb.prob.fun <- function(peak, trough, flatness, start, end) {
-    ## function(x) {
-    ##     (peak - trough) * (2*x - 1)^(2*flatness) + trough
-    ## }
-    integral <- function(x) {
-        (peak - trough) * (2*x - 1)^(2*flatness + 1) / (4*flatness + 2) + trough*x
+## THIS IS DEPRICATED
+## get.recomb.prob.fun <- function(peak, trough, flatness, start, end) {
+##     ## function(x) {
+##     ##     (peak - trough) * (2*x - 1)^(2*flatness) + trough
+##     ## }
+##     integral <- function(x) {
+##         (peak - trough) * (2*x - 1)^(2*flatness + 1) / (4*flatness + 2) + trough*x
+##     }
+##     function(a, b) {
+##         abs( (1e-6) * (integral(a) - integral(b)) )
+##     }
+## }
+
+
+##' Return a scaled, mirrored, shifted logistic / sigmoid function
+##'
+##' The returned function will be as follows. The asymptotic maximum and minimum
+##' values of function are specified by peak and trough. The function will be
+##' shifted upward as necessary so that the minimum asymptotic value is the value
+##' of trough rather than 0, and it will be shifted left so that f(0) is very
+##' close to the peak value, though not exact because the function will
+##' asymptotically approach the peak value as x approaches negative
+##' infinity. The function will then be mirrored accross the y-axis so that it
+##' is monotonically decreasing.
+##' @title
+##' @param peak the maximum value of the function
+##' @param trough the minimum value of the function
+##' @param d the distance on the x-axis from peak to trough in number of bases
+##' @param sites numeric vector of site positions in base pairs
+##' @param error allowed error at intersection of logistic function with y-axis
+##' @return the semi-logistic function
+##' @author Jason
+get.recomb.profile.fun <- function(peak, trough, d, sites, error=0.0001) {
+    start <- sites[1]
+    end <- sites[length(sites)]
+    x_shift <- d / 2  # logistic function shift param
+    k <- log(1/error - 1) / (-x_shift)  # logistic function steepness param
+    l <- end - start  # length
+
+    ## implicitly return this function
+    logistic <- function(x) {
+        -(peak-trough) / (1 + exp(-k * (-x + x_shift))) + peak
     }
-    function(a, b) {
-        abs( (1e-6) * (integral(a) - integral(b)) )
+
+    function (positions) {
+        positions <- positions - start  # offset
+        ifelse(positions < l/2, logistic(positions), logistic(l-positions))
     }
 }
 
-get.recomb.prob.fun <- function(peak, trough, d, sites) { # dist in megabase
-    start <- sites[1]
-    end <- sites[length(sites)]
-    peak <- peak-trough
-    y <- 0.0001  # allowed error at peak of logistic function on x axis
-    x_shift <- d / 2  # logistic function shift param
-    k <- log(1/y - 1) / (-x_shift)  # logistic function steepness param
-    l <- end - start  # length
 
-    logistic <- function(x) {
-        -peak / (1 + exp(-k * (-x + x_shift)))
-    }
-
-    f(pos) <- function(pos) {
-        if (pos < l / 2) {
-            logistic(pos)
-        } else {
-            logistig(end - pos)
-        }
-    }
-
+get.recomb.prob.fun <- function(peak, trough, d, sites) {
+    f <- get.recomb.profile.fun(peak, trough, d, sites)
     ## implicitly return this function
     function(a, b) {
-        if (a > b) {
-            temp <- a
-            a <- b
-            b <- temp
+        if (length(a) != 1 || length(b) != 1) {
+            ## TODO(Jason): allow function to work properly on vector inputs by
+            warning("function returned by get.recomb.prob.fun not tested with vectors of length > 1")
         }
-        a <- a - start  # normalize
-        b <- b - start  # normalize
-
-        megabases <- (b-a)/(1e-6)  # base distance to megabase distance
-        cM <- (f(b) + f(a)) / 2 * (b - a)
+        megabases <- abs((b-a)/(1e6))  # base distance to megabase distance
+        mid <- mapply(function(x, y) {mean(c(x, y))}, a, b)
+        cM.per.Mb <- f(mid)  # "average" centimorgan per megabase value
+        ## return the centimorgan value which is probability of observing a
+        ## recombination in the progeny (it is half of the probability of a
+        ## physical recombination occurring between two of the chromotids
+        ## between these sites and is thus theoretically limited to 50%)
+        pmin(cM.per.Mb * megabases, 0.5)  # implicit return
     }
 }
 
@@ -158,18 +178,33 @@ cross <- function(p1, p2, fun) {
 }
 
 
-create.ril.pop <- function(n.generations, sites) {
+create.ril.pop <- function(n.generations, n.members, sites) {
+    if (n.generations < 2) {
+        stop("n.generations must be at least 2")
+    }
     n.sites <- length(sites)
 
-    ## Use booleans to keep track of reference and alternate allele
-    ## Each parent has two homologous chromosomes (cA and cB)
+    ## Use booleans to keep track of reference and alternate allele because it
+    ## is more efficient than using 0 and 1
+    ## Each parent has two homologous chromosomes (denoted here as cA and cB)
+    ## and the parents are homozygous within and polymorphic between.
     p1 <- p2 <- list()  # empty object initialization
     p1$cA <- p1$cB <- rep(TRUE, times=n.sites)  # parent 1
     p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
+    class(p1) <- class(p2) <- c("genome", class(p1))
 
     recomb.fun <- get.recomb.prob.fun(5, 0.0001, 10000, sites)
 
     f1 <- cross(p1, p2, recomb.fun)
+    f2s <- replicate(n.members, cross(f1, f1, recomb.fun)) # n.sites x n.members matrix
 
-    f2s <- replicate(n, cross(f1, f1)) # n.sites x n matrix
+    if (n.generations == 2) {
+        return f2s
+    }
+
+    fis <- f2s
+    for (i in 3:n.generations) {
+        fis <- apply(fis, 2, function(column){cross(column, column, recomb.fun)})
+    }
+    fis  # implicit return
 }

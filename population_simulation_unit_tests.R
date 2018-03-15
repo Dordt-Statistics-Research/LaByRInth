@@ -12,7 +12,7 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-## TEST 1:
+## TEST 1: 'cross' and 'gamete' functions
 
 sites <- c(1:16)
 n.sites <- length(sites)
@@ -30,10 +30,10 @@ print(p1)
 print(p2)
 print(cross(p1, p2, fun))
 
-## DONE: looks good up to here
+## DONE 1: looks good up to here
 
 
-## TEST 2:
+## TEST 2: 'cross' and 'gamete' functions
 
 ## Try to average 1 physical recombination
 ## In actuallity, the probability of a crossover happening between the inner
@@ -61,17 +61,63 @@ perc <- function(vec) {sum(vec) / length(vec)}
 print(perc(sapply(test.cAs, function(vec) {identical(vec, cA) || identical(vec, cB)})))
 print(perc(sapply(test.cBs, function(vec) {identical(vec, cA) || identical(vec, cB)})))
 
-## DONE: percentages come out as expected
+## DONE 2: percentages come out as expected
+
+
+## TEST 3: 'get.recomb.profile.fun'
+
+## Check the appearance of the curve to verify that the functions are specified
+## as intended
+sites <- seq(from=1000, to=2000, by=5)
+profile.fun <- get.recomb.profile.fun(peak=5, trough=1, d=300, sites=sites)
+plot(sites, profile.fun(sites), type="l")
+
+## DONE 3: plot shows the expected curve
+
+
+## TEST 4: 'get.recomb.profile.fun'
+
+## Check the appearance of the curve on an example of real site values
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+profile.fun <- get.recomb.profile.fun(peak=5, trough=0.1, d=5e7, sites=sites)
+plot(sites, profile.fun(sites), type="p")
+
+## DONE 4: plot shows the expected curve
+
+
+## TEST 5: 'get.recomb.prob.fun'
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+prob.fun <- get.recomb.prob.fun(peak=peak, trough=trough, d=d, sites=sites)
+profile.fun <- get.recomb.profile.fun(peak=peak, trough=trough, d=d, sites=sites)
+
+## find midpoint between every pair of sites
+mid.sites <- sapply.pairs(sites, function(s1, s2) {mean(c(s1, s2))})
+
+## find probability of observed recombination between these pairs
+mid.site.probs <- sapply.pairs(sites, function(s1, s2) {prob.fun(s1, s2)})
+
+## plot these probabilities; note that some of them could be above 1 if sites
+## are close together and and in peak regions of the profile
+plot(mid.sites, mid.site.probs, type="p")
+
+## plot the profile over top; where sites are farther apart, the probability
+## should tend to be higher; where the profile of the site is larger, the
+## probability should be larger
+points(sites, profile.fun(sites), type="p", col="green")
+
+## plot histogram and density of the probabilities
+hist(mid.site.probs)
+plot(density(mid.site.probs))
+
+## DONE 5: everything looks as it should; quite dependent on peak, trough, and d
 
 
 
+## TEST 6: 
 
-
-
-
-
-
-
-## get sites
-### sites <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
 ### ril.pop <- create.ril.pop(5, sites)
