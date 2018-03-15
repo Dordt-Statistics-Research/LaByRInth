@@ -15,7 +15,7 @@
 GENOME <- "genome"
 
 get.sites <- function(file) {
-    read.csv(file)[,1]
+    read.csv(file, header=FALSE)[,1]
 }
 
 get.recomb.prob.fun <- function(peak, trough, flatness, start, end) {
