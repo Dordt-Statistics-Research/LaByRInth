@@ -23,12 +23,12 @@ class(p2) <- c("genome", class(p2))
 
 p1$cA <- p2$cA <- cA <- rep(0, times=n.sites)
 p1$cB <- p2$cB <- cB <- rep(1, times=n.sites)
-p1$sites <- p2$sites <- sites
-fun <- function(site1, site2) {0.25}  # 50% chance of crossover between
-                                      # every pair of sites
+
+recomb.probs <- rep(0.25, n.sites-1)
+
 print(p1)
 print(p2)
-print(cross(p1, p2, fun))
+print(cross(p1, p2, recomb.probs))
 
 ## DONE 1: looks good up to here
 
@@ -43,14 +43,14 @@ print(cross(p1, p2, fun))
 ## chromosomes, there is in total a 0.5 + 0.5*0.3552644 = 0.6776322 chance that
 ## a given homologous chromosome in the offspring will be identical to one of
 ## the parental homologous chromosomes.
-fun <- function(site1, site2) {1 / (n.sites - 1) / 2}
+recomb.probs <- rep(1 / (n.sites - 1) / 2, n.sites - 1)
 
 ## Check this assumption over 10000 trials
 ## Each of the homologs of each cross should be identical to one of the parents
 ## about 67% of the time
 n <- 10000
 res <- lapply(1:n, function(i) {
-    cross(p1, p2, fun)
+    cross(p1, p2, recomb.probs)
 })
 
 test.cAs <- lapply(res, function(r) {r$cA})
@@ -92,18 +92,15 @@ peak <- 5
 trough <- 0.0001
 d <- 5e5
 
-prob.fun <- get.recomb.prob.fun(peak=peak, trough=trough, d=d, sites=sites)
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
 profile.fun <- get.recomb.profile.fun(peak=peak, trough=trough, d=d, sites=sites)
 
 ## find midpoint between every pair of sites
 mid.sites <- sapply.pairs(sites, function(s1, s2) {mean(c(s1, s2))})
 
-## find probability of observed recombination between these pairs
-mid.site.probs <- sapply.pairs(sites, function(s1, s2) {prob.fun(s1, s2)})
-
 ## plot these probabilities; note that some of them could be above 1 if sites
 ## are close together and and in peak regions of the profile
-plot(mid.sites, mid.site.probs, type="p")
+plot(mid.sites, recomb.probs, type="p")
 
 ## plot the profile over top; where sites are farther apart, the probability
 ## should tend to be higher; where the profile of the site is larger, the
@@ -111,13 +108,14 @@ plot(mid.sites, mid.site.probs, type="p")
 points(sites, profile.fun(sites), type="p", col="green")
 
 ## plot histogram and density of the probabilities
-hist(mid.site.probs)
-plot(density(mid.site.probs))
+hist(recomb.probs)
+plot(density(recomb.probs))
 
 ## DONE 5: everything looks as it should; quite dependent on peak, trough, and d
 
 
 
-## TEST 6: 
+## TEST 6: 'create.ril.pop'
 
-### ril.pop <- create.ril.pop(5, sites)
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+ril.pop <- create.ril.pop(n.ge10, sites)

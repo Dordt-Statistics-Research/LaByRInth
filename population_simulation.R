@@ -67,35 +67,33 @@ get.recomb.profile.fun <- function(peak, trough, d, sites, error=0.0001) {
 }
 
 
-get.recomb.prob.fun <- function(peak, trough, d, sites) {
+get.recomb.probs <- function(peak, trough, d, sites) {
     f <- get.recomb.profile.fun(peak, trough, d, sites)
-    ## implicitly return this function
-    function(a, b) {
-        if (length(a) != 1 || length(b) != 1) {
-            ## TODO(Jason): allow function to work properly on vector inputs by
-            warning("function returned by get.recomb.prob.fun not tested with vectors of length > 1")
-        }
-        megabases <- abs((b-a)/(1e6))  # base distance to megabase distance
-        mid <- mapply(function(x, y) {mean(c(x, y))}, a, b)
+
+    sapply.pairs(sites, function(s1, s2) {
+        megabases <- abs((s2-s1)/(1e6))  # base distance to megabase distance
+        mid <- (s1 + s2) / 2
         cM.per.Mb <- f(mid)  # "average" centimorgan per megabase value
+
         ## return the centimorgan value which is probability of observing a
         ## recombination in the progeny (it is half of the probability of a
         ## physical recombination occurring between two of the chromotids
         ## between these sites and is thus theoretically limited to 50%)
         pmin(cM.per.Mb * megabases, 0.5)  # implicit return
-    }
+    })
 }
 
 sapply.pairs <- function(vec, fun) {
     if (length(vec) < 2) {
         stop("first argument must have length >= 2")
     }
-    sapply(1:(length(vec)-1), function(i){
-        fun(vec[i], vec[i+1])
-    })
+    v1 <- vec[-length(vec)]  # remove last entry
+    v2 <- vec[-1]  # remove first entry
+
+    mapply(fun, v1, v2)
 }
 
-gamete <- function(parent, fun) {
+gamete <- function(parent, recomb.probs) {
     if (! "genome" %in% class(parent)) {
         stop("parent must be of type genome")
     }
@@ -122,7 +120,7 @@ gamete <- function(parent, fun) {
         ## original chromosomes even though one of those should be returned 50%
         ## of the time. This is why we randomize equally over the four possible
         ## chromatids before worrying about the possibility of recombination.
-        recomb.probs <- sapply.pairs(parent$sites, fun) * 2
+        recomb.probs <- 2 * recomb.probs  # convert from cM to prob of physical
 
         ## vector indicating if a physical recombination will occur between each
         ## pair of adjacent sites
@@ -151,7 +149,7 @@ gamete <- function(parent, fun) {
 
 }
 
-cross <- function(p1, p2, fun) {
+cross <- function(p1, p2, recomb.probs) {
     if (! "genome" %in% class(p1)) {
         stop("p1 must be of type genome")
     }
@@ -161,8 +159,9 @@ cross <- function(p1, p2, fun) {
     if (length(p1) != length(p2)) {
         stop("p1 and p2 have different lengths")
     }
-    if (! identical(p1$sites, p2$sites)) {
-        stop("site vectors differ for p1 and p2")
+    if (FALSE) {
+        ## TODO(Jason): check that cA and cB for p1 and p2 are all same length
+        ## and length of recomb.probs is one less
     }
     if (FALSE) {
         ## TODO(Jason): warn if probability of recombination is greater than 50% across
@@ -171,14 +170,14 @@ cross <- function(p1, p2, fun) {
     offspring <- list()
     class(offspring) <- c("genome", class(offspring))
 
-    offspring$cA <- gamete(p1, fun)
-    offspring$cB <- gamete(p2, fun)
+    offspring$cA <- gamete(p1, recomb.probs)
+    offspring$cB <- gamete(p2, recomb.probs)
 
     offspring  # implicit return
 }
 
 
-create.ril.pop <- function(n.generations, n.members, sites) {
+create.ril.pop <- function(n.gen, n.mem, sites, recomb.probs) {
     if (n.generations < 2) {
         stop("n.generations must be at least 2")
     }
@@ -193,13 +192,11 @@ create.ril.pop <- function(n.generations, n.members, sites) {
     p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
     class(p1) <- class(p2) <- c("genome", class(p1))
 
-    recomb.fun <- get.recomb.prob.fun(5, 0.0001, 10000, sites)
-
     f1 <- cross(p1, p2, recomb.fun)
-    f2s <- replicate(n.members, cross(f1, f1, recomb.fun)) # n.sites x n.members matrix
+    f2s <- replicate(n.members, cross(f1, f1, recomb.probs)) # n.sites x n.members matrix
 
     if (n.generations == 2) {
-        return f2s
+        return k(f2s)
     }
 
     fis <- f2s
