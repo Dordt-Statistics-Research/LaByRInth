@@ -117,5 +117,39 @@ plot(density(recomb.probs))
 
 ## TEST 6: 'create.ril.pop'
 
+get.member.homozygosity <- function(genome) {
+    perc(genome$cA == genome$cB)
+}
+
+get.pop.homozygosity <- function(population) {
+    mean(sapply(population, get.member.homozygosity))
+}
+
 sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
-ril.pop <- create.ril.pop(n.ge10, sites)
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- rep(0.5, n.sites-1)  # pick a number
+n.tests <- 7
+n.gen.to.test <- 5
+n.mem <- 1000
+
+set.seed(1)
+## all of the following values printed should be very close to 0
+for (gen in 2:n.gen.to.test) {
+    homozygosities <- sapply(1:n.tests, function(i) {
+        ril.pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, sites, recomb.probs)
+        get.pop.homozygosity(ril.pop)  # implicit return
+    })
+    print(paste("Generation", gen))
+    print(homozygosities - (1 - 0.5^(gen-1)))
+}
+
+## DONE 6: populations seem to be generating correctly
+
+
+## TEST 7: simulate realistic population
+
+#recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)

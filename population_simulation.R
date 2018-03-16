@@ -12,6 +12,8 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+TESTING <- TRUE
+
 get.sites <- function(file) {
     read.csv(file, header=FALSE)[,1]
 }
@@ -177,31 +179,56 @@ cross <- function(p1, p2, recomb.probs) {
 }
 
 
-create.ril.pop <- function(n.gen, n.mem, sites, recomb.probs) {
-    if (n.generations < 2) {
-        stop("n.generations must be at least 2")
+##' Breed a population from two full homozygous parents
+##'
+##' TRUE and FALSE are used as the two alleles. Both homologous chromosomes for
+##' parent 1 are set to TRUE at all sites, and both homologous chromosomes for
+##' parent 2 are set to FALSE at all sites. These parents are crossed to produce
+##' an F1 genome which will necessarily have one homologous chromosome be TRUE
+##' at all sites and the other will be FALSE at all sites. The F1 genome will be
+##' selfed n.mem times to produce n.mem members of the F2 population. If n.gen
+##' is 2, this population will be returned in a list, otherwise each member of
+##' the F2 population will be selfed to produce the F3 generation, then each of
+##' the F3 members will be selfed, etc. until an F{n.gen} population has been
+##' generated which will then be returned in a list.
+##' @title
+##' @param n.gen the generation number of the population
+##' @param n.mem the number of members in the population
+##' @param recomb.probs vector of genetic map units between sites i.e. a vector
+##' of probabilities of observing a recombination between each pair sites in the
+##' population. In theory each probability should be less than 50%, but the code
+##' will still work as expected if this is not the case
+##' @return a list of elements of class genome with the genome length being 1
+##' more than the length of recomb.probs
+##' @author Jason Vander Woude
+create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
+    if (n.gen < 2) {
+        stop("n.gen must be at least 2")
     }
-    n.sites <- length(sites)
+    if (n.mem < 1) {
+        stop("n.mem must be at least 1")
+    }
+    n.sites <- length(recomb.probs) + 1
 
     ## Use booleans to keep track of reference and alternate allele because it
     ## is more efficient than using 0 and 1
     ## Each parent has two homologous chromosomes (denoted here as cA and cB)
     ## and the parents are homozygous within and polymorphic between.
-    p1 <- p2 <- list()  # empty object initialization
-    p1$cA <- p1$cB <- rep(TRUE, times=n.sites)  # parent 1
-    p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
-    class(p1) <- class(p2) <- c("genome", class(p1))
 
-    f1 <- cross(p1, p2, recomb.fun)
-    f2s <- replicate(n.members, cross(f1, f1, recomb.probs)) # n.sites x n.members matrix
+    f1 <- list()
+    class(f1) <- c("genome", class(f1))
+    f1$cA <- rep(TRUE, times=n.sites)
+    f1$cB <- rep(FALSE, times=n.sites)
 
-    if (n.generations == 2) {
-        return k(f2s)
+    f2s <- lapply(seq(n.mem), function(i){cross(f1, f1, recomb.probs)})
+
+    if (n.gen == 2) {
+        return (f2s)
     }
 
     fis <- f2s
-    for (i in 3:n.generations) {
-        fis <- apply(fis, 2, function(column){cross(column, column, recomb.fun)})
+    for (i in 3:n.gen) {
+        fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
     }
     fis  # implicit return
 }
