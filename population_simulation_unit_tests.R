@@ -151,5 +151,4 @@ for (gen in 2:n.gen.to.test) {
 
 
 ## TEST 7: simulate realistic population
-
 #recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)

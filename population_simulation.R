@@ -12,24 +12,19 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-TESTING <- TRUE
+
+
+## This file contains functions related to generating simulated
+## populations. Currently, only single chromosome pair (homologous chromosomes)
+## populations can be generated, but this is not a hinderance because these
+## functions are used only for testing and because every homologous chromosome
+## pair is imputed seperately anyway, there is no need to be concerned with
+## populations of members with more than 2 chromosomes.
+
 
 get.sites <- function(file) {
     read.csv(file, header=FALSE)[,1]
 }
-
-## THIS IS DEPRICATED
-## get.recomb.prob.fun <- function(peak, trough, flatness, start, end) {
-##     ## function(x) {
-##     ##     (peak - trough) * (2*x - 1)^(2*flatness) + trough
-##     ## }
-##     integral <- function(x) {
-##         (peak - trough) * (2*x - 1)^(2*flatness + 1) / (4*flatness + 2) + trough*x
-##     }
-##     function(a, b) {
-##         abs( (1e-6) * (integral(a) - integral(b)) )
-##     }
-## }
 
 
 ##' Return a scaled, mirrored, shifted logistic / sigmoid function
@@ -49,7 +44,7 @@ get.sites <- function(file) {
 ##' @param sites numeric vector of site positions in base pairs
 ##' @param error allowed error at intersection of logistic function with y-axis
 ##' @return the semi-logistic function
-##' @author Jason
+##' @author Jason Vander Woude
 get.recomb.profile.fun <- function(peak, trough, d, sites, error=0.0001) {
     start <- sites[1]
     end <- sites[length(sites)]
@@ -230,5 +225,135 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
     for (i in 3:n.gen) {
         fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
     }
+    class(fis) <- c("population", class(fis))
     fis  # implicit return
+}
+
+
+## Choose the alleles that will be sampled
+SamplePopulation <- function(pop, coverage=1, type="uniform") {
+    if (! "population" %in% class(pop)) {
+        stop("pop must be of class population")
+    }
+    if (! type %in% c("uniform")) {
+        stop("currently only type supported is uniform")
+    }
+
+    n.variants <- length(pop)  # how many members
+    n.sites <- length(pop[[1]]$cA)  # check length of one chrom of first variant
+    total <- n.variants * n.sites * 2  # 2 chromosomes per member
+    n.coverage.sites <- total * coverage
+    variants <- sample(1:n.variants, size=n.coverage.sites, replace=TRUE)
+    sites    <- sample(1:n.sites,    size=n.coverage.sites, replace=TRUE)
+    chroms   <- sample(1:2,          size=n.coverage.sites, replace=TRUE)
+
+    result <- list()
+    class(result) <- c("sample", class(result))
+    result$population <- pop
+    result$sample <- rbind(variants, sites, chroms)
+
+    result  # implicit return
+}
+
+
+
+EmptyVCF <- function(pop) {
+    if (! "population" %in% class(pop)) {
+        stop("pop must be of class population")
+    }
+
+    n.variants <- length(pop)  # how many members
+    n.sites <- length(pop[[1]]$cA)  # check length of one chrom of first variant
+    chr.name <- "UN"
+
+    vcf <- list()
+    class(vcf) <- "vcf"
+
+    vcf$variant.names <- paste0("V", 1:n.variants)
+    vcf$chrom.names <- chr.name
+
+    ## initialize the three main components of vcf
+    vcf$GT <- array(NA_integer_, dim=c(n.sites, n.variants, 2))
+    vcf$AD <- array(0, dim=c(n.sites, n.variants, 2))
+    vcf$DP <- matrix(0, nrow=n.sites, ncol=n.variants)
+
+    ## shorthand notation to allow naming all rows and columns together
+    `cn<-` <- `colnames<-`
+    `rn<-` <- `rownames<-`
+
+    ## name all rows and columns of each matrix/array
+    cn(vcf$AD) <- cn(vcf$DP) <- cn(vcf$GT) <- vcf$variant.names
+    rn(vcf$AD) <- rn(vcf$DP) <- rn(vcf$GT) <- paste0(chr.name, ":", sites)
+
+    vcf  # implicit return
+}
+
+
+FullPopulationVCF <- function(pop){
+    vcf <- EmptyVCF(pop)
+
+    ## properly set the DP field to 2 at every location
+    vcf$DP <- apply(vcf$DP, 1:2, function(i){2})
+
+    ## properly set the GT and AD fields based on the population
+    for (var in seq_along(colnames(vcf$DP))) {
+        for (site in seq_along(rownames(vcf$DP))) {
+            a <- pop[[var]]$cA[site]
+            b <- pop[[var]]$cB[site]
+            ## a and b are true or false
+            if (a && b) {  # both true / 1
+                vcf$GT[site, var, ] <- c(1, 1)
+                vcf$AD[site, var, ] <- c(0, 2)
+            } else if (!a && !b) {  # both false / 0
+                vcf$GT[site, var, ] <- c(0, 0)
+                vcf$AD[site, var, ] <- c(2, 0)
+            } else {  # different from each other
+                vcf$GT[site, var, ] <- c(0, 1)
+                vcf$AD[site, var, ] <- c(1, 1)
+            }
+        }
+    }
+
+    vcf  # implicit return
+}
+
+
+SamplePopulationVCF <- function(sample.result, sites){
+    if (! "sample" %in% class(sample.result)) {
+        stop("sample.result must be of class sample")
+    }
+
+    pop <- sample.result$population
+    sample <- sample.result$sample
+    vcf <- EmptyVCF(pop)
+
+    ## properly set the AD fields based on the population
+    for (observation in sample) {
+        var    <- observation[1]
+        site   <- observation[2]
+        chrom  <- observation[3]
+        if (chrom == 1) {
+            allele <- as.numeric(pop[[var]]$cA[site])
+        } else {
+            allele <- as.numeric(pop[[var]]$cB[site])
+        }
+        vcf$AD[site, var, allele] <- 1 + vcf$AD[site, var, allele]
+    }
+
+    ## properly set the GT and DP fields based on the AD field
+    vcf$DP <- apply(vcf$AD, 1:2, sum)  # sum both allele counts at each site
+
+    vcf$GT <- apply(vcf$AD, 1:2, function(depths) {
+        if (depths[0] == 0 && depths[1] == 0) {
+            c(NA_integer_, NA_integer_)
+        } else if (depths[0] == 0) {
+            c(1, 1)
+        } else if (depths[1] == 0) {
+            c(0, 0)
+        } else {  # both non-zero
+            c(0, 1)
+        }
+    })
+
+    vcf  # implicit return
 }
