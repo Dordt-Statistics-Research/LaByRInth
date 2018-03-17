@@ -451,96 +451,242 @@ SamplePopulationVCF <- function(sample.result, sites){
 ##' @param mask.list a list of 2 element vectors indicating the 
 ##' @return 
 ##' @author Jason Vander Woude
-checkAccuracy <- function(correct.vcf, test.vcf) {
+checkAccuracy <- function(correct.vcf, call.vcf) {
     if (! "vcf" %in% class(correct.vcf)) {
         stop("correct.vcf must be of class vcf")
     }
-    if (! "vcf" %in% class(test.vcf)) {
+    if (! "vcf" %in% class(call.vcf)) {
         stop("test.vcf must be of class vcf")
     }
 
-    n.variants <- ncol(correct.vcf$GT)
-
-    gt.corr <- correct.vcf$GT[, 3:n.variants, ]
-    gt.test <- test.vcf$GT[, 3:n.variants, ]
-
-    ## bind together the genotype data structures to allow efficiently applying
-    ## a function to them without having to index. Note that both gt.corr and
-    ## gt.test are already 3D structure where the first dimension is the site
-    ## index, the second is the variant index, and the third is the chromosome
-    ## index.
-    bound <- abind(gt.corr, gt.test, along=4)
-
-    types <- c("ref.called.ref",
-               "ref.called.het",
-               "ref.called.alt",
-               "het.called.ref",
-               "het.called.het",
-               "het.called.alt",
-               "alt.called.ref",
-               "alt.called.het",
-               "alt.called.alt")
-    enum <- 1:9  # note that m later assumes length 9
-    names(enum) <- types
-
-    ret <- list()
-
-    ## apply over the first two dimensions to check each site, variant pair
-    all.call.types <- apply(bound, 1:2, function(data) {
+    ## TODO(Jason): use factors here instead of strings to save space while
+    ## maintaining clarity of code
+    get.type <- function(gt) {
         ## sum the two genotype vector entries. If the sum is 0, then both
         ## entries are 0 and it is homozygous reference. If the sum is 1, then
         ## one of the entires is 0 and the other is 1, so it is heterozygous,
         ## and if the sum is 2, then both entries are 1 and it is homozygous
         ## alternate.
-        corr <- sum(data[,1])
-        test <- sum(data[,2])
+        n <- sum(gt)
 
-        if (corr == 0) {
-            if (test == 0) {
-                enum["ref.called.ref"]
-            } else if (test == 1) {
-                enum["ref.called.het"]
-            } else {  # test == 2
-                enum["ref.called.alt"]
-            }
-        } else if (corr == 1) {
-            if (test == 0) {
-                enum["het.called.ref"]
-            } else if (test == 1) {
-                enum["het.called.het"]
-            } else {  # test == 2
-                enum["het.called.alt"]
-            }
-        } else {  # corr == 2
-            if (test == 0) {
-                enum["alt.called.ref"]
-            } else if (test == 1) {
-                enum["alt.called.het"]
-            } else {  # test == 2
-                enum["alt.called.alt"]
+        if (is.na(n)) {
+            "unknown"
+        } else if (n == 0) {
+            "reference"
+        } else if (n == 1) {
+            "heterozygous"
+        } else if (n == 2) {
+            "alternate"
+        } else {
+            stop(paste("get.type cannot accept the value", n))
+        }
+    }
+
+    generalize.type <- function(type) {
+        ifelse(
+            type %in% c("reference", "alternate"),
+            "homozygous",
+            as.character(type)
+        )
+    }
+
+    get.quality <- function(corr, call) {
+        f <- function(cor, cal) {
+            if (cor == "unknown") {
+                "unknown"
+            } else if (cal == "unknown") {
+                "skipped"
+            } else if (as.character(cor) == as.character(cal)) {
+                "correct"
+            } else if (cor == "heterozygous") {
+                "partial"
+            } else {
+                "wrong"
             }
         }
-    })
-    ret$all.call.types <- all.call.types
+        mapply(f, corr, call)  # implicit return
+    }
 
-    ## summarize all calls into the nine types
-    m <- sapply(enum, function(call.type) {
-        sum(result == enum)
-    })
-    m <- matrix(m, nrow=3, ncol=3, byrow=TRUE)
-    rownames(m) <- c("ref", "het", "alt")
-    colnames(m) <- c("called.ref", "called.het", "called.alt")
-    ## m :=         Call
-    ##
-    ##              r h a
-    ##              e e l
-    ##              f t t
-    ##    A   ref [ *     ]
-    ##    c   het [   *   ]
-    ##    t   alt [     * ]
-    ret$call.summary <- m
+    variants        <- colnames(correct.vcf$GT)
+    n.variants      <- length(variants)
+    sites           <- rownames(correct.vcf$GT)
+    n.sites         <- length(sites)
 
-    #m.small <- matrix(nrow=2, ncol=2)
+    progeny.indices <- 3:n.variants
+    progeny         <- variants[progeny.indices]
+    n.progeny       <- length(progeny)
 
-    ret  ## implicit return
+    gt.corr         <- correct.vcf$GT[, progeny.indices, ]
+    gt.call         <- call.vcf$GT[, progeny.indices, ]
+    ad.corr         <- correct.vcf$AD[, progeny.indices, ]
+
+    ## as.numeric and as.factor are used to convert the matrix returned by apply
+    ## into a vector
+    corr.types      <- as.factor(apply(gt.corr, 1:2, get.type))
+    gen.corr.types  <- as.factor(generalize.type(corr.types))
+    call.types      <- as.factor(apply(gt.call, 1:2, get.type))
+    gen.call.types  <- as.factor(generalize.type(call.types))
+    if (is.null(ad.corr)) {
+        ref.depths <- alt.depths <- NA_integer_
+    } else {
+        ref.depths      <- as.numeric(apply(ad.corr, 1:2, function(ad) {ad[1]}))
+        alt.depths      <- as.numeric(apply(ad.corr, 1:2, function(ad) {ad[2]}))
+    }
+    qualities       <- get.quality(corr.types, call.types)
+
+    ## the use of as.numeric abover will turn the matrix into a vector in column
+    ## major order, and because columns represent variants, every block of
+    ## n.sites entries correspond to the same variant/progeny. This is why
+    ## variants are repeated with "each" while sites are repeated with "times"
+    variants       <- rep(progeny, each=n.sites)
+    sites          <- rep(sites, times=n.progeny)
+
+    ## implicitly return data.frame
+    data.frame(
+        variant       = variants,
+        site          = sites,
+        type          = corr.types,
+        call.type     = call.types,
+        gen.type      = gen.corr.types,
+        gen.call.type = gen.call.types,
+        ref.depth     = ref.depths,
+        alt.depth     = alt.depths,
+        depth         = ref.depths + alt.depths,
+        quality       = qualities
+    )
 }
+
+
+
+
+
+
+
+
+
+
+    ## ## bind together the genotype data structures to allow efficiently applying
+    ## ## a function to them without having to index. Note that both gt.corr and
+    ## ## gt.test are already 3D structure where the first dimension is the site
+    ## ## index, the second is the variant index, and the third is the chromosome
+    ## ## index.
+    ## bound <- abind(gt.corr, gt.test, along=4)
+
+
+
+
+
+
+
+
+
+
+    ## types <- c("ref.called.ref",
+    ##            "ref.called.het",
+    ##            "ref.called.alt",
+    ##            "ref.called.nil",
+    ##            "het.called.ref",
+    ##            "het.called.het",
+    ##            "het.called.alt",
+    ##            "het.called.nil",
+    ##            "alt.called.ref",
+    ##            "alt.called.het",
+    ##            "alt.called.alt",
+    ##            "alt.called.nil",
+    ##            "nil.called.ref",
+    ##            "nil.called.het",
+    ##            "nil.called.alt",
+    ##            "nil.called.nil")
+
+    ## types <- c("ref", "het", "alt", "nil")
+    ## n.types <- length(types)
+    ## enum <- 0:(n.types - 1)
+    ## names(enum) <- types
+
+    ## get.type <- function(n) {
+    ##     if (is.na(n)) {
+    ##         "unknown"
+    ##     } else if (n == 0) {
+    ##         "reference"
+    ##     } else if (n == 1) {
+    ##         "heterozygous"
+    ##     } else if (n == 2) {
+    ##         "alternate"
+    ##     } else {
+    ##         stop(paste("get.type cannot accept the value", n))
+    ##     }
+    ## }
+
+    ## ## enum <- 1:9  # note that m later assumes length 9
+    ## ## names(enum) <- types
+
+    ## ret <- list()
+
+    ## ## apply over the first two dimensions to check each site, variant pair
+    ## all.call.types <- apply(bound, 1:2, function(data) {
+    ##     ## sum the two genotype vector entries. If the sum is 0, then both
+    ##     ## entries are 0 and it is homozygous reference. If the sum is 1, then
+    ##     ## one of the entires is 0 and the other is 1, so it is heterozygous,
+    ##     ## and if the sum is 2, then both entries are 1 and it is homozygous
+    ##     ## alternate.
+    ##     corr <- get.type(sum(data[,1]))
+    ##     test <- get.type(sum(data[,2]))
+
+
+
+    ##     if (is.na(corr)) {
+
+    ##     } else if (corr == 0) {
+    ##         if (test == 0) {
+    ##             enum["ref.called.ref"]
+    ##         } else if (test == 1) {
+    ##             enum["ref.called.het"]
+    ##         } else {  # test == 2
+    ##             enum["ref.called.alt"]
+    ##         }
+    ##     } else if (corr == 1) {
+    ##         if (test == 0) {
+    ##             enum["het.called.ref"]
+    ##         } else if (test == 1) {
+    ##             enum["het.called.het"]
+    ##         } else {  # test == 2
+    ##             enum["het.called.alt"]
+    ##         }
+    ##     } else {  # corr == 2
+    ##         if (test == 0) {
+    ##             enum["alt.called.ref"]
+    ##         } else if (test == 1) {
+    ##             enum["alt.called.het"]
+    ##         } else {  # test == 2
+    ##             enum["alt.called.alt"]
+    ##         }
+    ##     }
+    ## })
+    ## ret$all.call.types <- all.call.types
+
+    ## ## turn the result from a matrix to a vector
+    ## all.call.types <- as.numeric(all.call.types)
+    ## variant <- rep(progeny, each=n.sites)
+    ## site <- rep(sites, times=n.progeny)
+    ## type <- all.call.types
+
+    ## ## summarize all calls into the nine types
+    ## m <- sapply(enum, function(call.type) {
+    ##     sum(result == enum)
+    ## })
+    ## m <- matrix(m, nrow=3, ncol=3, byrow=TRUE)
+    ## rownames(m) <- c("ref", "het", "alt")
+    ## colnames(m) <- c("called.ref", "called.het", "called.alt")
+    ## ## m :=         Call
+    ## ##
+    ## ##              r h a
+    ## ##              e e l
+    ## ##              f t t
+    ## ##    A   ref [ *     ]
+    ## ##    c   het [   *   ]
+    ## ##    t   alt [     * ]
+    ## ret$call.summary <- m
+
+    ## #m.small <- matrix(nrow=2, ncol=2)
+
+    ## ret  ## implicit return

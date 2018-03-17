@@ -151,7 +151,6 @@ trough <- 0.1
 d <- 5e5
 
 recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
-#recomb.probs <- rep(0.25, n.sites-1)  # pick a number
 n.gen <- 5
 n.mem <- 100
 cov <- 0.25
@@ -173,3 +172,107 @@ vcf.to.pgm("./analysis/simulated_population/sample_f5_test_1.vcf", c("P1", "P2")
 
 ## DONE 7: trying various parameters not shown here, everything seems to
 ## consistently look as expected
+
+
+## TEST 8: try imputing sample data
+
+source("functions.R")  # need vcf functions
+
+## note: peak=5, trough=0.1, d=5e5 looks similar to current lakin fuller imputation
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.1
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+n.gen <- 5
+n.mem <- 100
+cov <- 0.25
+
+set.seed(1)
+ril.pop <- create.ril.pop(n.gen=n.gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(ril.pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(ril.pop, coverage=cov), sites)
+
+WriteVCF(sample.vcf, "./analysis/simulated_population/sample_f5_test_1.vcf")
+
+## Create a preferences objects containing all preferences
+prefs <- list()
+class(prefs)            <- "prefs"
+
+## Algorithm parameters
+prefs$recomb.double     <- TRUE
+prefs$read.err          <- 0.05
+prefs$genotype.err      <- 0.05
+prefs$recomb.dist       <- 1e6
+## should the GT info be inferred from the AD info
+prefs$use.only.ad       <- FALSE # THIS DIFFERS FROM STANDARD PREFS
+## Should non-imputed sites be in the output VCF file
+prefs$leave.all.calls   <- TRUE
+prefs$parents           <- c("P1", "P2")
+
+prefs$states            <- 3     # currently only support for 2 parents
+## TODO(Jason): implement this feature
+prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
+                                        # switched in the output so that parent 1
+                                        # is always reference and parent 2 is
+                                        # always alternate
+
+## Logistic parameters
+prefs$quiet             <- FALSE
+prefs$cores             <- 4
+prefs$parallel          <- TRUE
+prefs$write             <- TRUE
+prefs$out.file          <- "./analysis/simulated_population/sample_f5_test_1_imputed.vcf"
+
+LabyrinthImpute("./analysis/simulated_population/sample_f5_test_1.vcf",
+    parents = c("P1", "P2"),
+    out.file = "./analysis/simulated_population/sample_f5_test_1_imputed.vcf")
+imputed.vcf <- VCF("./analysis/simulated_population/sample_f5_test_1_imputed.vcf", prefs)
+
+LabyrinthImpute("./analysis/simulated_population/sample_f5_test_1.vcf",
+    recomb.dist = 500e6,
+    parents = c("P1", "P2"),
+    out.file = "./analysis/simulated_population/sample_f5_test_1_imputed_2.vcf")
+prefs$out.file          <- "./analysis/simulated_population/sample_f5_test_1_imputed.vcf"
+imputed.2.vcf <- VCF(prefs$out.file, prefs)
+
+LabyrinthImpute("./analysis/simulated_population/sample_f5_test_1.vcf",
+    parents = c("P1", "P2"),
+    out.file = "./analysis/simulated_population/sample_f5_test_1_imputed_3.vcf")
+prefs$out.file <- "./analysis/simulated_population/black_hole"
+imputed.3.vcf <- VCF("./analysis/simulated_population/sample_f5_test_1_imputed_3.vcf", prefs)
+
+
+res <- checkAccuracy(full.vcf, imputed.vcf)
+res.2 <- checkAccuracy(full.vcf, imputed.2.vcf)
+res.3 <- checkAccuracy(full.vcf, imputed.3.vcf)
+
+with(res, sum(quality=="correct") / length(quality))
+with(res, sum(quality=="correct") / (length(quality) - sum(quality=="skipped")))
+
+with(res.2, sum(quality=="correct") / length(quality))
+with(res.2, sum(quality=="correct") / (length(quality) - sum(quality=="skipped")))
+
+vcf.to.pgm("./analysis/simulated_population/sample_f5_test_1_imputed.vcf", c("P1", "P2"),
+           "./analysis/simulated_population/sample_f5_test_1_imputed.pgm")
+
+
+vcf.to.pgm("./analysis/simulated_population/sample_f5_test_1_imputed_3.vcf", c("P1", "P2"),
+           "./analysis/simulated_population/sample_f5_test_1_imputed_3.pgm")
+
+## using 500 times the recombination distance resulted in exactly the same imputation?
+## only 7 heterozygous calls were made, so it is probably being penalized too
+## much
+
+## what is the true type when we get it wrong
+summary(with(res, gen.type[quality=="wrong"]))
+summary(with(res, gen.type[quality=="skipped"]))  ## 10% of skips are heterozygous
+
+## recursive imputation??? need depth data though
+
+## interesting that when imputing without a priori multiplying the heterozygous
+## probabilities by 0.05, there are more het calls which makes sense, but there
+## are fewer correct calls and few partial calls (which also makes sense) and
+## fewer correct calls and twice as many wrong calls
