@@ -436,17 +436,111 @@ SamplePopulationVCF <- function(sample.result, sites){
     })
 
     vcf$GT <- abind(gt.1, gt.2, along=3)
-    ## vcf$GT <- apply(vcf$AD, 1:2, function(depths) {
-    ##     if (depths[1] == 0 && depths[2] == 0) {
-    ##         c(NA_integer_, NA_integer_)
-    ##     } else if (depths[1] == 0) {
-    ##         c(1, 1)
-    ##     } else if (depths[2] == 0) {
-    ##         c(0, 0)
-    ##     } else {  # both non-zero
-    ##         c(0, 1)
-    ##     }
-    ## })
 
     vcf  # implicit return
+}
+
+##' .. content for \description{} (no empty lines) ..
+##'
+##' It is assumed that the population parents are the first two entries in
+##' population that the vcf is built from. The data will also only check for
+##' correct imputation in progeny and ignore the parents.
+##' @title 
+##' @param correct.vcf 
+##' @param test.vcf 
+##' @param mask.list a list of 2 element vectors indicating the 
+##' @return 
+##' @author Jason Vander Woude
+checkAccuracy <- function(correct.vcf, test.vcf) {
+    if (! "vcf" %in% class(correct.vcf)) {
+        stop("correct.vcf must be of class vcf")
+    }
+    if (! "vcf" %in% class(test.vcf)) {
+        stop("test.vcf must be of class vcf")
+    }
+
+    n.variants <- ncol(correct.vcf$GT)
+
+    gt.corr <- correct.vcf$GT[, 3:n.variants, ]
+    gt.test <- test.vcf$GT[, 3:n.variants, ]
+
+    ## bind together the genotype data structures to allow efficiently applying
+    ## a function to them without having to index. Note that both gt.corr and
+    ## gt.test are already 3D structure where the first dimension is the site
+    ## index, the second is the variant index, and the third is the chromosome
+    ## index.
+    bound <- abind(gt.corr, gt.test, along=4)
+
+    types <- c("ref.called.ref",
+               "ref.called.het",
+               "ref.called.alt",
+               "het.called.ref",
+               "het.called.het",
+               "het.called.alt",
+               "alt.called.ref",
+               "alt.called.het",
+               "alt.called.alt")
+    enum <- 1:9  # note that m later assumes length 9
+    names(enum) <- types
+
+    ret <- list()
+
+    ## apply over the first two dimensions to check each site, variant pair
+    all.call.types <- apply(bound, 1:2, function(data) {
+        ## sum the two genotype vector entries. If the sum is 0, then both
+        ## entries are 0 and it is homozygous reference. If the sum is 1, then
+        ## one of the entires is 0 and the other is 1, so it is heterozygous,
+        ## and if the sum is 2, then both entries are 1 and it is homozygous
+        ## alternate.
+        corr <- sum(data[,1])
+        test <- sum(data[,2])
+
+        if (corr == 0) {
+            if (test == 0) {
+                enum["ref.called.ref"]
+            } else if (test == 1) {
+                enum["ref.called.het"]
+            } else {  # test == 2
+                enum["ref.called.alt"]
+            }
+        } else if (corr == 1) {
+            if (test == 0) {
+                enum["het.called.ref"]
+            } else if (test == 1) {
+                enum["het.called.het"]
+            } else {  # test == 2
+                enum["het.called.alt"]
+            }
+        } else {  # corr == 2
+            if (test == 0) {
+                enum["alt.called.ref"]
+            } else if (test == 1) {
+                enum["alt.called.het"]
+            } else {  # test == 2
+                enum["alt.called.alt"]
+            }
+        }
+    })
+    ret$all.call.types <- all.call.types
+
+    ## summarize all calls into the nine types
+    m <- sapply(enum, function(call.type) {
+        sum(result == enum)
+    })
+    m <- matrix(m, nrow=3, ncol=3, byrow=TRUE)
+    rownames(m) <- c("ref", "het", "alt")
+    colnames(m) <- c("called.ref", "called.het", "called.alt")
+    ## m :=         Call
+    ##
+    ##              r h a
+    ##              e e l
+    ##              f t t
+    ##    A   ref [ *     ]
+    ##    c   het [   *   ]
+    ##    t   alt [     * ]
+    ret$call.summary <- m
+
+    #m.small <- matrix(nrow=2, ncol=2)
+
+    ret  ## implicit return
 }
