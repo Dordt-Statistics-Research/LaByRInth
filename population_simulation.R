@@ -27,6 +27,27 @@ get.sites <- function(file) {
 }
 
 
+perc <- function(vec) {
+    sum(vec) / length(vec)
+}
+
+
+get.member.homozygosity <- function(genome) {
+    perc(genome$cA == genome$cB)
+}
+
+
+get.pop.homozygosity <- function(population) {
+    mean(sapply(population, get.member.homozygosity))
+}
+
+
+list.of.cols <- function(matrix) {
+    lapply(1:ncol(matrix), function(col) {matrix[, col]})
+}
+
+
+
 ##' Return a scaled, mirrored, shifted logistic / sigmoid function
 ##'
 ##' The returned function will be as follows. The asymptotic maximum and minimum
@@ -209,11 +230,12 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
     ## is more efficient than using 0 and 1
     ## Each parent has two homologous chromosomes (denoted here as cA and cB)
     ## and the parents are homozygous within and polymorphic between.
+    p1 <- p2 <- list()  # empty object initialization
+    p1$cA <- p1$cB <- rep(TRUE, times=n.sites)  # parent 1
+    p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
+    class(p1) <- class(p2) <- c("genome", class(p1))
 
-    f1 <- list()
-    class(f1) <- c("genome", class(f1))
-    f1$cA <- rep(TRUE, times=n.sites)
-    f1$cB <- rep(FALSE, times=n.sites)
+    f1 <- cross(p1, p2, recomb.fun)
 
     f2s <- lapply(seq(n.mem), function(i){cross(f1, f1, recomb.probs)})
 
@@ -225,13 +247,17 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
     for (i in 3:n.gen) {
         fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
     }
+    fis <- c(list(p1), list(p2), fis)  # prepend parents to list of progeny
     class(fis) <- c("population", class(fis))
     fis  # implicit return
 }
 
 
 ## Choose the alleles that will be sampled
-SamplePopulation <- function(pop, coverage=1, type="uniform") {
+## This assumes that the parents are the first two entries in the population and
+## will not be sampled
+## TODO(Jason): allow for false reads
+SamplePopulation <- function(pop, coverage=1, type="uniform", parents=TRUE) {
     if (! "population" %in% class(pop)) {
         stop("pop must be of class population")
     }
@@ -241,35 +267,55 @@ SamplePopulation <- function(pop, coverage=1, type="uniform") {
 
     n.variants <- length(pop)  # how many members
     n.sites <- length(pop[[1]]$cA)  # check length of one chrom of first variant
-    total <- n.variants * n.sites * 2  # 2 chromosomes per member
+    ## 2 parents are not sampled and 2 chromosomes per member
+    ## TODO(Jason): verify that this is how coverage is computed
+    total <- (n.variants - 2) * n.sites * 2
     n.coverage.sites <- total * coverage
-    variants <- sample(1:n.variants, size=n.coverage.sites, replace=TRUE)
+    variants <- sample(3:n.variants, size=n.coverage.sites, replace=TRUE)
     sites    <- sample(1:n.sites,    size=n.coverage.sites, replace=TRUE)
     chroms   <- sample(1:2,          size=n.coverage.sites, replace=TRUE)
+
+    ## also sample both chromosomes of both parents at every site
+    p.variants <- rep(1:2, each=2*n.sites)  # 1,1,...,1,2,...,2,2
+    p.chroms <- rep(rep(1:2, each=n.sites), times=2)
+    p.sites <- rep(1:n.sites, times=2*2)  # 1,2,3,...,n,1,2,3,...
+
+    variants <- c(p.variants, variants)
+    sites <- c(p.sites, sites)
+    chroms <- c(p.chroms, chroms)
 
     result <- list()
     class(result) <- c("sample", class(result))
     result$population <- pop
-    result$sample <- rbind(variants, sites, chroms)
+    result$sample <- list.of.cols(rbind(variants, sites, chroms))
 
     result  # implicit return
 }
 
 
 
-EmptyVCF <- function(pop) {
+EmptyVCF <- function(pop, sites) {
     if (! "population" %in% class(pop)) {
         stop("pop must be of class population")
     }
 
+    ## TODO(Jason): either skip this or make it more efficient
+    n.sites <- length(sites)
+    for (member in pop) {
+        if (length(member$cA) != n.sites ||
+            length(member$cB) != n.sites) {
+            stop("not all members of population have same length chromosomes as the sites vector")
+        }
+    }
+
     n.variants <- length(pop)  # how many members
-    n.sites <- length(pop[[1]]$cA)  # check length of one chrom of first variant
     chr.name <- "UN"
 
     vcf <- list()
     class(vcf) <- "vcf"
 
-    vcf$variant.names <- paste0("V", 1:n.variants)
+    ## first two variants are parents, the rest are progeny
+    vcf$variant.names <- c("P1", "P2", paste0("V", 1:(n.variants - 2)))
     vcf$chrom.names <- chr.name
 
     ## initialize the three main components of vcf
@@ -285,12 +331,31 @@ EmptyVCF <- function(pop) {
     cn(vcf$AD) <- cn(vcf$DP) <- cn(vcf$GT) <- vcf$variant.names
     rn(vcf$AD) <- rn(vcf$DP) <- rn(vcf$GT) <- paste0(chr.name, ":", sites)
 
+    ## create vcf header
+    fields <- c("CHROM", "POS", "ID", "REF", "ALT",
+                "QUAL", "FILTER", "INFO", "FORMAT")
+    ## single string of all fields and variant names seperated by tabs
+    tab.sep.line <- paste0("#", paste0(c(fields, vcf$variant.names), collapse="\t"))
+    vcf$header <- c("##fileformat=VCFv4.0", tab.sep.line)
+
+    ## set field data
+    vcf$variants <- cbind(rep(chr.name, n.sites),        # CHROM
+                          as.character(sites),           # POS
+                          paste0(chr.name, "_", sites),  # ID
+                          rep("A", n.sites),             # REF
+                          rep("C", n.sites),             # ALT
+                          rep("0", n.sites),             # QUALITY
+                          rep("PASS", n.sites),          # FILTER
+                          rep("", n.sites),              # INFO
+                          rep("GT:AD:DP", n.sites))      # FORMAT
+    cn(vcf$variants) <- fields
+
     vcf  # implicit return
 }
 
 
-FullPopulationVCF <- function(pop){
-    vcf <- EmptyVCF(pop)
+FullPopulationVCF <- function(pop, sites){
+    vcf <- EmptyVCF(pop, sites)
 
     ## properly set the DP field to 2 at every location
     vcf$DP <- apply(vcf$DP, 1:2, function(i){2})
@@ -322,20 +387,23 @@ SamplePopulationVCF <- function(sample.result, sites){
     if (! "sample" %in% class(sample.result)) {
         stop("sample.result must be of class sample")
     }
+    require(abind)
 
     pop <- sample.result$population
     sample <- sample.result$sample
-    vcf <- EmptyVCF(pop)
+    vcf <- EmptyVCF(pop, sites)
 
     ## properly set the AD fields based on the population
     for (observation in sample) {
         var    <- observation[1]
         site   <- observation[2]
         chrom  <- observation[3]
+        ## add 1 to allele to compensate for 1 based indexing so allele will
+        ## either equal 1 if the site is FALSE or 2 if the site is TRUE
         if (chrom == 1) {
-            allele <- as.numeric(pop[[var]]$cA[site])
+            allele <- as.numeric(pop[[var]]$cA[site]) + 1
         } else {
-            allele <- as.numeric(pop[[var]]$cB[site])
+            allele <- as.numeric(pop[[var]]$cB[site]) + 1
         }
         vcf$AD[site, var, allele] <- 1 + vcf$AD[site, var, allele]
     }
@@ -343,17 +411,42 @@ SamplePopulationVCF <- function(sample.result, sites){
     ## properly set the GT and DP fields based on the AD field
     vcf$DP <- apply(vcf$AD, 1:2, sum)  # sum both allele counts at each site
 
-    vcf$GT <- apply(vcf$AD, 1:2, function(depths) {
-        if (depths[0] == 0 && depths[1] == 0) {
-            c(NA_integer_, NA_integer_)
-        } else if (depths[0] == 0) {
-            c(1, 1)
+    gt.1 <- apply(vcf$AD, 1:2, function(depths) {
+        if (depths[1] == 0 && depths[2] == 0) {
+            NA_integer_
         } else if (depths[1] == 0) {
-            c(0, 0)
+            1
+        } else if (depths[2] == 0) {
+            0
         } else {  # both non-zero
-            c(0, 1)
+            0
         }
     })
+
+    gt.2 <- apply(vcf$AD, 1:2, function(depths) {
+        if (depths[1] == 0 && depths[2] == 0) {
+            NA_integer_
+        } else if (depths[1] == 0) {
+            1
+        } else if (depths[2] == 0) {
+            0
+        } else {  # both non-zero
+            1
+        }
+    })
+
+    vcf$GT <- abind(gt.1, gt.2, along=3)
+    ## vcf$GT <- apply(vcf$AD, 1:2, function(depths) {
+    ##     if (depths[1] == 0 && depths[2] == 0) {
+    ##         c(NA_integer_, NA_integer_)
+    ##     } else if (depths[1] == 0) {
+    ##         c(1, 1)
+    ##     } else if (depths[2] == 0) {
+    ##         c(0, 0)
+    ##     } else {  # both non-zero
+    ##         c(0, 1)
+    ##     }
+    ## })
 
     vcf  # implicit return
 }

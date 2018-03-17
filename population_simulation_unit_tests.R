@@ -56,7 +56,6 @@ res <- lapply(1:n, function(i) {
 test.cAs <- lapply(res, function(r) {r$cA})
 test.cBs <- lapply(res, function(r) {r$cB})
 
-perc <- function(vec) {sum(vec) / length(vec)}
 ## Both of these values should be about 67%
 print(perc(sapply(test.cAs, function(vec) {identical(vec, cA) || identical(vec, cB)})))
 print(perc(sapply(test.cBs, function(vec) {identical(vec, cA) || identical(vec, cB)})))
@@ -117,14 +116,6 @@ plot(density(recomb.probs))
 
 ## TEST 6: 'create.ril.pop'
 
-get.member.homozygosity <- function(genome) {
-    perc(genome$cA == genome$cB)
-}
-
-get.pop.homozygosity <- function(population) {
-    mean(sapply(population, get.member.homozygosity))
-}
-
 sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
 n.sites <- length(sites)
 peak <- 5
@@ -150,5 +141,35 @@ for (gen in 2:n.gen.to.test) {
 ## DONE 6: populations seem to be generating correctly
 
 
-## TEST 7: simulate realistic population
-#recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+## TEST 7: simulate realistic population and save as vcf file
+
+## note: peak=5, trough=0.1, d=5e5 looks similar to current lakin fuller imputation
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.1
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+#recomb.probs <- rep(0.25, n.sites-1)  # pick a number
+n.gen <- 5
+n.mem <- 100
+cov <- 0.25
+
+set.seed(1)
+ril.pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(ril.pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(ril.pop, coverage=cov), sites)
+
+source("functions.R")  # need vcf functions
+
+WriteVCF(full.vcf, "./analysis/simulated_population/full_f5_test_1.vcf")
+WriteVCF(sample.vcf, "./analysis/simulated_population/sample_f5_test_1.vcf")
+
+vcf.to.pgm("./analysis/simulated_population/full_f5_test_1.vcf", c("P1", "P2"),
+           "./analysis/simulated_population/full_f5_test_1.pgm")
+vcf.to.pgm("./analysis/simulated_population/sample_f5_test_1.vcf", c("P1", "P2"),
+           "./analysis/simulated_population/sample_f5_test_1.pgm")
+
+## DONE 7: trying various parameters not shown here, everything seems to
+## consistently look as expected
