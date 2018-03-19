@@ -213,6 +213,126 @@ viterbi <- function(probs, dists, prefs) {
 }
 
 
+experimental.viterbi <- function(emission.probs, qs, prefs) {
+    nstates <- nstates.probs(emission.probs)
+    path.size <- nsites.probs(emission.probs)
+
+    ## 3D array
+    paths.tracker <- array(NA, dim=c(nstates, path.size, nstates))
+
+    ## This will keep track of the overall probabilities of each of the {nstates}
+    ## final paths, so that the probability of the final paths do not have to be
+    ## computed again. The probabilities are initialized to the emission
+    ## probabilities of the first site of the probs matrix which is the first
+    ## row
+    if (path.size < 1) {
+        stop("viterbi requires that probs have > 0 rows")
+    }
+    probs.tracker <- log(emission.probs[1, ])
+
+    ## Hard code the first column to the vector 1,2,...,nstates as an index
+    ## This is what the generatePath function will need
+    paths.tracker[, 1, ] <- diag(TRUE, nstates)
+
+    if (path.size != 1) {  # if the path size is 1 just use the emission probs
+        for (site in 2:path.size) {  # for each site in the path
+
+            q <- qs[site - 1]
+
+            ## log of the probability for each possible hidden state at this site
+            probs.tracker <- sapply(1:nstates, function(state) {
+
+                extension.probs <- sapply(1:nstates, function(i) {
+                    ## log of the probability of being at state i before and
+                    ## transitioning to the 'state' state
+                    probs.tracker[i] + log(experimentalTransProb(i, state, q))
+                })
+
+                optimal.indices <- extension.probs==max(extension.probs)
+                ## use <<- to assign to a variable outside the current scope
+                paths.tracker[state, site, ] <<- optimal.indices
+                max(extension.probs) + log(emission.probs[site, state])  # return prob
+            })
+        }
+    }
+
+    ## The code above has already computed the optimal path, but that
+    ## information is encoded within the paths.tracker matrix and needs to be
+    ## extracted. That is what generatePath will do when passed the path.tracker
+    ## matrix and the indices of the optimal path.
+    generatePath(paths.tracker, probs.tracker==max(probs.tracker))  # return best path
+}
+
+
+experimentalTransProb <- function(a, b, q) {
+    ## ## a and b are in {1,2,3,4}
+    ## if (a == b) {
+    ##     if (a %in% 1:2) {
+    ##         q^2  # same hom hom transition
+    ##     } else {
+    ##         ## 2*q^2+2*(1/2 - q)^2  # het het transition
+    ##         q^2 + (1/2 - q)^2  # het het transition
+    ##     }
+    ## } else if (a == 3 || b == 3) {
+    ##     2*q*(1/2 - q)  # het hom (or hom het) transition
+    ## } else {
+    ##     (1/2 - q)^2  # diff hom hom transition
+    ## }
+
+    if (a == 1) {
+        if (b == 1) {
+            q^2
+        } else if (b == 2) {
+            (1/2 - q)^2
+        } else if (b == 3) {
+            q*(1/2 - q)
+        } else if (b == 4) {
+            q*(1/2 - q)
+        } else {
+            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        }
+    } else if (a == 2) {
+        if (b == 1) {
+            (1/2 - q)^2
+        } else if (b == 2) {
+            q^2
+        } else if (b == 3) {
+            q*(1/2 - q)
+        } else if (b == 4) {
+            q*(1/2 - q)
+        } else {
+            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        }
+    } else if (a == 3) {
+        if (b == 1) {
+            q*(1/2 - q)
+        } else if (b == 2) {
+            q*(1/2 - q)
+        } else if (b == 3) {
+            q^2
+        } else if (b == 4) {
+            (1/2 - q)^2
+        } else {
+            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        }
+    } else if (a == 4) {
+        if (b == 1) {
+            q*(1/2 - q)
+        } else if (b == 2) {
+            q*(1/2 - q)
+        } else if (b == 3) {
+            (1/2 - q)^2
+        } else if (b == 4) {
+            q^2
+        } else {
+            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        }
+    } else {
+        stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+    }
+}
+
+
 ##' Find the transission probability between hidden states
 ##'
 ##' Use the equations specified in the LB-Impute paper to compute the
@@ -224,7 +344,7 @@ viterbi <- function(probs, dists, prefs) {
 ##' @param prefs a preferences object
 ##' @return the transmission probability between these hidden states
 ##' @author Jason Vander Woude
-transProb <- function(a, b, dist, prefs) {
+transProb <- function(a, b, p, prefs) {
     if (a == b) {
         ## If there is no recombination
         0.5 * (1 + exp(-dist/prefs$recomb.dist))
@@ -534,7 +654,9 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
         allele.counts <- ad[row, 1, ]
 
         if (all(is.na(geno.calls))) {
-            ret.val[row, ] <- rep(1, prefs$states)
+            #ret.val[row, ] <- c(0.475, 0.475, 0.05)
+            ret.val[row, ] <- c(0.25, 0.25, 0.5)
+#            ret.val[row, ] <- rep(1, prefs$states)
         } else if (any(is.na(geno.calls))) {
             stop("Some but not all genotype calls are NA")  # TODO(Jason): remove
         } else {
@@ -542,9 +664,15 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
             alt.calls <- allele.counts[2]
 
             ## Calculate the emission probabilities for this site
-            ref.prob <- 0.475 * (1 - rerr)**ref.calls * (rerr)**alt.calls
-            alt.prob <- 0.475 * (1 - rerr)**alt.calls * (rerr)**ref.calls
-            hom.prob <- 0.050 * (0.5)**(ref.calls + alt.calls)  # homozygous
+            ## ref.prob <- 0.4639369 * (1 - rerr)**ref.calls * (rerr)**alt.calls
+            ## alt.prob <- 0.4639369 * (1 - rerr)**alt.calls * (rerr)**ref.calls
+            ## hom.prob <- 0.07212618 * (0.5)**(ref.calls + alt.calls)  # homozygous
+            ## sum.prob <- sum(ref.prob, alt.prob, hom.prob)
+
+            ## Calculate the emission probabilities for this site
+            ref.prob <- 0.25 * (1 - rerr)**ref.calls * (rerr)**alt.calls
+            alt.prob <- 0.25 * (1 - rerr)**alt.calls * (rerr)**ref.calls
+            hom.prob <- 0.5 * (0.5)**(ref.calls + alt.calls)  # homozygous
             sum.prob <- sum(ref.prob, alt.prob, hom.prob)
 
             normalize <- function(x) {
@@ -598,11 +726,17 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
                             recomb.double=TRUE, read.err=0.05,
                             genotype.err=0.05, recomb.dist=1e6,
                             write=TRUE, parallel=TRUE, cores=4,
-                            quiet=FALSE) {
+                            quiet=FALSE, generation=2, qs=NULL) {
 
     ## Create a preferences objects containing all preferences
     prefs <- list()
     class(prefs)            <- "prefs"
+
+
+
+    prefs$qs <- qs
+
+
 
     ## Algorithm parameters
     prefs$recomb.double     <- recomb.double
@@ -698,7 +832,7 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
                     vcf$GT[site, var, ] <- NA_integer_
                 } else if (call %in% 1:2) {
                     vcf$GT[site, var, ] <- parent.geno[site, call]
-                } else if (call == 4) {
+                } else if (call == 4 || call == 8 || call == 4+8) {
                     vcf$GT[site, var, ] <- 0:1
                 } else {
                     ## partial imputation will be ignored
@@ -976,7 +1110,7 @@ LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
     chroms <- vcf$chrom.names
 
     do.call(c, prefs$lapply(chroms, function(chrom) {  # c is the concatenate R function
-        result <- LabyrinthImputeChrom(vcf, sample, chrom, parent.geno, prefs)
+        result <- ExperimentalLabyrinthImputeChrom(vcf, sample, chrom, parent.geno, prefs)
         writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
         if (!prefs$parallel) {  # if running in serial mode
             prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
@@ -1035,6 +1169,103 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         class(relevant.probs) <- "probs"
 
         path <- viterbi(relevant.probs, dists, prefs)
+
+        full.path <- relevant.sites
+
+        path.index <- 1
+        filler <- NA_integer_
+        ## The missing calls that were not relevant will be filled back in
+        ## to create the full path from the relevant part of the path
+        for (i in seq_along(relevant.sites)) {
+            if (relevant.sites[i]) {  # if the site was relevant
+                full.path[i] <- path[path.index]  # set to next call
+                path.index <- path.index + 1  # increment call index
+            } else {
+                ## If we can safely decrement the index and elements are same
+                if (path.index > 1 &&
+                    path.index <= length(path) &&
+                    !is.na(path[path.index - 1]) &&
+                    !is.na(path[path.index]) &&
+                    path[path.index - 1] == path[path.index]) {
+                    filler <- path[path.index]
+                } else {
+                    filler <- NA_integer_
+                }
+                full.path[i] <- filler
+            }
+        }
+    }
+
+    ## At this stage full.path has entries of 1 through 7, or NA which indicates
+    ## the call at that site according to the following table
+    ## 1: Homozygous and the allele is the same as parent 1
+    ## 2: Homozygous and the allele is the same as parent 2
+    ## 4: Heterozygous
+    ## -------------------------------------------------------------------------
+    ## In the same way that binary counting works, we can use these 3 'basis'
+    ## values to explain what other numbers indicate. This is shown below
+    ## -------------------------------------------------------------------------
+    ## 3 (1+2): Homozygous, but the actual allele is unknown
+    ## 5 (1+4): One of the alleles matches parent 1, but the other is unknown
+    ## 6 (2+4): One of the alleles matches parent 2, but the other is unknown
+    ## 7 (1+2+4): Nothing is known about the alleles
+    ## NA: The site was not imputed
+
+    full.path  # implicit return
+}
+
+
+ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
+
+    if (length(sample) != 1) {
+        stop("Length of sample must be 1")
+    }
+    if (length(chrom) != 1) {
+        stop("Length of chrom must be 1")
+    }
+
+    emission.probs <- GetProbabilities(vcf, sample, chrom, parent.geno, prefs)
+
+    ## turn the heterozygous emission probabilities into two seperate states
+    emission.probs[, 3] <- emission.probs[, 3]/2
+    emission.probs <- cbind(emission.probs, emission.probs[, 3])
+
+    site.pos <- sapply(rownames(emission.probs), function(name) {
+        as.numeric(str.split(name, ":")[2])
+    })
+
+    ## This is the sites where both parents were called (not NA) and where they
+    ## are different from each other. It is a boolean vector indicating whether
+    ## the site is relevant, thus the length is the same as the length of the
+    ## final imputation for this sample and chromosome
+    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
+
+    ## informative.sites <- apply(emission.probs, 1, function(row) {
+    ##     !all(row == row[1])
+    ## })
+
+    ## if (length(relevant.sites) != length(informative.sites)) {
+    ##     stop("Site index arrays differ")
+    ## }
+    ## relevant.sites <- relevant.sites & informative.sites
+
+    ## If there are not enough markers according to user preference (or if there
+    ## are 0), then do not do the imputation and return a path of NA's of the
+    ## correct length
+    n.relevant.sites <- sum(relevant.sites)  # boolean addition
+    if (n.relevant.sites < 1) {
+        full.path <- rep(NA_integer_, length(relevant.sites))
+    } else {
+        names(relevant.sites) <- NULL  # Makes debugging easier
+
+        ## distances between relevant sites
+        dists <- diff(site.pos[relevant.sites])
+
+        relevant.probs <- emission.probs[relevant.sites, , drop=F]
+        class(relevant.probs) <- "probs"
+
+        path <- experimental.viterbi(relevant.probs, prefs$qs, prefs)
+        ## path <- viterbi(relevant.probs, dists, prefs)
 
         full.path <- relevant.sites
 
@@ -1232,6 +1463,7 @@ make.vcf.lines <- function(vcf) {
 
     names <- str.split(vcf$header[length(vcf$header)], "\t")
     prefix.strings <- vcf$variants[, 1:which(names=="INFO")]
+##    prefix.strings <- vcf$field.data[, 1:which(names=="INFO")]
 
     content.strings <- cbind(prefix.strings, "GT:AD:DP", data.strings)
     all.strings <- rbind(names, content.strings)

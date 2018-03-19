@@ -22,6 +22,9 @@
 ## populations of members with more than 2 chromosomes.
 
 
+source("utility_functions.R")
+
+
 get.sites <- function(file) {
     read.csv(file, header=FALSE)[,1]
 }
@@ -235,19 +238,30 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
     p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
     class(p1) <- class(p2) <- c("genome", class(p1))
 
-    f1 <- cross(p1, p2, recomb.fun)
+    f1 <- cross(p1, p2, recomb.probs)
 
     f2s <- lapply(seq(n.mem), function(i){cross(f1, f1, recomb.probs)})
 
-    if (n.gen == 2) {
-        return (f2s)
+    fis <- f2s
+    if (n.gen != 2) {
+        for (i in 3:n.gen) {
+            fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
+        }
     }
 
-    fis <- f2s
-    for (i in 3:n.gen) {
-        fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
-    }
     fis <- c(list(p1), list(p2), fis)  # prepend parents to list of progeny
+    class(fis) <- c("population", class(fis))
+    fis  # implicit return
+}
+
+
+self.population <- function(pop, recomb.probs) {
+    if (! "population" %in% class(pop)) {
+        stop("pop must be of class population")
+    }
+    fis <- pop[3:length(pop)]  # remove parents
+    fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
+    fis <- c(pop[1:2], fis)  # prepend parents to list of crossed progeny
     class(fis) <- c("population", class(fis))
     fis  # implicit return
 }
@@ -440,6 +454,29 @@ SamplePopulationVCF <- function(sample.result, sites){
     vcf  # implicit return
 }
 
+
+get.gt.type <- function(gt) {
+    ## sum the two genotype vector entries. If the sum is 0, then both
+    ## entries are 0 and it is homozygous reference. If the sum is 1, then
+    ## one of the entires is 0 and the other is 1, so it is heterozygous,
+    ## and if the sum is 2, then both entries are 1 and it is homozygous
+    ## alternate.
+    n <- sum(gt)
+
+    if (is.na(n)) {
+        "unknown"
+    } else if (n == 0) {
+        "reference"
+    } else if (n == 1) {
+        "heterozygous"
+    } else if (n == 2) {
+        "alternate"
+    } else {
+        stop(paste("get.gt.type cannot accept the value", n))
+    }
+}
+
+
 ##' .. content for \description{} (no empty lines) ..
 ##'
 ##' It is assumed that the population parents are the first two entries in
@@ -451,35 +488,12 @@ SamplePopulationVCF <- function(sample.result, sites){
 ##' @param mask.list a list of 2 element vectors indicating the 
 ##' @return 
 ##' @author Jason Vander Woude
-checkAccuracy <- function(correct.vcf, call.vcf) {
+CheckAccuracy <- function(correct.vcf, call.vcf) {
     if (! "vcf" %in% class(correct.vcf)) {
         stop("correct.vcf must be of class vcf")
     }
     if (! "vcf" %in% class(call.vcf)) {
         stop("test.vcf must be of class vcf")
-    }
-
-    ## TODO(Jason): use factors here instead of strings to save space while
-    ## maintaining clarity of code
-    get.type <- function(gt) {
-        ## sum the two genotype vector entries. If the sum is 0, then both
-        ## entries are 0 and it is homozygous reference. If the sum is 1, then
-        ## one of the entires is 0 and the other is 1, so it is heterozygous,
-        ## and if the sum is 2, then both entries are 1 and it is homozygous
-        ## alternate.
-        n <- sum(gt)
-
-        if (is.na(n)) {
-            "unknown"
-        } else if (n == 0) {
-            "reference"
-        } else if (n == 1) {
-            "heterozygous"
-        } else if (n == 2) {
-            "alternate"
-        } else {
-            stop(paste("get.type cannot accept the value", n))
-        }
     }
 
     generalize.type <- function(type) {
@@ -522,9 +536,9 @@ checkAccuracy <- function(correct.vcf, call.vcf) {
 
     ## as.numeric and as.factor are used to convert the matrix returned by apply
     ## into a vector
-    corr.types      <- as.factor(apply(gt.corr, 1:2, get.type))
+    corr.types      <- as.factor(apply(gt.corr, 1:2, get.gt.type))
     gen.corr.types  <- as.factor(generalize.type(corr.types))
-    call.types      <- as.factor(apply(gt.call, 1:2, get.type))
+    call.types      <- as.factor(apply(gt.call, 1:2, get.gt.type))
     gen.call.types  <- as.factor(generalize.type(call.types))
     if (is.null(ad.corr)) {
         ref.depths <- alt.depths <- NA_integer_
@@ -555,3 +569,81 @@ checkAccuracy <- function(correct.vcf, call.vcf) {
         quality       = qualities
     )
 }
+
+
+## note that this colors by reference / alternate and not by parent 1 / parent 2
+ppm.from.vcf <- function(vcf, out.file, ref=c(79, 165, 77),
+                         het=c(249, 204, 104), alt=c(22, 209, 247),
+                         nil=c(255, 255, 255)) {
+
+    verify.color <- function(color) {
+        all(color <= 255 & color >= 0 & color == floor(color)) &&
+            length(color) == 3
+    }
+
+    if (!verify.color(ref) ||
+        !verify.color(het) ||
+        !verify.color(alt) ||
+        !verify.color(nil)) {
+        stop("colors must be 3 element vectors of integers from 0 to 255")
+    }
+
+    colors <- list(ref, het, alt, nil)
+    ## turn every color into a space seperated string
+    colors <- unlist(lapply(colors, function(color) {paste(color, collapse=" ")}))
+    names(colors) <- c("reference", "heterozygous", "alternate", "unknown")
+
+    if ("vcf" %in% class(vcf)) {
+        ## string representing color for every site and variant transposed so
+        ## that a row corresponds to a variant
+        image.colors <- t(apply(vcf$GT, 1:2, function(gt) {colors[get.gt.type(gt)]}))
+        ## tab separate colors in a row
+        image.lines <- apply(image.colors, 1, paste, collapse="\t")
+
+        ##
+        line.1 <- "P3"
+        line.2 <- paste(ncol(image.colors), nrow(image.colors), "255")
+
+        con <- file(out.file)
+        writeLines(c(line.1, line.2, image.lines), con)
+        close(con)
+
+    } else if ("character" %in% class(vcf)) {
+        stop("NOT YET IMPLEMENTED")
+    }
+}
+
+
+Summarize <- function(accuracy.result) {
+    acc <- accuracy.result
+
+    print("Percent called correctly:")
+    print(100*with(acc, perc(quality=="correct")))
+
+    print("Percent called partial (heterozygous called homozygous):")
+    print(100*with(acc, perc(quality=="partial")))
+
+    print("Percent called incorrectly:")
+    print(100*with(acc, perc(quality=="wrong")))
+
+    print("Percent skipped:")
+    print(100*with(acc, perc(quality=="skipped")))
+}
+
+
+## recomb probs should be in map units
+compute.qs <- function(recomb.probs, gen) {
+    ps <- 2*recomb.probs
+    q2s <- (2 - ps)/4
+    if (gen == 2) {
+        q2s  # implicit return
+    } else {
+        qis <- q2s
+        for (i in 3:gen) {
+            qis <- -ps*qs/2 + ps/8 + q
+        }
+        qis  # implicit return
+    }
+}
+
+## get.filename.generator <- function

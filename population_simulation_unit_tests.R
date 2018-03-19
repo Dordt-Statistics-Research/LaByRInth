@@ -276,3 +276,191 @@ summary(with(res, gen.type[quality=="skipped"]))  ## 10% of skips are heterozygo
 ## probabilities by 0.05, there are more het calls which makes sense, but there
 ## are fewer correct calls and few partial calls (which also makes sense) and
 ## fewer correct calls and twice as many wrong calls
+
+## NOT DONE 8: more to do here
+
+
+## TEST 9: sequential generations
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 2
+n.mem <- 100
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+
+dir <- "analysis/simulated_population/breeding"
+basename <- "test_00004"
+
+full.vcf <- FullPopulationVCF(pop, sites)
+filename <- paste0(basename, "_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, paste0(dir, filename))
+for (gen in 3:6) {
+    pop <- self.population(pop, recomb.probs)
+    full.vcf <- FullPopulationVCF(pop, sites)
+    filename <- paste0(basename, "_f", gen, ".ppm")
+    ppm.from.vcf(full.vcf, paste0(dir, filename))
+}
+
+## NOT DONE 9
+
+
+## TEST 10: imputing an F2
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 2  # F2
+n.mem <- 100
+cov = 1/16
+qs <- compute.qs(recomb.probs, gen)
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00005"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), file, qs=qs, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+
+## TEST 11
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F2
+n.mem <- 100
+cov = 0.25
+qs <- compute.qs(recomb.probs, gen)
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00006"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), file, qs=qs, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+with(acc, summary(call.type[quality=="wrong" | quality=="partial"]))
+
+## TEST 12
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.1
+d <- 5e6
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 2  # F2
+n.mem <- 100
+cov = 0.125
+qs <- compute.qs(recomb.probs, gen)
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00007"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), file, qs=qs, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+with(acc, summary(call.type[quality=="wrong" | quality=="partial"]))
+
+## TEST 13
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.01
+d <- 5e6
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 2  # F2
+n.mem <- 100
+cov = 0.125
+qs <- compute.qs(recomb.probs, gen)
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00008"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), file, qs=qs, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_mod_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+with(acc, summary(call.type[quality=="wrong" | quality=="partial"]))
+
+## TEST 12:
+p <- 0.1
+q <- (2-p)/4
+for (i in 1:5) {
+    print(q)
+    q <- -p*q/2 + p/8 + q
+}
+print(c(q^2, 2*q*(1/2-q), (1/2-q)^2, 2*q^2+2*(1/2-q)^2))
+
+
