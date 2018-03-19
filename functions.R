@@ -14,7 +14,7 @@
 
 
 ## TODO(Jason): only require parallel on functions that use it (use lapply if not available)
-library(abind)
+require(abind)
 source("image_functions.R")
 source("utility_functions.R")
 
@@ -67,6 +67,36 @@ vcf.to.numeric <- function(str.vec) {
             stop(paste("Attempted to convert invalid VCF string:", str))
         }
     })
+}
+
+
+get.lapply <- function(prefs) {
+    serial.lapply <- function(..., mc.preschedule=F, mc.cores=prefs$cores) {
+        lapply(...)
+    }
+
+    parallel.lapply <- function(..., mc.preschedule=F, mc.cores=prefs$cores) {
+        mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+    }
+
+    ## implicit return
+    if (prefs$parallel) {
+        require(parallel)
+        parallel.lapply
+    } else {
+        serial.lapply
+    }
+}
+
+
+get.labyrinth.vcf.header <- function() {
+    ## c("##fileformat=VCFv4.0",
+    ##   paste0("##LaByRInth=<ID=Imputation,",
+    ##          "Version=1.0,",
+    ##          "Description=\"Code can be found at ",
+    ##          "github.com/Dordt-Statistics-Research/LaByRInth\">",),
+    ##  "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
+    "##fileformat=VCFv4.0"
 }
 
 
@@ -243,6 +273,10 @@ VCF <- function(file, prefs, required=c("AD","GT")) {
     header <- vcf$header.lines[length(vcf$header.lines)]  #get column heading
     header <- substr(header, 2, nchar(header)) #remove leading '#'
     colnames(vcf$variants) <- str.split(header, "\t")
+
+#    vcf$field.data <- vcf$variants[, 1:which(colnames(vcf$variants)=="FORMAT")]
+#    colnames(vcf$field.data) <- str.split(header, "\t")
+
 
     formatExample <- vcf$variants[1, "FORMAT"]
     field.names <- str.split(formatExample, ":")
@@ -425,7 +459,7 @@ ResolveHomozygotes <- function(vcf, samples) {
     ## the code as is, but especially if we begin utilizing non-HWPB data, this
     ## is a feature that should be incorporated.
 
-    ## TODO(Jason): Again, if utilizing non-HWPB data, firs remove false
+    ## TODO(Jason): Again, if utilizing non-HWPB data, first remove false
     ## homozygosity because otherwise variants will only be caled homozygous of
     ## the variant seen or heterozygous even if they were actually called
     ## homozygous of the other.
@@ -507,29 +541,6 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
             ref.calls <- allele.counts[1]
             alt.calls <- allele.counts[2]
 
-            ## I think this is outdated code, but I'll leave it for awhile just
-            ## in case
-            ## if (is.na(ref.calls)) {
-            ##     ref.calls <- 0
-            ## }
-            ## if (is.na(alt.calls)) {
-            ##     alt.calls <- 0
-            ## }
-
-
-            ## x <- apply(mask$GT, 1:2, function(vec) {vec[1]==vec[2]})
-            ## > length(x)
-            ## [1] 3195264
-            ## > sum(x)
-            ## [1] NA
-            ## > sum(x, na.rm=T)
-            ## [1] 1936888
-            ## > sum(x==0, na.rm=T)
-            ## [1] 178873
-            ## > 178873 / (1936888+178873)
-            ## [1] 0.0845431
-
-
             ## Calculate the emission probabilities for this site
             ref.prob <- 0.475 * (1 - rerr)**ref.calls * (rerr)**alt.calls
             alt.prob <- 0.475 * (1 - rerr)**alt.calls * (rerr)**ref.calls
@@ -582,7 +593,7 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 
 ## TODO(Jason): Try writing an empty file immediately in case they give a bad
 ## destination and provide nice directory DNE message or file exists message
-LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
+LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
                             leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
                             recomb.double=TRUE, read.err=0.05,
                             genotype.err=0.05, recomb.dist=1e6,
@@ -618,47 +629,35 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
     prefs$write             <- write
     prefs$out.file          <- out.file
 
-    prefs  # implicit return
-
     start.time <- Sys.time()
     pseudo.start.time <- start.time
 
-    ## if (is.null(prefs)) {
-    ##     prefs <- GetDefaultPreferences()
-    ## }
-
     ValidatePreferences(prefs)
 
-    ## Determine whether to run in parallel and how many cores to use
-    if (prefs$parallel) {
-        require(parallel)
-        prefs$lapply <- function(...,
-                                 mc.preschedule=F,
-                                 mc.cores=prefs$cores) {
-            mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
-        }
-    } else {
-        prefs$lapply <- function(...,
-                                 mc.preschedule=F,
-                                 mc.cores=prefs$cores) {
-            lapply(...)
-        }
-    }
+    prefs$lapply <- get.lapply(prefs)
 
     print.labyrinth.header()
 
     writeLines(paste0(" *  Running imputation in ", ifelse(prefs$parallel,
                paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
-    writeLines(paste0(" *  Loading VCF file ", file))
 
-    vcf <- VCF(file, prefs)
+    ## if the vcf is actually a filename, load the vcf object
+    if (! inherits(vcf, "vcf")) {
+        ## if the vcf is not even a string, stop
+        if (! inherits(vcf, "character")) {
+            stop("vcf must either be a filename or an object of class vcf")
+        }
+        writeLines(paste0(" *  Loading VCF file ", file))
 
-    end.time <- Sys.time()
-    time <- difftime(end.time, pseudo.start.time)
-    pseudo.start.time <- end.time
-    runtime <- as.numeric(time)
-    units <- attr(time, "units")
-    writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
+        vcf <- VCF(file, prefs)
+
+        end.time <- Sys.time()
+        time <- difftime(end.time, pseudo.start.time)
+        pseudo.start.time <- end.time
+        runtime <- as.numeric(time)
+        units <- attr(time, "units")
+        writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
+    }
 
     chroms <- vcf$chrom.names
     variants <- vcf$variant.names
@@ -692,8 +691,23 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
 
     close(prefs$fifo)
 
-    colnames(result) <- variants
-    rownames(result) <- rownames(parent.geno)
+    for (site in 1:n.sites) {
+        for (var in 1:n.variants) {
+            call <- result[site, var]
+                if (is.na(call)) {
+                    vcf$GT[site, var, ] <- NA_integer_
+                } else if (call %in% 1:2) {
+                    vcf$GT[site, var, ] <- parent.geno[site, call]
+                } else if (call == 4) {
+                    vcf$GT[site, var, ] <- 0:1
+                } else {
+                    ## partial imputation will be ignored
+                    vcf$GT[site, var, ] <- NA_integer_
+                }
+        }
+    }
+
+    vcf$header.lines <- get.labyrinth.vcf.header()
 
     end.time <- Sys.time()
     time <- difftime(end.time, pseudo.start.time)
@@ -719,91 +733,93 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
 
         writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
-        ## TODO(Jason): don't use sink()
-        sink(prefs$out.file)
-        writeLines(vcf$header[1])  # Add header
-        writeLines("##LaByRInth=<ID=Imputation,Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">")
-        writeLines("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
-        names <- vcf$header[length(vcf$header)]
-        writeLines(names)  # Add header
-        names <- str.split(names, "\t")
+        WriteVCF(vcf, prefs$out.file)
 
-        ## The text on all the lines before the actual genotype call data
-        prefix <- cbind(vcf$variants[, 1:which(names=="INFO")], "GT")
-        ## TODO(Jason): this probably isn't necessary if I use the vcf$samples variable
-        ref.geno <- Get(vcf, "GT", prefs$parents)
-        ref.geno <- apply(ref.geno, 1:2, function(genotypes) {
-            ## Concatenate the genotypes with a slash between
-            text <- paste0(genotypes, collapse="/")
-            text <- gsub("NA", ".", text)
-        })
+        ## ## TODO(Jason): don't use sink()
+        ## sink(prefs$out.file)
+        ## writeLines(vcf$header[1])  # Add header
+        ## writeLines("##LaByRInth=<ID=Imputation,Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">")
+        ## writeLines("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
+        ## names <- vcf$header[length(vcf$header)]
+        ## writeLines(names)  # Add header
+        ## names <- str.split(names, "\t")
 
-        ## TODO(Jason): this won't work unless I find a way around sink()
-        ## progress.env <- new.env()
-        ## prefs$fifo <- ProgressMonitor(progress.env)
-        ## assign("progress", 0.0, envir=progress.env)
-        ## prefs$prog.env <- progress.env
-        ## prefs$n.jobs <- n.sites
+        ## ## The text on all the lines before the actual genotype call data
+        ## prefix <- cbind(vcf$variants[, 1:which(names=="INFO")], "GT")
+        ## ## TODO(Jason): this probably isn't necessary if I use the vcf$samples variable
+        ## ref.geno <- Get(vcf, "GT", prefs$parents)
+        ## ref.geno <- apply(ref.geno, 1:2, function(genotypes) {
+        ##     ## Concatenate the genotypes with a slash between
+        ##     text <- paste0(genotypes, collapse="/")
+        ##     text <- gsub("NA", ".", text)
+        ## })
 
-        ## TODO(Jason): this should be cleaned up and there should be an option
-        ## to use or not use partion imputation
-        for (i in 1:n.sites) {
-            ## Write prefix columns with tab seperation
-            cat(paste0(prefix[i, ], collapse="\t"))
-            cat("\t")
-            for (j in 1:n.variants) {
-                call <- result[i, j]
-                if (is.na(call)) {
-                    text <- "./."
-                } else if (call %in% 1:2) {
-                    text <- ref.geno[i, call]
-                } else if (call == 4) {
-                    text <- "0/1"
-                } else if (call %in% c(3,5,6,7)) {
-                    if (call == 3) {
-                        text <- "./." # used to be X/X
-                    } else if (call == 5) {
-                        parent.call <- parent.geno[i, 1]  # 6 indicates parent 1
-                        if (is.na(parent.call)) {
-                            ## TODO(Jason): I'm not sure what to do here
-                            text <- "./."
-                        } else if (parent.call == 0) {
-                            text <- "0/."
-                        } else if (parent.call == 1) {
-                            text <- "./1"
-                        } else {
-                            stop("Unexpected imputation result for value 5")
-                        }
-                    } else if (call == 6) {
-                        parent.call <- parent.geno[i, 2]  # 6 indicates parent 2
-                        if (is.na(parent.call)) {
-                            ## TODO(Jason): I'm not sure what to do here
-                            text <- "./."
-                        } else if (parent.call == 0) {
-                            text <- "0/."
-                        } else if (parent.call == 1) {
-                            text <- "./1"
-                        } else {
-                            stop("Unexpected imputation result for value 6")
-                        }
-                    } else if (call == 7) {
-                        text <- "?/?"
-                    }
-                } else {
-                    stop(paste("Invalid genotype call:", call))
-                }
-                cat(text)
-                if (j != n.variants) {  # add tab if not last column
-                    cat("\t")
-                }
-            }
-            if (i != n.sites) {  # add newline if not last row
-                cat("\n")
-            }
+        ## ## TODO(Jason): this won't work unless I find a way around sink()
+        ## ## progress.env <- new.env()
+        ## ## prefs$fifo <- ProgressMonitor(progress.env)
+        ## ## assign("progress", 0.0, envir=progress.env)
+        ## ## prefs$prog.env <- progress.env
+        ## ## prefs$n.jobs <- n.sites
 
-            ## MakeProgress(prefs)
-        }
-        sink()  # turn off sink
+        ## ## TODO(Jason): this should be cleaned up and there should be an option
+        ## ## to use or not use partion imputation
+        ## for (i in 1:n.sites) {
+        ##     ## Write prefix columns with tab seperation
+        ##     cat(paste0(prefix[i, ], collapse="\t"))
+        ##     cat("\t")
+        ##     for (j in 1:n.variants) {
+        ##         call <- result[i, j]
+        ##         if (is.na(call)) {
+        ##             text <- "./."
+        ##         } else if (call %in% 1:2) {
+        ##             text <- ref.geno[i, call]
+        ##         } else if (call == 4) {
+        ##             text <- "0/1"
+        ##         } else if (call %in% c(3,5,6,7)) {
+        ##             if (call == 3) {
+        ##                 text <- "./." # used to be X/X
+        ##             } else if (call == 5) {
+        ##                 parent.call <- parent.geno[i, 1]  # 6 indicates parent 1
+        ##                 if (is.na(parent.call)) {
+        ##                     ## TODO(Jason): I'm not sure what to do here
+        ##                     text <- "./."
+        ##                 } else if (parent.call == 0) {
+        ##                     text <- "0/."
+        ##                 } else if (parent.call == 1) {
+        ##                     text <- "./1"
+        ##                 } else {
+        ##                     stop("Unexpected imputation result for value 5")
+        ##                 }
+        ##             } else if (call == 6) {
+        ##                 parent.call <- parent.geno[i, 2]  # 6 indicates parent 2
+        ##                 if (is.na(parent.call)) {
+        ##                     ## TODO(Jason): I'm not sure what to do here
+        ##                     text <- "./."
+        ##                 } else if (parent.call == 0) {
+        ##                     text <- "0/."
+        ##                 } else if (parent.call == 1) {
+        ##                     text <- "./1"
+        ##                 } else {
+        ##                     stop("Unexpected imputation result for value 6")
+        ##                 }
+        ##             } else if (call == 7) {
+        ##                 text <- "?/?"
+        ##             }
+        ##         } else {
+        ##             stop(paste("Invalid genotype call:", call))
+        ##         }
+        ##         cat(text)
+        ##         if (j != n.variants) {  # add tab if not last column
+        ##             cat("\t")
+        ##         }
+        ##     }
+        ##     if (i != n.sites) {  # add newline if not last row
+        ##         cat("\n")
+        ##     }
+
+        ##     ## MakeProgress(prefs)
+        ## }
+        ## sink()  # turn off sink
         end.time <- Sys.time()
         time <- difftime(end.time, pseudo.start.time)
         pseudo.start.time <- end.time
@@ -816,7 +832,7 @@ LabyrinthImpute <- function(file, parents, out.file="", use.only.ad=TRUE,
     runtime <- as.numeric(time)
     units <- attr(time, "units")
     writeLines(paste0(" *  LaByRInth completed in ", round(runtime, 2), " ", units, "\n\n"))
-    invisible(result)  # implicit return
+    invisible(vcf)  # implicit return
 }
 
 
@@ -861,10 +877,6 @@ LabyrinthFilter <- function(file, parents, out.file="", use.only.ad=TRUE,
 
     start.time <- Sys.time()
     pseudo.start.time <- start.time
-
-    ## if (is.null(prefs)) {
-    ##     prefs <- GetDefaultPreferences()
-    ## }
 
     ## Determine whether to run in parallel and how many cores to use
     if (prefs$parallel) {
@@ -1089,36 +1101,6 @@ GenotypeFromDepth <-  function(allelic.depths) {
     }
     genotype  # implicit return
 }
-
-
-## GetDefaultPreferences <- function() {
-##     prefs <- list()
-##     class(prefs)            <- "prefs"
-
-##     ## Algorithm parameters
-##     prefs$recomb.double     <- TRUE
-##     prefs$read.err          <- 0.05
-##     prefs$genotype.err      <- 0.05
-##     prefs$recomb.dist       <- 1000000
-##     prefs$states            <- 3     # currently only support for 2 parents
-##     prefs$use.only.ad       <- TRUE  # should the GT info be inferred from the
-##                                      # AD info
-##     prefs$leave.all.calls   <- TRUE  # Should non-imputed sites be in the output
-##                                      # VCF file
-##     prefs$ref.alt.by.parent <- FALSE # Should the reference and alternate be
-##                                      # switched in the output so that parent 1
-##                                      # is always reference and parent 2 is
-##                                      # always alternate
-
-##     ## Logistic parameters
-##     prefs$quiet             <- FALSE
-##     prefs$cores             <- 4
-##     prefs$parallel          <- TRUE
-##     prefs$write             <- TRUE
-##     prefs$out.file          <- ""
-
-##     prefs  # implicit return
-## }
 
 
 ##' Checking preferences for the correct variable type
