@@ -454,7 +454,7 @@ acc <- CheckAccuracy(full.vcf, imputed.vcf)
 Summarize(acc)
 with(acc, summary(call.type[quality=="wrong" | quality=="partial"]))
 
-## TEST 12:
+## TEST 14:
 p <- 0.1
 q <- (2-p)/4
 for (i in 1:5) {
@@ -462,5 +462,169 @@ for (i in 1:5) {
     q <- -p*q/2 + p/8 + q
 }
 print(c(q^2, 2*q*(1/2-q), (1/2-q)^2, 2*q^2+2*(1/2-q)^2))
+
+
+
+## TEST 15: F5 population
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+cov = 1/16
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00009"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), gen, file, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+
+
+## TEST 15: F5 population
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+cov = 1/4
+
+set.seed(2)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00010"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), gen, file, parallel=TRUE)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+## These results don't look good
+
+
+## TEST 15: F5 population
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+recomb.dist <- 50 / trough * 1e6
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 2  # F3
+n.mem <- 100
+cov = 1/4
+
+set.seed(2)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00011"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), gen, file,
+                               parallel=FALSE, use.uncalled.sites=TRUE,
+                               write=FALSE, recomb.dist=recomb.dist)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+## 99.68% accuracy
+
+
+## TEST 16: F3 population
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.0001
+d <- 5e5
+recomb.dist <- 50 / trough * 1e6
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 3  # F3
+n.mem <- 100
+cov = 1/8
+
+set.seed(2)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+basename <- "test_00012"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+file <- paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+ppm.from.vcf(sample.vcf, file)
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".vcf")
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), gen, file,
+                               parallel=FALSE, write=FALSE, recomb.dist=recomb.dist,
+                               use.uncalled.sites=TRUE, weight.uncalled=TRUE, weight.called=TRUE, seperate.het=TRUE)
+
+file <- paste0(dir, "/", basename, "_imputed_f", gen, ".ppm")
+ppm.from.vcf(imputed.vcf, file)
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+## use.uncalled.sites          weight    _uncalled_      _called_        seperate.het
+##               TRUE            TRUE                                            TRUE       78% (no almost no het calls)
+##              FALSE            TRUE                                            TRUE       78% (no almost no het calls)
+##              FALSE           FALSE                                            TRUE       78% (no almost no het calls)
+##               TRUE           FALSE                                            TRUE       78% (no almost no het calls)
+##               TRUE           FALSE                                           FALSE       22% (almost all het)
+##               TRUE            TRUE                                           FALSE       59% (63% het calls)
+##              FALSE            TRUE                                           FALSE       ERROR
+##                                                                                          99% (splotchy though)
+##               TRUE                           TRUE        FALSE               FALSE       22% (almost all het)
+##               TRUE                          FALSE         TRUE               FALSE       22% (almost all het)
+##               TRUE                           TRUE         TRUE               FALSE       22% (almost all het)
+##               TRUE                          FALSE        FALSE               FALSE       22% (almost all het)
+
+##               TRUE                           TRUE        FALSE                TRUE       77.71565% (almost no het)
+##               TRUE                          FALSE         TRUE                TRUE       77.65267% (almost no het)
+##               TRUE                           TRUE         TRUE                TRUE       77.65267% (almost no het)
+##               TRUE                          FALSE        FALSE                TRUE       
 
 

@@ -162,57 +162,6 @@ generatePath <- function(path.tracker, boolean.indices) {
 ##' @param prefs imputation preferences object
 ##' @return the most probable sequence of states
 ##' @author Jason Vander Woude
-viterbi <- function(probs, dists, prefs) {
-    nstates <- nstates.probs(probs)
-    path.size <- nsites.probs(probs)
-
-    ## 3D array
-    paths.tracker <- array(NA, dim=c(nstates, path.size, nstates))
-
-    ## This will keep track of the overall probabilities of each of the {nstates}
-    ## final paths, so that the probability of the final paths do not have to be
-    ## computed again. The probabilities are initialized to the emission
-    ## probabilities of the first site of the probs matrix which is the first
-    ## row
-    if (path.size < 1) {
-        stop("viterbi requires that probs have > 0 rows")
-    }
-    probs.tracker <- log(probs[1, ])
-
-    ## Hard code the first column to the vector 1,2,...,nstates as an index
-    ## This is what the generatePath function will need
-    paths.tracker[, 1, ] <- diag(TRUE, nstates)
-
-    if (path.size != 1) {  # if the path size is 1 just use the emission probs
-        for (site in 2:path.size) {  # for each site in the path
-
-            dist <- dists[site - 1]
-
-            ## log of the probability for each possible hidden state at this site
-            probs.tracker <- sapply(1:nstates, function(state) {
-
-                extension.probs <- sapply(1:nstates, function(i) {
-                    ## log of the probability of being at state i before and
-                    ## transitioning to the 'state' state
-                    probs.tracker[i] + log(transProb(i, state, dist, prefs))
-                })
-
-                optimal.indices <- extension.probs==max(extension.probs)
-                ## use <<- to assign to a variable outside the current scope
-                paths.tracker[state, site, ] <<- optimal.indices
-                max(extension.probs) + log(probs[site, state])  # return prob
-            })
-        }
-    }
-
-    ## The code above has already computed the optimal path, but that
-    ## information is encoded within the paths.tracker matrix and needs to be
-    ## extracted. That is what generatePath will do when passed the path.tracker
-    ## matrix and the indices of the optimal path.
-    generatePath(paths.tracker, probs.tracker==max(probs.tracker))  # return best path
-}
-
-
 experimental.viterbi <- function(emission.probs, qs, prefs) {
     nstates <- nstates.probs(emission.probs)
     path.size <- nsites.probs(emission.probs)
@@ -238,19 +187,22 @@ experimental.viterbi <- function(emission.probs, qs, prefs) {
         for (site in 2:path.size) {  # for each site in the path
 
             q <- qs[site - 1]
-
+            browser()
             ## log of the probability for each possible hidden state at this site
             probs.tracker <- sapply(1:nstates, function(state) {
 
                 extension.probs <- sapply(1:nstates, function(i) {
                     ## log of the probability of being at state i before and
                     ## transitioning to the 'state' state
-                    probs.tracker[i] + log(experimentalTransProb(i, state, q))
+                    probs.tracker[i] + log(experimentalTransProb(i, state, q, prefs))
                 })
 
                 optimal.indices <- extension.probs==max(extension.probs)
                 ## use <<- to assign to a variable outside the current scope
                 paths.tracker[state, site, ] <<- optimal.indices
+                if (is.na(log(emission.probs[site, state]))) {
+                    print(emission.probs[site, state])
+                }
                 max(extension.probs) + log(emission.probs[site, state])  # return prob
             })
         }
@@ -264,71 +216,71 @@ experimental.viterbi <- function(emission.probs, qs, prefs) {
 }
 
 
-experimentalTransProb <- function(a, b, q) {
-    ## ## a and b are in {1,2,3,4}
-    ## if (a == b) {
-    ##     if (a %in% 1:2) {
-    ##         q^2  # same hom hom transition
-    ##     } else {
-    ##         ## 2*q^2+2*(1/2 - q)^2  # het het transition
-    ##         q^2 + (1/2 - q)^2  # het het transition
-    ##     }
-    ## } else if (a == 3 || b == 3) {
-    ##     2*q*(1/2 - q)  # het hom (or hom het) transition
-    ## } else {
-    ##     (1/2 - q)^2  # diff hom hom transition
-    ## }
-
-    if (a == 1) {
-        if (b == 1) {
-            q^2
-        } else if (b == 2) {
-            (1/2 - q)^2
-        } else if (b == 3) {
-            q*(1/2 - q)
-        } else if (b == 4) {
-            q*(1/2 - q)
-        } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
-        }
-    } else if (a == 2) {
-        if (b == 1) {
-            (1/2 - q)^2
-        } else if (b == 2) {
-            q^2
-        } else if (b == 3) {
-            q*(1/2 - q)
-        } else if (b == 4) {
-            q*(1/2 - q)
-        } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
-        }
-    } else if (a == 3) {
-        if (b == 1) {
-            q*(1/2 - q)
-        } else if (b == 2) {
-            q*(1/2 - q)
-        } else if (b == 3) {
-            q^2
-        } else if (b == 4) {
-            (1/2 - q)^2
-        } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
-        }
-    } else if (a == 4) {
-        if (b == 1) {
-            q*(1/2 - q)
-        } else if (b == 2) {
-            q*(1/2 - q)
-        } else if (b == 3) {
-            (1/2 - q)^2
-        } else if (b == 4) {
-            q^2
+experimentalTransProb <- function(a, b, q, prefs) {
+    if (prefs$seperate.het) {
+        if (a == 1) {
+            if (b == 1) {
+                q^2
+            } else if (b == 2) {
+                (1/2 - q)^2
+            } else if (b == 3) {
+                q*(1/2 - q)
+            } else if (b == 4) {
+                q*(1/2 - q)
+            } else {
+                stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            }
+        } else if (a == 2) {
+            if (b == 1) {
+                (1/2 - q)^2
+            } else if (b == 2) {
+                q^2
+            } else if (b == 3) {
+                q*(1/2 - q)
+            } else if (b == 4) {
+                q*(1/2 - q)
+            } else {
+                stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            }
+        } else if (a == 3) {
+            if (b == 1) {
+                q*(1/2 - q)
+            } else if (b == 2) {
+                q*(1/2 - q)
+            } else if (b == 3) {
+                q^2
+            } else if (b == 4) {
+                (1/2 - q)^2
+            } else {
+                stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            }
+        } else if (a == 4) {
+            if (b == 1) {
+                q*(1/2 - q)
+            } else if (b == 2) {
+                q*(1/2 - q)
+            } else if (b == 3) {
+                (1/2 - q)^2
+            } else if (b == 4) {
+                q^2
+            } else {
+                stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            }
         } else {
             stop(paste("experimentalTransProb failed. a:", a, "b:", b))
         }
     } else {
-        stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        if (a == b) {
+            if (a %in% 1:2) {
+                q^2  # same hom hom transition
+            } else {
+                2*q^2+2*(1/2 - q)^2  # het het transition
+            }
+        } else if (a == 3 || b == 3) {
+            2*q*(1/2 - q)  # het hom (or hom het) transition
+        } else {
+            (1/2 - q)^2  # diff hom hom transition
+        }
     }
 }
 
@@ -634,14 +586,29 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
     gt <- Get(vcf, "GT", sample, chrom)
     ad <- Get(vcf, "AD", sample, chrom)
 
-    ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = prefs$states)
+    browser()
+    if (prefs$seperate.het) {
+        ## turn the heterozygous emission probabilities into two seperate states
+        ncol <- prefs$nstates + 1
+        ## emission.probs[, 3] <- emission.probs[, 3]/2
+        ## emission.probs <- cbind(emission.probs, emission.probs[, 3])
+    } else {
+        ncol <- prefs$nstates
+    }
+
+    ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = ncol)
     rownames(ret.val) <- rownames(gt)
-    colnames(ret.val) <- c(colnames(parent.geno), "HETEROZYGOUS")
+    if (prefs$seperate.het) {
+        colnames(ret.val) <- c(colnames(parent.geno), "HETEROZYGOUS.1", "HETEROZYGOUS.2")
+    } else {
+        colnames(ret.val) <- c(colnames(parent.geno), "HETEROZYGOUS")
+    }
+
     class(ret.val) <- "prob"
 
     ## probability constraints from original LB-Impute code
-    max.allowed <- 1 - (2 * prefs$genotype.err)
-    min.allowed <- prefs$genotype.err
+    ## max.allowed <- 1 - (2 * prefs$genotype.err)
+    ## min.allowed <- prefs$genotype.err]
     rerr <- prefs$read.err
 
     for (row in 1:nrow(ret.val)) {
@@ -653,27 +620,46 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
         geno.calls <- gt[row, 1, ]
         allele.counts <- ad[row, 1, ]
 
-        if (all(is.na(geno.calls))) {
-            #ret.val[row, ] <- c(0.475, 0.475, 0.05)
-            ret.val[row, ] <- c(0.25, 0.25, 0.5)
-#            ret.val[row, ] <- rep(1, prefs$states)
-        } else if (any(is.na(geno.calls))) {
-            stop("Some but not all genotype calls are NA")  # TODO(Jason): remove
+
+        ## percent of population that should theoretically be heterozygous. For
+        ## example, an F2 generation should theoretically have 50%
+        ## heterozygosity and an F3 should have 25% etc.
+        perc.het <- 0.5^(prefs$generation - 1)
+        perc.ref <- perc.alt <- (1 - perc.het) / 2
+
+
+        if (any(is.na(geno.calls))) {
+            ## if there were no calls at this site, assume probabilities based
+            ## on the generation of the population.
+            if (prefs$weight.uncalled && prefs$seperate.het) {
+                ret.val[row, ] <- c(perc.ref, perc.alt, perc.het, perc.het)       ##HERE
+            } else if (prefs$weight.uncalled && ! prefs$seperate.het) {
+                ret.val[row, ] <- c(perc.ref, perc.alt, perc.het)
+            } else if (! prefs$weight.uncalled && prefs$seperate.het) {
+                ret.val[row, ] <- c(1, 1, 1, 1)
+            } else if (! prefs$weight.uncalled && ! prefs$seperate.het) {
+                ret.val[row, ] <- c(1, 1, 1)
+            } else {
+                stop("error in GetProbabilities")
+            }
         } else {
             ref.calls <- allele.counts[1]
             alt.calls <- allele.counts[2]
 
             ## Calculate the emission probabilities for this site
-            ## ref.prob <- 0.4639369 * (1 - rerr)**ref.calls * (rerr)**alt.calls
-            ## alt.prob <- 0.4639369 * (1 - rerr)**alt.calls * (rerr)**ref.calls
-            ## hom.prob <- 0.07212618 * (0.5)**(ref.calls + alt.calls)  # homozygous
-            ## sum.prob <- sum(ref.prob, alt.prob, hom.prob)
-
-            ## Calculate the emission probabilities for this site
-            ref.prob <- 0.25 * (1 - rerr)**ref.calls * (rerr)**alt.calls
-            alt.prob <- 0.25 * (1 - rerr)**alt.calls * (rerr)**ref.calls
-            hom.prob <- 0.5 * (0.5)**(ref.calls + alt.calls)  # homozygous
-            sum.prob <- sum(ref.prob, alt.prob, hom.prob)
+            ref.prob <- (1 - rerr)**ref.calls * (rerr)**alt.calls
+            alt.prob <- (1 - rerr)**alt.calls * (rerr)**ref.calls
+            het.prob <- (0.5)**(ref.calls + alt.calls)
+            if (prefs$weight.called) {
+                ref.prob <- perc.ref * ref.prob
+                alt.prob <- perc.alt * alt.prob
+                het.prob <- perc.het * het.prob
+            }
+            if (prefs$seperate.het) {
+                sum.prob <- sum(ref.prob, alt.prob, 2 * het.prob)
+            } else {
+                sum.prob <- sum(ref.prob, alt.prob, het.prob)
+            }
 
             normalize <- function(x) {
                 ## TODO(Jason): Correction: max.allowed should be swapped with
@@ -684,7 +670,7 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
             ## TODO(Jason): This seems incorrect. If the parent is unknown (NA)
             ## then why should the probability of being that parent be the max
             ## of alt.prob and ref.prob?
-            for (state in 1:(prefs$states - 1)) {
+            for (state in 1:2) {
                 if (is.na(parent.geno[row, state])) {
                     ret.val[row, state] <- normalize(max(alt.prob, ref.prob))
                 } else if (parent.geno[row, state] == 0) {
@@ -695,7 +681,10 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs) {
                     stop("Parental genotype was not NA, 0, or 1")
                 }
             }
-            ret.val[row, prefs$states] <- normalize(hom.prob)
+            ret.val[row, 3] <- normalize(het.prob)
+            if (prefs$seperate.het) {
+                ret.val[row, 4] <- normalize(het.prob)                          ##HERE
+            }
         }
     }
     ret.val  # implicit return
@@ -721,28 +710,34 @@ GetRelevantProbabiltiesIndex <- function(vcf, chromosomes, parent.geno, prefs) {
 
 ## TODO(Jason): Try writing an empty file immediately in case they give a bad
 ## destination and provide nice directory DNE message or file exists message
-LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
-                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
-                            recomb.double=TRUE, read.err=0.05,
+## TAG:Impute
+LabyrinthImpute <- function(vcf, parents, generation, out.file="",
+                            seperate.het=TRUE,
+                            weight.called=TRUE, weight.uncalled=TRUE,
+                            use.only.ad=TRUE, leave.all.calls=TRUE,
+                            ref.alt.by.parent=TRUE, read.err=0.05,
                             genotype.err=0.05, recomb.dist=1e6,
                             write=TRUE, parallel=TRUE, cores=4,
-                            quiet=FALSE, generation=2, qs=NULL) {
+                            quiet=FALSE, use.uncalled.sites=TRUE) {
+
+    if (! use.uncalled.sites) {
+        stop("still have to make sure qs are computed correctly per variant")
+    }
+
 
     ## Create a preferences objects containing all preferences
     prefs <- list()
     class(prefs)            <- "prefs"
 
-
-
-    prefs$qs <- qs
-
-
-
     ## Algorithm parameters
-    prefs$recomb.double     <- recomb.double
     prefs$read.err          <- read.err
+    prefs$generation        <- generation
     prefs$genotype.err      <- genotype.err
     prefs$recomb.dist       <- recomb.dist
+    prefs$weight.uncalled   <- weight.uncalled
+    prefs$weight.called     <- weight.called
+    prefs$seperate.het      <- seperate.het
+    prefs$use.uncalled.sites<- use.uncalled.sites
     ## should the GT info be inferred from the AD info
     prefs$use.only.ad       <- use.only.ad
     ## Should non-imputed sites be in the output VCF file
@@ -868,92 +863,6 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
         writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
         WriteVCF(vcf, prefs$out.file)
-
-        ## ## TODO(Jason): don't use sink()
-        ## sink(prefs$out.file)
-        ## writeLines(vcf$header[1])  # Add header
-        ## writeLines("##LaByRInth=<ID=Imputation,Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">")
-        ## writeLines("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")
-        ## names <- vcf$header[length(vcf$header)]
-        ## writeLines(names)  # Add header
-        ## names <- str.split(names, "\t")
-
-        ## ## The text on all the lines before the actual genotype call data
-        ## prefix <- cbind(vcf$variants[, 1:which(names=="INFO")], "GT")
-        ## ## TODO(Jason): this probably isn't necessary if I use the vcf$samples variable
-        ## ref.geno <- Get(vcf, "GT", prefs$parents)
-        ## ref.geno <- apply(ref.geno, 1:2, function(genotypes) {
-        ##     ## Concatenate the genotypes with a slash between
-        ##     text <- paste0(genotypes, collapse="/")
-        ##     text <- gsub("NA", ".", text)
-        ## })
-
-        ## ## TODO(Jason): this won't work unless I find a way around sink()
-        ## ## progress.env <- new.env()
-        ## ## prefs$fifo <- ProgressMonitor(progress.env)
-        ## ## assign("progress", 0.0, envir=progress.env)
-        ## ## prefs$prog.env <- progress.env
-        ## ## prefs$n.jobs <- n.sites
-
-        ## ## TODO(Jason): this should be cleaned up and there should be an option
-        ## ## to use or not use partion imputation
-        ## for (i in 1:n.sites) {
-        ##     ## Write prefix columns with tab seperation
-        ##     cat(paste0(prefix[i, ], collapse="\t"))
-        ##     cat("\t")
-        ##     for (j in 1:n.variants) {
-        ##         call <- result[i, j]
-        ##         if (is.na(call)) {
-        ##             text <- "./."
-        ##         } else if (call %in% 1:2) {
-        ##             text <- ref.geno[i, call]
-        ##         } else if (call == 4) {
-        ##             text <- "0/1"
-        ##         } else if (call %in% c(3,5,6,7)) {
-        ##             if (call == 3) {
-        ##                 text <- "./." # used to be X/X
-        ##             } else if (call == 5) {
-        ##                 parent.call <- parent.geno[i, 1]  # 6 indicates parent 1
-        ##                 if (is.na(parent.call)) {
-        ##                     ## TODO(Jason): I'm not sure what to do here
-        ##                     text <- "./."
-        ##                 } else if (parent.call == 0) {
-        ##                     text <- "0/."
-        ##                 } else if (parent.call == 1) {
-        ##                     text <- "./1"
-        ##                 } else {
-        ##                     stop("Unexpected imputation result for value 5")
-        ##                 }
-        ##             } else if (call == 6) {
-        ##                 parent.call <- parent.geno[i, 2]  # 6 indicates parent 2
-        ##                 if (is.na(parent.call)) {
-        ##                     ## TODO(Jason): I'm not sure what to do here
-        ##                     text <- "./."
-        ##                 } else if (parent.call == 0) {
-        ##                     text <- "0/."
-        ##                 } else if (parent.call == 1) {
-        ##                     text <- "./1"
-        ##                 } else {
-        ##                     stop("Unexpected imputation result for value 6")
-        ##                 }
-        ##             } else if (call == 7) {
-        ##                 text <- "?/?"
-        ##             }
-        ##         } else {
-        ##             stop(paste("Invalid genotype call:", call))
-        ##         }
-        ##         cat(text)
-        ##         if (j != n.variants) {  # add tab if not last column
-        ##             cat("\t")
-        ##         }
-        ##     }
-        ##     if (i != n.sites) {  # add newline if not last row
-        ##         cat("\n")
-        ##     }
-
-        ##     ## MakeProgress(prefs)
-        ## }
-        ## sink()  # turn off sink
         end.time <- Sys.time()
         time <- difftime(end.time, pseudo.start.time)
         pseudo.start.time <- end.time
@@ -1120,101 +1029,6 @@ LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
 }
 
 
-LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
-
-    if (length(sample) != 1) {
-        stop("Length of sample must be 1")
-    }
-    if (length(chrom) != 1) {
-        stop("Length of chrom must be 1")
-    }
-
-    emission.probs <- GetProbabilities(vcf, sample, chrom, parent.geno, prefs)
-
-    site.pos <- sapply(rownames(emission.probs), function(name) {
-        as.numeric(str.split(name, ":")[2])
-    })
-
-    ## This is the sites where both parents were called (not NA) and where they
-    ## are different from each other. It is a boolean vector indicating whether
-    ## the site is relevant, thus the length is the same as the length of the
-    ## final imputation for this sample and chromosome
-
-    relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
-    #writeLines(paste0(chrom, " ", sample, ": ", paste0(relevant.sites, collapse="")))
-
-    informative.sites <- apply(emission.probs, 1, function(row) {
-        !all(row == row[1])
-    })
-    ## relevant.sites <- informative.sites
-
-    if (length(relevant.sites) != length(informative.sites)) {
-        stop("Site index arrays differ")
-    }
-    relevant.sites <- relevant.sites & informative.sites
-
-    ## If there are not enough markers according to user preference (or if there
-    ## are 0), then do not do the imputation and return a path of NA's of the
-    ## correct length
-    n.relevant.sites <- sum(relevant.sites)  # boolean addition
-    if (n.relevant.sites < 1) {
-        full.path <- rep(NA_integer_, length(relevant.sites))
-    } else {
-        names(relevant.sites) <- NULL  # Makes debugging easier
-
-        ## distances between relevant sites
-        dists <- diff(site.pos[relevant.sites])
-
-        relevant.probs <- emission.probs[relevant.sites, , drop=F]
-        class(relevant.probs) <- "probs"
-
-        path <- viterbi(relevant.probs, dists, prefs)
-
-        full.path <- relevant.sites
-
-        path.index <- 1
-        filler <- NA_integer_
-        ## The missing calls that were not relevant will be filled back in
-        ## to create the full path from the relevant part of the path
-        for (i in seq_along(relevant.sites)) {
-            if (relevant.sites[i]) {  # if the site was relevant
-                full.path[i] <- path[path.index]  # set to next call
-                path.index <- path.index + 1  # increment call index
-            } else {
-                ## If we can safely decrement the index and elements are same
-                if (path.index > 1 &&
-                    path.index <= length(path) &&
-                    !is.na(path[path.index - 1]) &&
-                    !is.na(path[path.index]) &&
-                    path[path.index - 1] == path[path.index]) {
-                    filler <- path[path.index]
-                } else {
-                    filler <- NA_integer_
-                }
-                full.path[i] <- filler
-            }
-        }
-    }
-
-    ## At this stage full.path has entries of 1 through 7, or NA which indicates
-    ## the call at that site according to the following table
-    ## 1: Homozygous and the allele is the same as parent 1
-    ## 2: Homozygous and the allele is the same as parent 2
-    ## 4: Heterozygous
-    ## -------------------------------------------------------------------------
-    ## In the same way that binary counting works, we can use these 3 'basis'
-    ## values to explain what other numbers indicate. This is shown below
-    ## -------------------------------------------------------------------------
-    ## 3 (1+2): Homozygous, but the actual allele is unknown
-    ## 5 (1+4): One of the alleles matches parent 1, but the other is unknown
-    ## 6 (2+4): One of the alleles matches parent 2, but the other is unknown
-    ## 7 (1+2+4): Nothing is known about the alleles
-    ## NA: The site was not imputed
-
-    full.path  # implicit return
-}
-
-
 ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
 
     if (length(sample) != 1) {
@@ -1226,10 +1040,6 @@ ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, pr
 
     emission.probs <- GetProbabilities(vcf, sample, chrom, parent.geno, prefs)
 
-    ## turn the heterozygous emission probabilities into two seperate states
-    emission.probs[, 3] <- emission.probs[, 3]/2
-    emission.probs <- cbind(emission.probs, emission.probs[, 3])
-
     site.pos <- sapply(rownames(emission.probs), function(name) {
         as.numeric(str.split(name, ":")[2])
     })
@@ -1240,14 +1050,16 @@ ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, pr
     ## final imputation for this sample and chromosome
     relevant.sites <- GetRelevantProbabiltiesIndex(vcf, chrom, parent.geno, prefs)
 
-    ## informative.sites <- apply(emission.probs, 1, function(row) {
-    ##     !all(row == row[1])
-    ## })
+    if (! prefs$use.uncalled.sites) {
+        informative.sites <- apply(emission.probs, 1, function(row) {
+            !all(row == row[1])
+        })
 
-    ## if (length(relevant.sites) != length(informative.sites)) {
-    ##     stop("Site index arrays differ")
-    ## }
-    ## relevant.sites <- relevant.sites & informative.sites
+        if (length(relevant.sites) != length(informative.sites)) {
+            stop("Site index arrays differ")
+        }
+        relevant.sites <- relevant.sites & informative.sites
+    }
 
     ## If there are not enough markers according to user preference (or if there
     ## are 0), then do not do the imputation and return a path of NA's of the
@@ -1258,14 +1070,16 @@ ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, pr
     } else {
         names(relevant.sites) <- NULL  # Makes debugging easier
 
+        ## TODO(Jason): move this code outside
         ## distances between relevant sites
         dists <- diff(site.pos[relevant.sites])
+        map.units <- dists / prefs$recomb.dist  # convert bases into map units
+        qs <- compute.qs(map.units, prefs$generation)
 
         relevant.probs <- emission.probs[relevant.sites, , drop=F]
         class(relevant.probs) <- "probs"
 
-        path <- experimental.viterbi(relevant.probs, prefs$qs, prefs)
-        ## path <- viterbi(relevant.probs, dists, prefs)
+        path <- experimental.viterbi(relevant.probs, qs, prefs)
 
         full.path <- relevant.sites
 
@@ -1348,9 +1162,6 @@ ValidatePreferences <- function(prefs) {
     }
     if (length(prefs$parents) != 2) {
         stop("exactly 2 parents must be specified")
-    }
-    if (!is.logical(prefs$recomb.double)) {
-        stop("'recomb.double' must be of type logical")
     }
     if (!(0 <= prefs$read.err && prefs$read.err < 1) ||
         !(0 <= prefs$genotype.err && prefs$genotype.err < 1)) {
@@ -1463,102 +1274,28 @@ make.vcf.lines <- function(vcf) {
 
     names <- str.split(vcf$header[length(vcf$header)], "\t")
     prefix.strings <- vcf$variants[, 1:which(names=="INFO")]
-##    prefix.strings <- vcf$field.data[, 1:which(names=="INFO")]
 
     content.strings <- cbind(prefix.strings, "GT:AD:DP", data.strings)
     all.strings <- rbind(names, content.strings)
 
     lines <- apply(all.strings, 1, paste0, collapse="\t")
 
-    c(vcf$header[1],
-               "##LaByRInth=<ID=Imputation,\"Version=1.0,Description=\"Code can be found at github.com/Dordt-Statistics-Research/LaByRInth\">",
-               "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
-               lines) # implicit return
+    c(get.labyrinth.vcf.header(), lines)  # implicit return
 }
 
 
-## CodifyGT <- function(gt) {
-##     ## gt is a vector of genotypes
-##     switch(type,
-##            mean = 1,
-##            median = 2,
-##            trimmed = 3)
-## }
-
-
-AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
-    ## TODO(Jason): without an original mask matrix it is impossible to tell
-    ## what percent of masked sites were imputed correctly. But it is possible
-    ## to tell the percent on non-NA masked sites which is really what we care about
-    four.d.data <- abind(imp$GT, orig$GT, mask$GT, along=4)
-
-    ## df <- data.frame(num=rep(NA_integer_, N), txt=rep("", N),  # as many cols as you need
-    ##              stringsAsFactors=FALSE)          # you don't know levels yet
-
-    find.masked.sites <- function(slice) {
-        correct  <- 1
-        partial  <- 2
-        skipped  <- 3
-        wrong    <- 4
-        unmasked <- 5
-        ## Assume orignal VCF file had no partial calls (i.e. "./1" or "0/.")
-        i <- slice[,1]  # imp
-        o <- slice[,2]  # orig
-        m <- slice[,3]  # mask
-        if (all(is.na(m)) && !all(is.na(o))) { # all masked are na, no original are na
-            ##browser()
-            ## i <- sort(slice$imp[is.na(slice$imp)]
-            if (all(is.na(i))) {
-                skipped
-            } else if (any(is.na(i))) {
-                non.na.i <- i[!is.na(i)]  # will be length 1 since i is length 2
-                if (non.na.i %in% o) {
-                    partial
-                } else {
-                    wrong
-                }
-            } else if (all(sort(i) == sort(o))) {
-                correct
-            } else {
-                wrong
-            }
-        } else {
-            ##print(slice)
-            unmasked
+## recomb probs should be in map units
+compute.qs <- function(recomb.probs, gen) {
+    ## pairwise min to limit probabilities to 1
+    ps <- pmin(2*recomb.probs, 1)
+    q2s <- (2 - ps)/4
+    if (gen == 2) {
+        q2s  # implicit return
+    } else {
+        qis <- q2s
+        for (i in 3:gen) {
+            qis <- -ps*qs/2 + ps/8 + q
         }
+        qis  # implicit return
     }
-
-    find.depth <- function(strip) {
-        ##browser()
-        if (strip[1]) {
-            sum(strip[2:length(strip)])
-        } else {
-            0
-        }
-    }
-
-#    browser()
-    masked.sites <- apply(four.d.data, 1:2, find.masked.sites)
-    print("found masked sites")
-
-    mask.w.ad <- abind(masked.sites, orig$AD, along=3)
-
-    depths <- as.numeric(apply(mask.w.ad, 1:2, find.depth))  # matrix to vector
-    qualities <- as.numeric(masked.sites)  # matrix to vector
-
-    relevant <- which(qualities!=5)
-#    relevant <- which(qualities!=-1)  # all sites
-
-    depths <- depths[relevant]
-    qualities <- qualities[relevant]
-    df <- data.frame(depth=depths,
-#                     quality=qualities)
-                     quality=factor(qualities,
-                                    levels=1:4,
-                                    labels = c("correct",
-                                               "partial",
-                                               "skipped",
-                                               "wrong")))
-
-    df
 }
