@@ -213,7 +213,7 @@ viterbi <- function(probs, dists, prefs) {
 }
 
 
-experimental.viterbi <- function(emission.probs, qs, prefs) {
+viterbi <- function(emission.probs, qs, prefs) {
     nstates <- nstates.probs(emission.probs)
     path.size <- nsites.probs(emission.probs)
 
@@ -245,7 +245,7 @@ experimental.viterbi <- function(emission.probs, qs, prefs) {
                 extension.probs <- sapply(1:nstates, function(i) {
                     ## log of the probability of being at state i before and
                     ## transitioning to the 'state' state
-                    probs.tracker[i] + log(experimentalTransProb(i, state, q))
+                    probs.tracker[i] + log(TransProb(i, state, q))
                 })
 
                 optimal.indices <- extension.probs==max(extension.probs)
@@ -264,7 +264,7 @@ experimental.viterbi <- function(emission.probs, qs, prefs) {
 }
 
 
-experimentalTransProb <- function(a, b, q) {
+TransProb <- function(a, b, q) {
     ## ## a and b are in {1,2,3,4}
     ## if (a == b) {
     ##     if (a %in% 1:2) {
@@ -289,7 +289,7 @@ experimentalTransProb <- function(a, b, q) {
         } else if (b == 4) {
             q*(1/2 - q)
         } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            stop(paste("TransProb failed. a:", a, "b:", b))
         }
     } else if (a == 2) {
         if (b == 1) {
@@ -301,7 +301,7 @@ experimentalTransProb <- function(a, b, q) {
         } else if (b == 4) {
             q*(1/2 - q)
         } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            stop(paste("TransProb failed. a:", a, "b:", b))
         }
     } else if (a == 3) {
         if (b == 1) {
@@ -313,7 +313,7 @@ experimentalTransProb <- function(a, b, q) {
         } else if (b == 4) {
             (1/2 - q)^2
         } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            stop(paste("TransProb failed. a:", a, "b:", b))
         }
     } else if (a == 4) {
         if (b == 1) {
@@ -325,10 +325,10 @@ experimentalTransProb <- function(a, b, q) {
         } else if (b == 4) {
             q^2
         } else {
-            stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+            stop(paste("TransProb failed. a:", a, "b:", b))
         }
     } else {
-        stop(paste("experimentalTransProb failed. a:", a, "b:", b))
+        stop(paste("TransProb failed. a:", a, "b:", b))
     }
 }
 
@@ -1110,7 +1110,7 @@ LabyrinthImputeSample <- function(vcf, sample, parent.geno, prefs) {
     chroms <- vcf$chrom.names
 
     do.call(c, prefs$lapply(chroms, function(chrom) {  # c is the concatenate R function
-        result <- ExperimentalLabyrinthImputeChrom(vcf, sample, chrom, parent.geno, prefs)
+        result <- LabyrinthImputeChrom(vcf, sample, chrom, parent.geno, prefs)
         writeBin(1/prefs$n.jobs, prefs$fifo)  # update the progress bar info
         if (!prefs$parallel) {  # if running in serial mode
             prefs$prog.env$progress <- PrintProgress(prefs$fifo, prefs$prog.env$progress)
@@ -1215,7 +1215,7 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
 }
 
 
-ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
+LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
 
     if (length(sample) != 1) {
         stop("Length of sample must be 1")
@@ -1264,7 +1264,7 @@ ExperimentalLabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, pr
         relevant.probs <- emission.probs[relevant.sites, , drop=F]
         class(relevant.probs) <- "probs"
 
-        path <- experimental.viterbi(relevant.probs, prefs$qs, prefs)
+        path <- viterbi(relevant.probs, prefs$qs, prefs)
         ## path <- viterbi(relevant.probs, dists, prefs)
 
         full.path <- relevant.sites
