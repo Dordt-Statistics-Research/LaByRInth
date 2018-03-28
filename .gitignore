@@ -1,1 +1,16 @@
 *~
+\#*#
+.Rhistory
+*.pgm
+*.ppm
+*.zip
+*.pdf
+*.eps
+*.sty
+*.cls
+*.cfg
+*.bib
+*.aux
+*.log
+*.bst
+*.patch
