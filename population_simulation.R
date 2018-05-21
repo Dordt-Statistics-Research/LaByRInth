@@ -574,7 +574,7 @@ CheckAccuracy <- function(correct.vcf, call.vcf) {
 ## note that this colors by reference / alternate and not by parent 1 / parent 2
 ppm.from.vcf <- function(vcf, out.file, ref=c(79, 165, 77),
                          het=c(249, 204, 104), alt=c(22, 209, 247),
-                         nil=c(255, 255, 255)) {
+                         nil=c(255, 255, 255), bak=c(127, 127, 127)) {
 
     verify.color <- function(color) {
         all(color <= 255 & color >= 0 & color == floor(color)) &&
@@ -584,7 +584,8 @@ ppm.from.vcf <- function(vcf, out.file, ref=c(79, 165, 77),
     if (!verify.color(ref) ||
         !verify.color(het) ||
         !verify.color(alt) ||
-        !verify.color(nil)) {
+        !verify.color(nil) ||
+        !verify.color(bak)) {
         stop("colors must be 3 element vectors of integers from 0 to 255")
     }
 
@@ -594,18 +595,27 @@ ppm.from.vcf <- function(vcf, out.file, ref=c(79, 165, 77),
     names(colors) <- c("reference", "heterozygous", "alternate", "unknown")
 
     if ("vcf" %in% class(vcf)) {
+        n.col <- nrow(vcf$GT)
+        n.row <- ncol(vcf$GT)
+        #browser()
+        background.row <- paste0(rep(paste0(bak, collapse=" "), n.col), collapse="\t")
+
         ## string representing color for every site and variant transposed so
         ## that a row corresponds to a variant
         image.colors <- t(apply(vcf$GT, 1:2, function(gt) {colors[get.gt.type(gt)]}))
         ## tab separate colors in a row
         image.lines <- apply(image.colors, 1, paste, collapse="\t")
 
+#        browser()
+        double.image.lines <- rep(image.lines, each=3)
+        double.image.lines[c(FALSE,TRUE,TRUE)] <- background.row
+
         ##
         line.1 <- "P3"
-        line.2 <- paste(ncol(image.colors), nrow(image.colors), "255")
+        line.2 <- paste(n.col, 3*n.row, "255")
 
         con <- file(out.file)
-        writeLines(c(line.1, line.2, image.lines), con)
+        writeLines(c(line.1, line.2, double.image.lines), con)
         close(con)
 
     } else if ("character" %in% class(vcf)) {
@@ -620,6 +630,11 @@ Summarize <- function(accuracy.result) {
     print("Percent called correctly:")
     print(100*with(acc, perc(quality=="correct")))
 
+    print("Percent called correctly of called:")
+    n.called <- with(acc, perc(quality!="unknown"))
+    n.correct <- with(acc, perc(quality=="correct"))
+    print(100 * n.correct / n.called)
+
     print("Percent called partial (heterozygous called homozygous):")
     print(100*with(acc, perc(quality=="partial")))
 
@@ -630,20 +645,5 @@ Summarize <- function(accuracy.result) {
     print(100*with(acc, perc(quality=="skipped")))
 }
 
-
-## recomb probs should be in map units
-compute.qs <- function(recomb.probs, gen) {
-    ps <- 2*recomb.probs
-    q2s <- (2 - ps)/4
-    if (gen == 2) {
-        q2s  # implicit return
-    } else {
-        qis <- q2s
-        for (i in 3:gen) {
-            qis <- -ps*qs/2 + ps/8 + q
-        }
-        qis  # implicit return
-    }
-}
 
 ## get.filename.generator <- function
