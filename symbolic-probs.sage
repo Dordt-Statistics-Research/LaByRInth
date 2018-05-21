@@ -1,10 +1,13 @@
 import pdb
 
+
 def xor(a, b):
     return((a).__xor__(b))
 
+
 def get_symbolic_probs(n, letter="p"):
     return [var(letter + "_%d" % i) for i in xrange(n)]
+
 
 def get_gamete_probs(n_sites, n_generations):
     n_seps = n_sites - 1  # number of seperations
@@ -44,7 +47,7 @@ def get_recomb_config_prob(recomb_config, recomb_probs):
     # indicated a recombination.  Now compute the probability of the gamete
     # being formed in exactly the way specified by k. In sites where a crossover
     # occurred
-    prob = 0.25  # because there are 4 possible "base" gametes
+    prob = 1/4  # because there are 4 possible "base" gametes
     n_seps = len(recomb_probs)
     n_sites = n_seps + 1
     mask = 2**n_seps - 1
@@ -60,7 +63,7 @@ def get_recomb_config_prob(recomb_config, recomb_probs):
     # If there are no recombinations (recomb is all 0-bits or all 1-bits) then
     # there is an additional 25% chance due to the biology
     if recomb_config == 0 or recomb_config == 2**n_sites - 1:
-        prob += 0.25
+        prob += 1/4
 
     return prob
     # TODO(Jason): consider using sum of log(probs) rather than product of probs
@@ -69,6 +72,14 @@ def get_recomb_config_prob(recomb_config, recomb_probs):
 def get_F1_gamete_probs(recomb_probs):
     n_sites = len(recomb_probs) + 1
     n_gametes = 2**n_sites
+    return [get_recomb_config_prob(config, recomb_probs)
+            for config in xrange(n_gametes)]
+
+
+def get_starting_gamete_probs(n_sites):
+    n_sep = n_sites - 1
+    n_gametes = 2**n_sites
+    recomb_probs = get_symbolic_probs(n_sep, letter="p")
     return [get_recomb_config_prob(config, recomb_probs)
             for config in xrange(n_gametes)]
 
@@ -91,6 +102,7 @@ def get_next_gamete_probs(prev_gamete_probs, recomb_probs):
     # different).
     for recomb_config in xrange(n_gametes):
         recomb_prob = get_recomb_config_prob(recomb_config, recomb_probs)
+        #pdb.set_trace()
         for gamete_i in xrange(n_gametes):
             gamete_i_prob = prev_gamete_probs[gamete_i]
             for gamete_j in xrange(n_gametes):
@@ -161,31 +173,6 @@ def test():
 
     return recursive_formula
 
-    # gamete_probs = get_F1_gamete_probs(recomb_probs)
-
-    # for i in xrange(n_generations - 1):
-    #     gamete_probs = eval_probs(recursive_formula,
-    #                               general_gamete_probs,
-    #                               gamete_probs)
-
-    # return expand_probs(gamete_probs)
-    # # gametes equal distances from the ends of the list have equal probabilties
-    # # because they are complements
-    # qs = get_symbolic_probs(2**4, "q")
-    # qs = qs + [q for q in reversed(qs)]
-
-    # ps = get_symbolic_probs(4, "p")
-
-    # probs52 = get_gamete_probs(5,2)
-
-
-    # probs = get_gamete_probs(3,2)
-    # n_gametes = len(probs)
-    # n_sites = log(n_gametes, 2)
-    # n_seps = n_sites - 1
-    # recomb_probs = [var("p_%d" % i) for i in xrange(n_seps)]
-    # sub = [prob.subs(p_0 = 0.5, p_1 = 0.5) for prob in probs]
-
 
 def expand_probs(probs):
     return [prob.expand() for prob in probs]
@@ -205,7 +192,3 @@ def plot_probs(probs):
     points = [(i, probs[i]) for i in range(len(probs))]
     sage.plot.point.point(points)
 
-# def make_map(result):
-#     assoc = {}
-#     for i in xrange(len(result)):
-#     return {prob[i]:i for i in  k k
