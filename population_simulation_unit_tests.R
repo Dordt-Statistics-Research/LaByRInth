@@ -464,3 +464,97 @@ for (i in 1:5) {
 print(c(q^2, 2*q*(1/2-q), (1/2-q)^2, 2*q^2+2*(1/2-q)^2))
 
 
+## TEST 15:
+basename <- "test_00015"
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.01
+d <- 1e7
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+
+
+## TEST 16:
+basename <- "test_00016"
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.001
+d <- 1e7
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+
+
+## TEST 17:
+basename <- "test_00017"
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.001
+d <- 0
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
+
+
+## TEST 18:
+basename <- "test_00018"
+
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.003
+d <- 0
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+
+dir <- "analysis/simulated_population/unit_tests"
+ensure_writability(paste0(dir, "/", basename))
+
+file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+ppm.from.vcf(full.vcf, file)
