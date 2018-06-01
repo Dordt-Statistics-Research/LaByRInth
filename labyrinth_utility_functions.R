@@ -95,16 +95,23 @@ get.labyrinth.vcf.header <- function() {
 
 
 print.labyrinth.header <- function() {
-    writeLines("\n")
-    writeLines("+---------------------------------------------------------------------+")
+    writeLines("\n"                                                                     )
+    writeLines("|#####################################################################|")
+    writeLines("|########/ /#########/ ___ \#######/ ___ \/_  _/######################|")
+    writeLines("|#######/ /#########/ /##/ /######/ /##/ /#/ /########################|")
+    writeLines("|######/ /###/ _  \/ _  __/#\ \/ / _  __/#/ /#/  |#/ /_  __/ /#/ /####|")
+    writeLines("|#####/ /###/ /#/ / /#| |####\  / /#\ \##/ /#/ /||/ /#/ /#/ __  /#####|")
+    writeLines("|####/_____/_/#/_/______/####/_/_/##/_/_____/_/#|__/#/_/#/_/#/_/######|")
+    writeLines("|#####################################################################|")
+    writeLines("|                                                                     |")
     writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
     writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
     writeLines("| Licensed under the Apache License, Version 2.0                      |")
     writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
     writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
     writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
-    writeLines("+---------------------------------------------------------------------+")
-    writeLines("")
+    writeLines("|_____________________________________________________________________|")
+    writeLines(""                                                                       )
 }
 
 
