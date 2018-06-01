@@ -12,6 +12,10 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+
+source("population_simulation.R")
+
+
 ## TEST 1: 'cross' and 'gamete' functions
 
 sites <- c(1:16)
@@ -558,3 +562,51 @@ ensure_writability(paste0(dir, "/", basename))
 
 file <- paste0(dir, "/", basename, "_full_f", gen, ".ppm")
 ppm.from.vcf(full.vcf, file)
+
+
+
+
+
+## TEST 19
+get.full.name <- function(dir, basename, gen) {
+    paste0(dir, "/", basename, "_full_f", gen, ".ppm")
+}
+get.sample.name <- function(dir, basename, gen) {
+    paste0(dir, "/", basename, "_sample_f", gen, ".ppm")
+}
+get.labyrinth.name <- function(dir, basename, gen) {
+    paste0(dir, "/", basename, "_imputed_labyrinth_f", gen, ".ppm")
+}
+
+
+basename <- "test_00019"
+
+sites  <- 1:10000
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.003
+d <- 0
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+gen <- 5  # F5
+n.mem <- 100
+cov <- 1/16
+
+set.seed(1)
+pop <- create.ril.pop(n.gen=gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(pop, coverage=cov), sites)
+
+imputed.vcf <- LabyrinthImpute(sample.vcf, c("P1", "P2"), file, generation=gen, qs=1, parallel=FALSE)
+
+dir <- "analysis/simulated_population/unit_tests"
+ensure_writability(paste0(dir, "/", basename))
+
+ppm.from.vcf(full.vcf, get.full.name(dir, basename, gen))
+ppm.from.vcf(sample.vcf, get.sample.name(dir, basename, gen))
+ppm.from.vcf(imputed.vcf, get.labyrinth.name(dir, basename, gen))
+
+
+acc <- CheckAccuracy(full.vcf, imputed.vcf)
+Summarize(acc)
+with(acc, summary(call.type[quality=="wrong" | quality=="partial"]))

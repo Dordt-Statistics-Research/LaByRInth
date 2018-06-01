@@ -3,17 +3,19 @@
 
 ## TODO(Jason): Try writing an empty file immediately in case they give a bad
 ## destination and provide nice directory DNE message or file exists message
-LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
+LabyrinthImpute <- function(vcf, parents, out.file, generation, use.only.ad=TRUE,
                             leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
                             recomb.double=TRUE, read.err=0.05,
                             genotype.err=0.05, recomb.dist=1e6,
                             write=TRUE, parallel=TRUE, cores=4,
-                            quiet=FALSE, generation=2, qs=NULL) {
+                            quiet=FALSE) {
+
+    start.time <- Sys.time()
+    pseudo.start.time <- start.time
 
     ## Create a preferences objects containing all preferences
     prefs <- list()
     class(prefs)            <- "prefs"
-    prefs$qs <- qs
 
     ## Algorithm parameters
     prefs$recomb.double     <- recomb.double
@@ -41,9 +43,6 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
     prefs$write             <- write
     prefs$out.file          <- out.file
 
-    start.time <- Sys.time()
-    pseudo.start.time <- start.time
-
     ValidatePreferences(prefs)
 
     prefs$lapply <- get.lapply(prefs)
@@ -52,6 +51,7 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
 
     writeLines(paste0(" *  Running imputation in ", ifelse(prefs$parallel,
                paste0("parallel (", prefs$cores, " cores)\n"), "serial\n")))
+
 
     ## if the vcf is actually a filename, load the vcf object
     if (! inherits(vcf, "vcf")) {
@@ -70,6 +70,10 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
         units <- attr(time, "units")
         writeLines(paste0(" *  VCF loaded in ", round(runtime, 2), " ", units, "\n"))
     }
+
+
+    ## vcf$gen.dists <- get.gen.dists(vcf)
+
 
     chroms <- vcf$chrom.names
     variants <- vcf$variant.names
@@ -103,15 +107,17 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
 
     close(prefs$fifo)
 
+    ## Assign the GT of the vcf object according to the results
     for (site in 1:n.sites) {
         for (var in 1:n.variants) {
             call <- result[site, var]
                 if (is.na(call)) {
                     vcf$GT[site, var, ] <- NA_integer_
                 } else if (call %in% 1:2) {
+                    ## set GT as homozygous same allele as corresponding parent
                     vcf$GT[site, var, ] <- parent.geno[site, call]
                 } else if (call == 4 || call == 8 || call == 4+8) {
-                    vcf$GT[site, var, ] <- 0:1
+                    vcf$GT[site, var, ] <- 0:1  # heterozygous
                 } else {
                     ## partial imputation will be ignored
                     vcf$GT[site, var, ] <- NA_integer_
@@ -132,6 +138,7 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
         ## Replace spaces and colons in the date with dashes
         if (prefs$out.file == "") {
             ## Write to the same directory as before, but prepend "LaByRInth" to the name
+            ## TODO(Jason): problem: this won't work because file dne
             qualified.name <- str.split(file, "/")
             name <- qualified.name[length(qualified.name)]
             if (grepl("/", file)) {
@@ -143,6 +150,7 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
             }
         }
 
+        ## TODO(Jason): prefs$out.file is not updated if it is ""
         writeLines(paste0(" *  Writing results to ", prefs$out.file))
 
         WriteVCF(vcf, prefs$out.file)
@@ -159,7 +167,7 @@ LabyrinthImpute <- function(vcf, parents, out.file="", use.only.ad=TRUE,
     runtime <- as.numeric(time)
     units <- attr(time, "units")
     writeLines(paste0(" *  LaByRInth completed in ", round(runtime, 2), " ", units, "\n\n"))
-    invisible(vcf)  # implicit return
+    invisible(vcf)  # implicit invisible return
 }
 
 
@@ -193,6 +201,8 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         stop("Length of chrom must be 1")
     }
 
+    print("imputing chrom")
+    browser()
     emission.probs <- GetProbabilities(vcf, sample, chrom, parent.geno, prefs)
 
     site.pos <- sapply(rownames(emission.probs), function(name) {
@@ -232,7 +242,7 @@ LabyrinthImputeChrom <- function(vcf, sample, chrom, parent.geno, prefs) {
         relevant.probs <- emission.probs[relevant.sites, , drop=F]
         class(relevant.probs) <- "probs"
 
-        path <- viterbi(relevant.probs, dists, prefs)
+        path <- multiviterbi(relevant.probs, dists, prefs)
 
         full.path <- relevant.sites
 

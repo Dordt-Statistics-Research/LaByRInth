@@ -42,15 +42,18 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs, pseudo.site
     gt <- Get(vcf, "GT", sample, chrom)
     ad <- Get(vcf, "AD", sample, chrom)
 
-    n.states <- 3 * (2* prefs$generation + 1)
-    ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = n.states)
+    n.superstates <- 3 * (2* prefs$generation + 1)
+    n.boundaries <- 2 * prefs$generation  # number total gamete crossovers
+    parents <- colnames(parent.geno)
+    states <- c(parents, "HET")
+    superstates <- c(sapply(0:n.boundaries, function(boundary) {
+        paste0(states, "-", boundary)
+    }))
+    ret.val <- matrix(NA_integer_, nrow = nrow(gt), ncol = n.superstates)
     rownames(ret.val) <- rownames(gt)
-    colnames(ret.val) <- c(colnames(parent.geno), "HETEROZYGOUS")
+    colnames(ret.val) <- superstates
     class(ret.val) <- "prob"
 
-    ## probability constraints from original LB-Impute code
-    max.allowed <- 1 - (2 * prefs$genotype.err)
-    min.allowed <- prefs$genotype.err
     rerr <- prefs$read.err
 
     for (row in 1:nrow(ret.val)) {
@@ -81,18 +84,15 @@ GetProbabilities <- function(vcf, sample, chrom, parent.geno, prefs, pseudo.site
         ## theoretical fraction of sites that should be homozygous
         perc.hom <- 1 - perc.het
         ## total probability of the sequence of reads occurring
-        p        <- perc.hom/2 * (1-rerr)^ref.calls * (rerr)^alt.calls +
-            perc.hom/2 * (1-rerr)^alt.calls * (rerr)^ref.calls +
-            perc.het   * (1/2)^(ref.calls + alt.calls)
-
+        p <- perc.hom/2 * (1-rerr)^ref.calls * (rerr)^alt.calls +
+             perc.hom/2 * (1-rerr)^alt.calls * (rerr)^ref.calls +
+             perc.het   * (1/2)^(ref.calls + alt.calls)
 
         ## Calculate the emission probabilities for this site
         ref.prob <- perc.hom/2 * (1-rerr)**ref.calls * (rerr)**alt.calls / p
         alt.prob <- perc.hom/2 * (1-rerr)**alt.calls * (rerr)**ref.calls / p
         hom.prob <- perc.het   * (1/2)**(ref.calls + alt.calls) / p
 
-
-        n.boundaries <- 2 * prefs$generation  # number total gamete crossovers
 
         r <- pseudo.site.pos[row]  # pseudo position of site in range [0, 0.5]
         n <- 2 * prefs$generation  # number of boundaries

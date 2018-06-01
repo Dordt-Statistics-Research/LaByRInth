@@ -39,6 +39,11 @@ def print_probs(gamete_probs):
 
 
 def get_recomb_config_prob(recomb_config, recomb_probs):
+    # Determine the probability of a recombination configuration. A
+    # recombination configuration specifies which homolog each position (bit) of
+    # the newly formed gamete will come from. This is with respect to the
+    # parental homologs and not the ancestral homologs.
+
     # Now the crossover locations required to form gamete_k from gamete_i and
     # gamete_j will be determined. By bitshifting k one position to the right,
     # XORing it with k, and masking it to remove any irrelevant leading bits the
@@ -72,6 +77,8 @@ def get_recomb_config_prob(recomb_config, recomb_probs):
 def get_F1_gamete_probs(recomb_probs):
     n_sites = len(recomb_probs) + 1
     n_gametes = 2**n_sites
+    # Because the direct parents are the ancestors, the get_recomb_config_prob
+    # function can be called directly to obtain the probability of each gamete
     return [get_recomb_config_prob(config, recomb_probs)
             for config in xrange(n_gametes)]
 
@@ -94,15 +101,18 @@ def get_next_gamete_probs(prev_gamete_probs, recomb_probs):
     # an array can be used instead of a python dictionary.
     next_gamete_probs = [0 for i in xrange(n_gametes)]
 
-    # gamete_i and gamete_j are binary encodings of the gamete allele structure
-    # where a 0-bit indicates an allele that comes from the first ancestral
-    # parent and a 1-bit indicates an allele that comes from the second
-    # ancestral parent (ancestral meaning one of the parents of the F1 plant as
-    # opposed to the immediate parents of these gametes which may or may not be
-    # different).
+    # Every possible recombination configuration will be checked along with
+    # every pair of gametes to see what gametes can be produced and what their
+    # probabilities are
     for recomb_config in xrange(n_gametes):
         recomb_prob = get_recomb_config_prob(recomb_config, recomb_probs)
-        #pdb.set_trace()
+
+        # gamete_i and gamete_j are binary encodings of the gamete allele
+        # structure where a 0-bit indicates an allele that comes from the first
+        # ancestral parent and a 1-bit indicates an allele that comes from the
+        # second ancestral parent (ancestral meaning one of the parents of the
+        # F1 plant as opposed to the immediate parents of these gametes which
+        # may or may not be different).
         for gamete_i in xrange(n_gametes):
             gamete_i_prob = prev_gamete_probs[gamete_i]
             for gamete_j in xrange(n_gametes):
@@ -191,4 +201,3 @@ def eval_probs(probs, symbols, values):
 def plot_probs(probs):
     points = [(i, probs[i]) for i in range(len(probs))]
     sage.plot.point.point(points)
-

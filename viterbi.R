@@ -13,7 +13,7 @@
 ## limitations under the License.
 
 
-viterbi <- function(emission.probs, qs, prefs) {
+multiviterbi <- function(emission.probs, qs, prefs) {
     nstates <- nstates.probs(emission.probs)
     path.size <- nsites.probs(emission.probs)
 
