@@ -166,50 +166,63 @@ viterbi <- function(probs, dists, prefs) {
     nstates <- nstates.probs(probs)
     path.size <- nsites.probs(probs)
 
-    ## 3D array
-    paths.tracker <- array(NA, dim=c(nstates, path.size, nstates))
-
-    ## This will keep track of the overall probabilities of each of the {nstates}
-    ## final paths, so that the probability of the final paths do not have to be
-    ## computed again. The probabilities are initialized to the emission
-    ## probabilities of the first site of the probs matrix which is the first
-    ## row
-    if (path.size < 1) {
-        stop("viterbi requires that probs have > 0 rows")
-    }
-    probs.tracker <- log(probs[1, ])
-
-    ## Hard code the first column to the vector 1,2,...,nstates as an index
-    ## This is what the generatePath function will need
-    paths.tracker[, 1, ] <- diag(TRUE, nstates)
-
-    if (path.size != 1) {  # if the path size is 1 just use the emission probs
-        for (site in 2:path.size) {  # for each site in the path
-
-            dist <- dists[site - 1]
-
-            ## log of the probability for each possible hidden state at this site
-            probs.tracker <- sapply(1:nstates, function(state) {
-
-                extension.probs <- sapply(1:nstates, function(i) {
-                    ## log of the probability of being at state i before and
-                    ## transitioning to the 'state' state
-                    probs.tracker[i] + log(transProb(i, state, dist, prefs))
-                })
-
-                optimal.indices <- extension.probs==max(extension.probs)
-                ## use <<- to assign to a variable outside the current scope
-                paths.tracker[state, site, ] <<- optimal.indices
-                max(extension.probs) + log(probs[site, state])  # return prob
-            })
+    for (model in 1:3) {
+        if (model == 1) {
+            m1 <- T
+            m2 <- T
+        } else if (model == 2) {
+            m1 <- T
+            m2 <- F
+        } else if (model == 3) {
+            m1 <- F
+            m2 <- F
         }
-    }
 
-    ## The code above has already computed the optimal path, but that
-    ## information is encoded within the paths.tracker matrix and needs to be
-    ## extracted. That is what generatePath will do when passed the path.tracker
-    ## matrix and the indices of the optimal path.
-    generatePath(paths.tracker, probs.tracker==max(probs.tracker))  # return best path
+        ## 3D array
+        paths.tracker <- array(NA, dim=c(nstates, path.size, nstates))
+
+        ## This will keep track of the overall probabilities of each of the {nstates}
+        ## final paths, so that the probability of the final paths do not have to be
+        ## computed again. The probabilities are initialized to the emission
+        ## probabilities of the first site of the probs matrix which is the first
+        ## row
+        if (path.size < 1) {
+            stop("viterbi requires that probs have > 0 rows")
+        }
+        probs.tracker <- log(probs[1, ])
+
+        ## Hard code the first column to the vector 1,2,...,nstates as an index
+        ## This is what the generatePath function will need
+        paths.tracker[, 1, ] <- diag(TRUE, nstates)
+
+        if (path.size != 1) {  # if the path size is 1 just use the emission probs
+            for (site in 2:path.size) {  # for each site in the path
+
+                dist <- dists[site - 1]
+
+                ## log of the probability for each possible hidden state at this site
+                probs.tracker <- sapply(1:nstates, function(state) {
+
+                    extension.probs <- sapply(1:nstates, function(i) {
+                        ## log of the probability of being at state i before and
+                        ## transitioning to the 'state' state
+                        probs.tracker[i] + log(transProb(i, state, dist, prefs))
+                    })
+
+                    optimal.indices <- extension.probs==max(extension.probs)
+                    ## use <<- to assign to a variable outside the current scope
+                    paths.tracker[state, site, ] <<- optimal.indices
+                    max(extension.probs) + log(probs[site, state])  # return prob
+                })
+            }
+        }
+
+        ## The code above has already computed the optimal path, but that
+        ## information is encoded within the paths.tracker matrix and needs to be
+        ## extracted. That is what generatePath will do when passed the path.tracker
+        ## matrix and the indices of the optimal path.
+        generatePath(paths.tracker, probs.tracker==max(probs.tracker))  # return best path
+    }
 }
 
 
@@ -224,19 +237,38 @@ viterbi <- function(probs, dists, prefs) {
 ##' @param prefs a preferences object
 ##' @return the transmission probability between these hidden states
 ##' @author Jason Vander Woude
-transProb <- function(a, b, dist, prefs) {
-    if (a == b) {
-        ## If there is no recombination
-        0.5 * (1 + exp(-dist/prefs$recomb.dist))
-    } else if (a %in% 1:2 && b %in% 1:2 && prefs$recomb.double) {
-        ## Double recomb occurred and has square of probability of single recomb
-        ## This only works for biparental
-        (0.5 * (1 - exp(-dist/prefs$recomb.dist)))**2
-    } else {
-        ## Some type of recombination occurred that has regular probability
-        0.5 * (1 - exp(-dist/prefs$recomb.dist))
-    }
-}
+## transProb <- function(a, b, dist, prefs, m1, m2) {
+##     if (m1) {
+##         p_1 <- (1 - exp(-dist/prefs$recomb.dist))
+##     } else {
+##         p_1 <- 0
+##     }
+##     if (m2) {
+##         q_1 <- (1 - exp(-dist/prefs$recomb.dist))
+##     } else {
+##         q_2 <- 0
+##     }
+##     f2trans <- [
+##         [(p_1 - 1)*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -(p_1 - 1)*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -p_1*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          p_1*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1)],
+##         [-(p_1 - 1)*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##             (p_1 - 1)*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          p_1*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -p_1*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1)],
+##         [-p_1*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          p_1*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##             (p_1 - 1)*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -(p_1 - 1)*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1)],
+##         [p_1*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -p_1*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##          -(p_1 - 1)*q_1/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1),
+##             (p_1 - 1)*(q_1 - 1)/((p_1 - 1)*(q_1 - 1) - p_1*(q_1 - 1) - (p_1 - 1)*q_1 + p_1*q_1)]
+##         ]
+##     f2trans[a][b]
+
+## }
 
 
 ##' Extract the information from a vcf file and save it as a vcf object
@@ -367,24 +399,25 @@ VCF <- function(file, prefs, required=c("AD","GT")) {
             }
 
             if ("GT" %in% field.names) {
-                if (prefs$use.only.ad && "AD" %in% field.names) {
+                ## if (prefs$use.only.ad && "AD" %in% field.names) {
+                if (TRUE) {
                     ret.val.gt <- GenotypeFromDepth(ret.val.ad)
                     vcf$GT[r, c, ] <- ret.val.gt
                     #vcf$GT.coded <- CodifyGT(ret.val.gt)
-                } else { ## TODO(Jason): warn of else condition outside loop
-                    ## Separate out GT field and split it into two calls
-                    ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
-                    ret.val.gt <- gsub("\\|", "/", ret.val.gt)  # replace '|' with '/'
-                    ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
-                    if (length(ret.val.gt) > 2) {
-                        stop(paste0("There are more than two genotype calls at ",
-                                    rownames(samples)[r], " for variant ", colnames(samples)[c]))
-                    }
-                    if (length(ret.val.gt) < 2) {
-                        stop(paste0("There are less than two genotype calls at ",
-                                    rownames(samples)[r], " for variant ", colnames(samples)[c]))
-                    }
-                    vcf$GT[r, c, ] <- ret.val.gt
+                ## } else { ## TODO(Jason): warn of else condition outside loop
+                ##     ## Separate out GT field and split it into two calls
+                ##     ret.val.gt <- str.split(samples[r,c], ":")[field.indices["GT"]]
+                ##     ret.val.gt <- gsub("\\|", "/", ret.val.gt)  # replace '|' with '/'
+                ##     ret.val.gt <- vcf.to.numeric(str.split(ret.val.gt, "/"))
+                ##     if (length(ret.val.gt) > 2) {
+                ##         stop(paste0("There are more than two genotype calls at ",
+                ##                     rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                ##     }
+                ##     if (length(ret.val.gt) < 2) {
+                ##         stop(paste0("There are less than two genotype calls at ",
+                ##                     rownames(samples)[r], " for variant ", colnames(samples)[c]))
+                ##     }
+                ##     vcf$GT[r, c, ] <- ret.val.gt
                 }
             }
         }
@@ -1330,3 +1363,60 @@ AnalyzeImputationsRDS <- function(imp, orig, mask, N=30000) {
 
     df
 }
+
+
+fwd.bkwd <- function(emm, trans) {
+    n.states <- nrow(emm)
+    n.sites <- ncol(emm)
+
+    ## initialize fwd and bkwd probabilities to be matrices of same size as
+    ## emissions which has a row for every state and a column for every site
+    f.probs <- matrix(data=0, nrow=n.states, ncol=n.sites)
+    b.probs <- f.probs
+
+    start.probs <- rep(1/n.states, n.states)
+    start.probs <- c(0.6, 0.4)                             ##############   REMOVE   ######
+    f.probs[, 1] <- start.probs * emm[, 1]
+
+    for (site in 2:n.sites) {
+        t.index <- site - 1
+        prev.site <- site - 1
+        for (to in 1:n.states) {
+            f.probs[to, site] <-
+                emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
+        }
+    }
+    fwd.prob <- sum(f.probs[, n.sites])
+
+    ## backward probabilities
+    end.probs <- rep(1, n.states)
+    b.probs[, n.sites] <- end.probs
+
+    for (site in (n.sites-1):1) {
+        t.index <- site
+        next.site <- site + 1
+        for (from in 1:n.states) {
+            b.probs[from, site] <-
+                sum(trans[from, , t.index] * b.probs[, next.site] * emm[ , next.site])
+        }
+    }
+    bkw.prob <- sum(start.probs * b.probs[, 1] * emm[ , 1])
+
+
+    print(f.probs)
+    print(b.probs)
+
+    print(fwd.prob)
+    print(bkw.prob)
+
+    f.probs * b.probs / fwd.prob  # implicit return
+}
+
+em <- matrix(c(0.5, 0.4, 0.5, 0.1,
+               0.1, 0.3, 0.1, 0.6), byrow=T, nrow=2)
+
+tran <- matrix(c(0.7, 0.3,
+                 0.4, 0.6), byrow=T, nrow=2)
+trans <- abind(tran, tran, tran, along=3)
+
+fwd.bkwd(em, trans)
