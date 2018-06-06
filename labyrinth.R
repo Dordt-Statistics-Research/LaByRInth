@@ -14,17 +14,18 @@
 
 
 ## library for working with VCF files
-require(vcfR)
-require(abind)
+require(vcfR, quietly=T)
+require(abind, quietly=T)
 
 
-LabyrinthImpute <- function (vcf, parents, generation, out.file="",
+LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              read.err=0.05, genotype.err=0.05,
                              recomb.dist=1e6, write=TRUE, parallel=TRUE,
                              cores=4, quiet=FALSE) {
 
-
+    ## begin timer
     total.timer <- new.timer()
+    print.labyrinth.header()
 
 
     ## vcf load code
@@ -32,7 +33,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file="",
         timer <- new.timer()
         display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
-        display(1, "Completed in ", timer())
+        display(1, "Completed in ", timer(), "\n")
     }
 
 
@@ -54,10 +55,11 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file="",
 
     non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
     if (length(non.hom.poly) != 0) {
-        display(0, "The parents are not homozygous within and polymorphic between at the following sites:")
+        display(0, "The parents are not homozygous within and ",
+                "polymorphic between at the following sites:")
         chroms <- getCHROM(vcf)[non.hom.poly]
         positions <- getPOS(vcf)[non.hom.poly]
-        ad <- extract.gt(vcf, "AD")[non.hom.poly, parents]
+        ad <- getAD(vcf)[non.hom.poly, parents]
         for (i in seq_along(chroms)) {
             display(1, "\tCHR:", chroms[i],
                     "\tPOS:", positions[i],
@@ -69,39 +71,41 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file="",
     if (length(non.biallelic) != 0 ||
         length(non.hom.poly) != 0)
         stop("The vcf must be filtered before imputing; please run LabyrinthFilter first")
-    display(1, "Completed in ", timer())
+    display(1, "Completed in ", timer(), "\n")
 
 
     ## transition probability code
     timer <- new.timer()
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
-    display(1, "Completed in ", timer())
+    display(1, "Completed in ", timer(), "\n")
 
 
     ## emission probability code
     timer <- new.timer()
     display(0, "Generating emission probabilities")
     emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
-    display(1, "Completed in ", timer())
+    display(1, "Completed in ", timer(), "\n")
+
+
+    ## emission.structures <<- emission.structures
+    ## transition.structures <<- transition.structures
 
 
     ## imputation code
     timer <- new.timer()
     display(0, "Imputing missing sites")
-    gt <- impute(vcf, parents, parallel, cores)
-    display(1, "Completed in ", timer())
+    gt <- impute(vcf, parents, emission.structures, transition.structures, parallel, cores)
+    display(1, "Completed in ", timer(), "\n")
 
 
     ## new vcf creation code
     timer <- new.timer()
     display(0, "Creating new vcf with imputed data")
+    vcf <- update.vcf(vcf, gt)
+    display(1, "Completed in ", timer(), "\n")
 
-
-    display(1, "Completed in ", timer())
-
-    browser()
-
+    write.vcf(vcf, out.file)
     display(0, "LaByRInth imputation completed in ", total.timer())
 
 }
@@ -134,7 +138,7 @@ LabyrinthFilter <- function(vcf, parents, out.file) {
         display(0, "The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
         chroms <- getCHROM(vcf)[which(non.hom.poly)]
         positions <- getPOS(vcf)[which(non.hom.poly)]
-        ad <- extract.gt(vcf, "AD")[which(non.hom.poly), parents]
+        ad <- getAD(vcf)[which(non.hom.poly), parents]
         for (i in seq_along(chroms)) {
             display(0, "\tCHR:", chroms[i],
                     "\tPOS:", positions[i],
@@ -170,7 +174,7 @@ parent.hom.and.poly <- function(vcf, parents) {
     if (length(parents) != 2) {
         stop("Lenght of parent must be 2")
     }
-    par.mat <- extract.gt(vcf, "AD")[ , parents]
+    par.mat <- getAD(vcf)[ , parents]
     apply(par.mat, 1, function(row) {
         (n.zeros(ad.to.num(row[1])) > 0
             && n.zeros(ad.to.num(row[2])) > 0
@@ -232,7 +236,11 @@ fwd.bkwd <- function(emm, trans) {
     }
     bkw.prob <- sum(start.probs * b.probs[, 1] * emm[ , 1])
 
-    f.probs * b.probs / fwd.prob  # implicit return
+    ret.val <- f.probs * b.probs / fwd.prob  # implicit return
+    n.rows <- nrow(ret.val)
+    ret.val.2 <- matrix(sapply(ret.val, function(prob) {ifelse(is.nan(prob), 1e-300, prob)}), nrow=n.rows)
+    ## TODO(Jason): THIS IS VERY WRONG. NEED TO ADD TO 1
+    ret.val.2  # implicit return
 }
 
 
@@ -246,7 +254,7 @@ fwd.bkwd <- function(emm, trans) {
 get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 
     ## determine at which sites parent 1 is reference
-    str.ad <- extract.gt(vcf, "AD")[ , parents[1]]
+    str.ad <- getAD(vcf)[ , parents[1]]
     p1.is.ref <- sapply(str.ad, function(str) {
         ## split the string and check if reference read is nonzero
         ad.to.num(str)[1] != 0
@@ -292,7 +300,7 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
     chroms <- getCHROM(vcf)
     u.chroms <- unique(chroms)
     samples <- getSAMPLES(vcf)
-    ad <- extract.gt(vcf, "AD")
+    ad <- getAD(vcf)
 
     listapply <- get.lapply(parallel, cores)
 
@@ -328,7 +336,18 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
         })
         names(ret.val.2) <- samples
         ret.val.2
-    })  # ret.val implicitly returned
+    })
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    close(thefifo)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    names(ret.val) <- u.chroms
+    ret.val  # implicitly returned
 }
 
 
@@ -404,13 +423,173 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
         })
         names(ret.val.2) <- NULL  # just to be clear the models aren't named
         ret.val.2
-    })  # ret.val implicitly returned
+    })
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    close(thefifo)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    names(ret.val) <- u.chroms
+    ret.val  # implicitly returned
 }
 
 
 trans.mat <- function(generation, p.model, q.model) {
     source(paste0("./transition-probs/F", generation, ".R"))
     do.call(paste0("trans.mat.F", generation), list(p.model, q.model))
+}
+
+
+impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cores) {
+
+    listapply <- get.lapply(parallel, cores)
+    ## listapply <- lapply  # for debuggin and also might not be any slower
+
+    ## determine at which sites parent 1 is reference
+    str.ad <- getAD(vcf)[ , parents[1]]
+    p1.is.ref <- sapply(str.ad, function(str) {
+        ## split the string and check if reference read is nonzero
+        ad.to.num(str)[1] != 0
+    })
+
+    state.to.gt <- function(state, p1.ref) {
+        if (state == 1) {
+            if (p1.ref)
+                "0/0"
+            else
+                "1/1"
+        } else if (state == 2) {
+            "0/1"
+        } else if (state == 3) {
+            if (p1.ref)
+                "1/1"
+            else
+                "0/0"
+        } else {
+            stop("invalid state; this should never happen")
+        }
+    }
+
+    chroms <- getCHROM(vcf)
+    u.chroms <- unique(chroms)
+    samples <- getSAMPLES(vcf)
+
+    impute.sample.chrom <- function(sample, chrom) {
+        p1.ref <- p1.is.ref[chroms==chrom]
+
+        if (sample == parents[1])
+            best.states <- rep(1, length(p1.ref))
+        else if (sample == parents[2])
+            best.states <- rep(4, length(p1.ref))
+        else {
+            emm <- emm.structures[[chrom]][[sample]]
+            model.trans <- trans.structures[[chrom]]
+            n.models <- length(model.trans)
+
+            list.of.posterior.matrices <-
+                listapply(model.trans, function(trans) {
+                    fwd.bkwd(emm, trans)
+                })
+
+            summed.posteriors <- Reduce(`+`, list.of.posterior.matrices)
+            normalized <- 1/n.models * summed.posteriors  # implicit return
+
+            ## merge H1 and H2
+            het.merged <- rbind(normalized[1, ],
+                                normalized[2, ] + normalized[3, ],
+                                normalized[4, ])
+
+            best.states <- apply(het.merged, 2, which.max)
+        }
+
+        if (length(best.states) == 0)
+            browser()
+        if (length(p1.ref) == 0)
+            browser()
+        mapply(FUN=state.to.gt, best.states, p1.is.ref[chroms==chrom])
+    }
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    progress.env <- new.env()
+    thefifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prog.env <- progress.env
+    n.jobs <- length(u.chroms) * length(samples)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    ## combine columns of each imputed sample
+    ret.val <- do.call(cbind, listapply(samples, function(sample) {
+
+        ## to impute an entire sample, 'stack' (or rbind) the columns of imputed
+        ## chromosomes
+        do.call(rbind, listapply(u.chroms, function(chrom) {
+
+            ret.val <- impute.sample.chrom(sample, chrom)
+
+
+            ## Progress bar code
+            ## -----------------------------------------------------------------
+            writeBin(1/n.jobs, thefifo)  # update the progress bar info
+            if (!parallel) {  # if running in serial mode
+                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+            }  # else the forked process handles this
+            ## -----------------------------------------------------------------
+            ## Progress bar code
+
+
+            as.matrix(ret.val)  # column matrix  # implicit return
+        }))
+
+    }))
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    close(thefifo)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    ret.val  # implicit return
+}
+
+
+## modify the vcf in place to add imputed calls in gt
+update.vcf <- function(vcf, gt) {
+    ad <- getAD(vcf)
+    n.rows <- nrow(ad)
+    if (n.rows != nrow(gt))
+        stop("conflict in number of rows; should never happen")
+
+    concat <- matrix(paste0(gt, ":", ad), nrow=n.rows)
+
+    vcf@gt <- cbind("GT:AD", concat)
+    colnames(vcf@gt) <- c("FORMAT", colnames(ad))
+    rownames(vcf@gt) <- rownames(ad)
+
+    vcf  # implicit return
+}
+
+
+getAD <- function(vcf) {
+    ad <- extract.gt(vcf, "AD")
+    ad[is.na(ad)] <- "0,0"  # replace NA entries
+    ad
+}
+
+
+getGT <- function(vcf) {
+    gt <- extract.gt(vcf, "GT")
+    gt[is.na(gt)] <- "0/0"  # replace NA entries
+    gt
 }
 
 
@@ -422,7 +601,7 @@ ad.to.num <- function(str) {
 
 
 all.bool.vec <- function(n) {
-    if (n > 32)
+    if (n > 16)
         stop("all.bool.vec function not supported for n > 16")
 
     lapply(0:(2^n-1), function(config) {
@@ -491,7 +670,7 @@ get.lapply <- function(parallel, cores=1) {
 
     ## implicit return
     if (parallel && cores != 1) {
-        require(parallel)
+        require(parallel, quietly=T)
         parallel.lapply
     } else {
         serial.lapply
@@ -517,11 +696,87 @@ display <- function(indent, ...) {
 }
 
 
+print.labyrinth.header <- function() {
+
+    ## the image looks funny because '\' in the displayed image must be '\\' in the code
+    writeLines("")
+    writeLines(" _____________________________________________________________________")
+    writeLines("|          __          ____        _____  _____                       |")
+    writeLines("|         / /         / __ \\      / ___ \\/_  _/                       |")
+    writeLines("|        / /   ____  / /_/ /_  __/ /__/ / / / __   __________  __     |")
+    writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  __/ / / /  | / /_  __/ /_/ /     |")
+    writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\ _/ /_/ /||/ / / / / __  /      |")
+    writeLines("|     /_____/_/ /_/______/  /_/_/  /_/_____/_/ |__/ /_/ /_/ /_/       |")
+    writeLines("|                                                                     |")
+    writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
+    writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
+    writeLines("| Licensed under the Apache License, Version 2.0                      |")
+    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
+    writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
+    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
+    writeLines("|_____________________________________________________________________|")
+    writeLines("")
+
+}
+
+
+analyze <- function(orig, mask, imp) {
+
+    load <- function(vcf) {
+        if (! inherits(vcf, "vcfR"))
+            read.vcfR(vcf, verbose=F)
+        else
+            vcf
+    }
+
+    check.correct <- function(orig.gt, imp.gt) {
+        gsub("\\|", "/", orig.gt)  # replace '|' with '/'
+        if (orig.gt == "1/0")
+            orig.gt <- "0/1"
+        orig.gt == imp.gt
+    }
+
+    check.masked <- function(orig.ad, mask.ad) {
+        orig.ad != mask.ad
+    }
+
+    get.gt <- function(vcf)
+        extract.gt(vcf, "GT")
+
+    orig <- load(orig)
+    mask <- load(mask)
+    imp <- load(imp)
+
+    depths <- sapply(getAD(orig), ad.to.num)
+
+    data <- data.frame(
+        ref.depth = depths[1, ],
+        alt.depth = depths[2, ],
+        depth     = depths[1, ] + depths[2, ],
+        correct   = mapply(FUN=check.correct, getGT(orig), getGT(imp)),
+        masked    = mapply(FUN=check.masked, getAD(orig), getAD(mask))
+    )
+
+    data  # implicit return
+}
+
+
 ## INPROGRESS
-## write transition code
-##   use previous transition function first and check imputation quality
 ## write code from emission to calls
 ## decide how to present the probabilities in the output vcf
 ## don't compute the emission probabilities for H2 because they are the same as H1
 ## cache the emission probabilities because they will often be the same
 ## estimate generation using equations for P(G|R) which are in the Libre Calc sheet
+## fix the forward-backward algorithm from numerical instability
+## check if extract.gt with na param as F is sufficient for both ad and gt fields
+
+## To tell Tintle
+##  * scrapped almost all original code
+##  * using vcf library
+##  * made code more readible and more maintainable
+##  * implemented desired improvement (multi-model)
+##  * now using forward-backward instead of viterbi
+##     * posterior probabilities
+##  * logo!
+##  * currently testing lakin-fuller imputed as f2
+##  * currently debugging
