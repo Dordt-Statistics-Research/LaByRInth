@@ -15,7 +15,7 @@
 
 ## library for working with VCF files
 require(vcfR)
-require(parallel)
+
 
 LabyrinthImpute <- function (vcf, parents, out.file="", use.only.ad=TRUE,
                             leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
@@ -32,7 +32,7 @@ LabyrinthImpute <- function (vcf, parents, out.file="", use.only.ad=TRUE,
         vcf <- read.vcfR(vcf, verbose=F)
     }
     message("Checking if parents are in the vcf")
-    if (! all(parents %in% getVARIANTS(vcf)))
+    if (! all(parents %in% getSAMPLES(vcf)))
         stop("Some or all parents are not in the vcf")
     message("Checking for sites that are not biallelic")
     non.biallelic <- which(! is.biallelic(vcf))
@@ -65,13 +65,14 @@ LabyrinthImpute <- function (vcf, parents, out.file="", use.only.ad=TRUE,
     message("Generating emission probabilities")
     ## INPROGRESS
 
-    emission.structures <- get.emission.structures(vcf, parents, read.err)
-    global.emission.structures <<- get.emission.structures(vcf, parents, read.err)
+    emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
+    global.emission.structures <<- emission.structures
     browser()
 
     message("LaByRInth imputation complete")
 
 }
+
 
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
@@ -82,7 +83,7 @@ LabyrinthFilter <- function(vcf, parents, out.file) {
         vcf <- read.vcfR(vcf, verbose=F)
     }
     message("Checking if parents are in the vcf")
-    if (! all(parents %in% getVARIANTS(vcf)))
+    if (! all(parents %in% getSAMPLES(vcf)))
         stop("Some or all parents are not in the vcf")
     message("Checking for sites that are not biallelic")
     non.biallelic <- ! is.biallelic(vcf)
@@ -209,7 +210,7 @@ fwd.bkwd <- function(emm, trans) {
 ## should be a vector of strings where each string is a numeric value followed
 ## by a comma and another numeric value. This is the format that the vcfR
 ## package stores the reads in.
-get.emission.structures <- function(vcf, parents, rerr) {
+get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 
     str.ad <- extract.gt(vcf, "AD")[ , parents[1]]
     p1.is.ref <- sapply(str.ad, function(str) {
@@ -242,19 +243,11 @@ get.emission.structures <- function(vcf, parents, rerr) {
         else
             stop("Invalid state; this should never happen")
 
-
-        ## ret <- switch(state,
-        ##        P1 = choose(n, n1) * (1-rerr)^n1 * (rerr)^n2,
-        ##        P2 = choose(n, n2) * (1-rerr)^n2 * (rerr)^n1,
-        ##        H1 = choose(n, n1) * (0.5)^n
-        ##        H2 = choose(n, n1) * (0.5)^n
-        ##        )  # implicit return
-        ret
+        ret  # implicit return
     }
 
     reads.emm.probs <- function(reads, p1.is.ref) {
         names(reads) <- NULL  # makes debuggin easier
-        ## browser()
         do.call(rbind,
                 lapply(states, function(state) {
                     ## mapply will repeat state as many times as necessary
@@ -267,21 +260,46 @@ get.emission.structures <- function(vcf, parents, rerr) {
     samples <- getSAMPLES(vcf)
     ad <- extract.gt(vcf, "AD")
 
-    listapply <- function(..., mc.preschedule=F, mc.cores=4) {
-        mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
-    }
+    listapply <- get.lapply(parallel, cores)
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    progress.env <- new.env()
+    thefifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prog.env <- progress.env
+    n.jobs <- length(u.chroms) * length(samples)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
 
     ret.val <- listapply(u.chroms, function(chrom) {
         ret.val.2  <- listapply(samples, function(sample) {
             ## emissions will be useless for parents, but that is fine
-            ## if (sample == parents[1])
-            ##     return rep(states["P1"],
-            reads.emm.probs(ad[chroms==chrom, colnames(ad)==sample], p1.is.ref[chroms==chrom])
+            ret.val.3 <- reads.emm.probs(ad[chroms==chrom,
+                                            colnames(ad)==sample], p1.is.ref[chroms==chrom])
+
+            ## Progress bar code
+            ## -----------------------------------------------------------------
+            writeBin(1/n.jobs, thefifo)  # update the progress bar info
+            if (!parallel) {  # if running in serial mode
+                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+            }  # else the forked process handles this
+            ## -----------------------------------------------------------------
+            ## Progress bar code
+
+
+            ret.val.3
         })
         names(ret.val.2) <- samples
         ret.val.2
-    })
+    })  # ret.val implicitly returned
+}
 
+
+get.transition.structures(vcf) {
+    
 }
 
 
@@ -316,7 +334,7 @@ ProgressMonitor <- function(env, parallel) {
 PrintProgress <- function(f, curr.prog) {
     msg <- readBin(f, "double")
     progress <- curr.prog + as.numeric(msg)
-    cat(sprintf(paste0(" *  ",  "Progress: %.2f%%\r"), progress * 100))
+    cat(sprintf(paste0("",  "Progress: %.2f%%\r"), progress * 100))
     progress  # implicit return
 }
 
@@ -338,3 +356,31 @@ MakeProgress <- function(fifo, n.jobs, prog.env, parallel) {
         prog.env$progress <- PrintProgress(fifo, prog.env$progress)
     }  # else the forked process handles this
 }
+
+
+get.lapply <- function(parallel, cores=1) {
+    serial.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
+        lapply(...)
+    }
+
+    parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
+        mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+    }
+
+    ## implicit return
+    if (parallel && cores != 1) {
+        require(parallel)
+        parallel.lapply
+    } else {
+        serial.lapply
+    }
+}
+
+
+## INPROGRESS
+## write transition code
+##   use previous transition function first and check imputation quality
+## write code from emission to calls
+## decide how to present the probabilities in the output vcf
+## don't compute the emission probabilities for H2 because they are the same as H1
+## cache the emission probabilities because they will often be the same
