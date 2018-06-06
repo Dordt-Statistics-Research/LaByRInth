@@ -15,61 +15,94 @@
 
 ## library for working with VCF files
 require(vcfR)
+require(abind)
 
 
-LabyrinthImpute <- function (vcf, parents, out.file="", use.only.ad=TRUE,
-                            leave.all.calls=TRUE, ref.alt.by.parent=TRUE,
-                            recomb.double=TRUE, read.err=0.05,
-                            genotype.err=0.05, recomb.dist=1e6,
-                            write=TRUE, parallel=TRUE, cores=4,
-                            quiet=FALSE) {
+LabyrinthImpute <- function (vcf, parents, generation, out.file="",
+                             read.err=0.05, genotype.err=0.05,
+                             recomb.dist=1e6, write=TRUE, parallel=TRUE,
+                             cores=4, quiet=FALSE) {
 
-    ## If vcf is not already of class vcfR, assume it is a filename and try to
-    ## read it. If not, read.vcfR will throw an error
-    message("Checking if vcf is an object or file")
+
+    total.timer <- new.timer()
+
+
+    ## vcf load code
     if (! inherits(vcf, "vcfR")) {
-        message("Loading vcf")
+        timer <- new.timer()
+        display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer())
     }
-    message("Checking if parents are in the vcf")
+
+
+    ## vcf requirement verification code
+    timer <- new.timer()
+    display(0, "Verifying requirements of vcf")
     if (! all(parents %in% getSAMPLES(vcf)))
         stop("Some or all parents are not in the vcf")
-    message("Checking for sites that are not biallelic")
+
     non.biallelic <- which(! is.biallelic(vcf))
     if (length(non.biallelic) != 0) {
-        message("The following sites are not biallelic:")
+        display(0, "The following sites are not biallelic:")
         chroms <- getCHROM(vcf)[non.biallelic]
         positions <- getPOS(vcf)[non.biallelic]
         for (i in seq_along(chroms)) {
-            message("\tCHR:", chroms[i], "\tPOS:", positions[i])
+            display(1, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    message("Checking for sites where parents are not homozygous within and polymorphic between")
+
     non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
     if (length(non.hom.poly) != 0) {
-        message("The parents are not homozygous within and polymorphic between at the following sites:")
+        display(0, "The parents are not homozygous within and polymorphic between at the following sites:")
         chroms <- getCHROM(vcf)[non.hom.poly]
         positions <- getPOS(vcf)[non.hom.poly]
         ad <- extract.gt(vcf, "AD")[non.hom.poly, parents]
         for (i in seq_along(chroms)) {
-            message("\tCHR:", chroms[i],
+            display(1, "\tCHR:", chroms[i],
                     "\tPOS:", positions[i],
                     paste0("\t", parents[1], ":"), ad[i, 1],
                     paste0("\t", parents[2], ":"), ad[i, 2])
         }
     }
+
     if (length(non.biallelic) != 0 ||
         length(non.hom.poly) != 0)
         stop("The vcf must be filtered before imputing; please run LabyrinthFilter first")
+    display(1, "Completed in ", timer())
 
-    message("Generating emission probabilities")
-    ## INPROGRESS
 
+    ## transition probability code
+    timer <- new.timer()
+    display(0, "Generating transition probabilities")
+    transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
+    display(1, "Completed in ", timer())
+
+
+    ## emission probability code
+    timer <- new.timer()
+    display(0, "Generating emission probabilities")
     emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
-    global.emission.structures <<- emission.structures
+    display(1, "Completed in ", timer())
+
+
+    ## imputation code
+    timer <- new.timer()
+    display(0, "Imputing missing sites")
+    gt <- impute(vcf, parents, parallel, cores)
+    display(1, "Completed in ", timer())
+
+
+    ## new vcf creation code
+    timer <- new.timer()
+    display(0, "Creating new vcf with imputed data")
+
+
+    display(1, "Completed in ", timer())
+
     browser()
 
-    message("LaByRInth imputation complete")
+    display(0, "LaByRInth imputation completed in ", total.timer())
 
 }
 
@@ -77,33 +110,33 @@ LabyrinthImpute <- function (vcf, parents, out.file="", use.only.ad=TRUE,
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
 LabyrinthFilter <- function(vcf, parents, out.file) {
-    message("Checking if vcf is an object or file")
+    display(0, "Checking if vcf is an object or file")
     if (! inherits(vcf, "vcfR")) {
-        message("Loading vcf")
+        display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
     }
-    message("Checking if parents are in the vcf")
+    display(0, "Checking if parents are in the vcf")
     if (! all(parents %in% getSAMPLES(vcf)))
         stop("Some or all parents are not in the vcf")
-    message("Checking for sites that are not biallelic")
+    display(0, "Checking for sites that are not biallelic")
     non.biallelic <- ! is.biallelic(vcf)
     if (length(non.biallelic) != 0) {
-        message("The following sites are not biallelic and will be removed:")
+        display(0, "The following sites are not biallelic and will be removed:")
         chroms <- getCHROM(vcf)[which(non.biallelic)]
         positions <- getPOS(vcf)[which(non.biallelic)]
         for (i in seq_along(chroms)) {
-            message("\tCHR:", chroms[i], "\tPOS:", positions[i])
+            display(0, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    message("Checking for sites where parents are not homozygous within and polymorphic between")
+    display(0, "Checking for sites where parents are not homozygous within and polymorphic between")
     non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
     if (length(non.hom.poly) != 0) {
-        message("The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
+        display(0, "The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
         chroms <- getCHROM(vcf)[which(non.hom.poly)]
         positions <- getPOS(vcf)[which(non.hom.poly)]
         ad <- extract.gt(vcf, "AD")[which(non.hom.poly), parents]
         for (i in seq_along(chroms)) {
-            message("\tCHR:", chroms[i],
+            display(0, "\tCHR:", chroms[i],
                     "\tPOS:", positions[i],
                     paste0("\t", parents[1], ":"), ad[i, 1],
                     paste0("\t", parents[2], ":"), ad[i, 2])
@@ -114,7 +147,7 @@ LabyrinthFilter <- function(vcf, parents, out.file) {
     vcf@fix <- vcf@fix[mask, ]
     vcf@gt <- vcf@gt[mask, ]
     write.vcf(vcf, paste0(out.file, ".vcf.gz"), mask=TRUE)
-    message(paste("\nFiltering is complete;", sum(!mask), "of", length(mask), "sites removed"))
+    display(0, paste("\nFiltering is complete;", sum(!mask), "of", length(mask), "sites removed"))
     invisible(vcf)  # implicit return
 }
 
@@ -212,6 +245,7 @@ fwd.bkwd <- function(emm, trans) {
 ## package stores the reads in.
 get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 
+    ## determine at which sites parent 1 is reference
     str.ad <- extract.gt(vcf, "AD")[ , parents[1]]
     p1.is.ref <- sapply(str.ad, function(str) {
         ## split the string and check if reference read is nonzero
@@ -298,15 +332,103 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 }
 
 
-get.transition.structures(vcf) {
-    
+get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, cores=1) {
+
+    states <- 1:4
+    names(states) <- c("P1", "H1", "H2", "P2")
+
+    listapply <- get.lapply(parallel, cores)
+
+    phys.recomb.prob <- function(dist, recomb.dist) {
+        ## this is the value that LB-Impute used
+        (1 - exp(-1.0 * dist / recomb.dist))
+    }
+
+
+    trans.probs <- function(chrom, p.model, q.model) {
+        positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
+        distances <- diff(positions)  # difference b/w successive positions
+
+        phys.recomb.probs <- lapply(distances, phys.recomb.prob, recomb.dist)
+
+        trans.matrices <- lapply(phys.recomb.probs, function(phys.r.prob) {
+            p.probs <- ifelse(p.model, phys.r.prob, 0)
+            q.probs <- ifelse(q.model, phys.r.prob, 0)
+            trans.mat(generation, p.probs, q.probs)
+        })
+
+        abind.args <- c(
+            list(along = 3),
+            trans.matrices
+        )
+
+        do.call(abind, abind.args)
+    }
+
+    chroms <- getCHROM(vcf)
+    u.chroms <- unique(chroms)
+    n.selfings <- generation - 1
+    super.models <- all.bool.vec(2*n.selfings)
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    progress.env <- new.env()
+    thefifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prog.env <- progress.env
+    n.jobs <- length(u.chroms) * length(super.models)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    ret.val <- listapply(u.chroms, function(chrom) {
+        ret.val.2  <- listapply(super.models, function(super.model) {
+            p.model <- super.model[1:n.selfings]
+            q.model <- super.model[(n.selfings+1):(2*n.selfings)]
+
+            ret.val.3 <- trans.probs(chrom, p.model, q.model)
+
+
+            ## Progress bar code
+            ## -----------------------------------------------------------------
+            writeBin(1/n.jobs, thefifo)  # update the progress bar info
+            if (!parallel) {  # if running in serial mode
+                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+            }  # else the forked process handles this
+            ## -----------------------------------------------------------------
+            ## Progress bar code
+
+
+            ret.val.3
+        })
+        names(ret.val.2) <- NULL  # just to be clear the models aren't named
+        ret.val.2
+    })  # ret.val implicitly returned
+}
+
+
+trans.mat <- function(generation, p.model, q.model) {
+    source(paste0("./transition-probs/F", generation, ".R"))
+    do.call(paste0("trans.mat.F", generation), list(p.model, q.model))
 }
 
 
 ## convert string representation to numeric vector
-ad.to.num <- function(str)
+ad.to.num <- function(str) {
     as.numeric(str.split(str, ","))
 
+}
+
+
+all.bool.vec <- function(n) {
+    if (n > 32)
+        stop("all.bool.vec function not supported for n > 16")
+
+    lapply(0:(2^n-1), function(config) {
+        as.logical(intToBits(config)[1:n])
+    })
+}
 
 
 ## Progress monitor code from https://stackoverflow.com/questions/27726134/
@@ -334,7 +456,7 @@ ProgressMonitor <- function(env, parallel) {
 PrintProgress <- function(f, curr.prog) {
     msg <- readBin(f, "double")
     progress <- curr.prog + as.numeric(msg)
-    cat(sprintf(paste0("",  "Progress: %.2f%%\r"), progress * 100))
+    cat(sprintf(paste0("    * ",  "Progress: %.2f%%\r"), progress * 100))
     progress  # implicit return
 }
 
@@ -377,6 +499,24 @@ get.lapply <- function(parallel, cores=1) {
 }
 
 
+new.timer <- function() {
+    start <- Sys.time()
+    function() {
+        elapsed <- difftime(Sys.time(), start)
+        runtime <- as.numeric(elapsed)
+        units <- attr(elapsed, "units")
+        paste(round(runtime, 2), units)
+    }
+}
+
+
+display <- function(indent, ...) {
+    if (! is.numeric(indent))
+        stop("indent must be numeric")
+    message(rep("   ", indent), " * ", ...)
+}
+
+
 ## INPROGRESS
 ## write transition code
 ##   use previous transition function first and check imputation quality
@@ -384,3 +524,4 @@ get.lapply <- function(parallel, cores=1) {
 ## decide how to present the probabilities in the output vcf
 ## don't compute the emission probabilities for H2 because they are the same as H1
 ## cache the emission probabilities because they will often be the same
+## estimate generation using equations for P(G|R) which are in the Libre Calc sheet
