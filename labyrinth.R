@@ -79,17 +79,15 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
     display(1, "Completed in ", timer(), "\n")
-
+    transition.structures <<- transition.structures  # for debugging
 
     ## emission probability code
     timer <- new.timer()
     display(0, "Generating emission probabilities")
     emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
     display(1, "Completed in ", timer(), "\n")
+    emission.structures <<- emission.structures  # for debugging
 
-
-    ## emission.structures <<- emission.structures
-    ## transition.structures <<- transition.structures
 
 
     ## imputation code
@@ -290,11 +288,24 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 
     reads.emm.probs <- function(reads, p1.is.ref) {
         names(reads) <- NULL  # makes debuggin easier
-        do.call(rbind,
+        ret.val <- do.call(rbind,
                 lapply(states, function(state) {
                     ## mapply will repeat state as many times as necessary
                     mapply(FUN=prob, state, reads, p1.is.ref)
                 }))
+
+        ## normalize the emission probabilities so that the forward-backward
+        ## algorithm is more stable
+
+        ret.val <- ret.val / colSums(ret.val)[col(ret.val)]  # normalize each
+                                        # column
+
+        l <- length(states)
+
+        ret.val[is.na(ret.val)] <- 1 / l  # default normalize na columns
+
+        ret.val
+
     }
 
     chroms <- getCHROM(vcf)
@@ -312,6 +323,13 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
     assign("progress", 0.0, envir=progress.env)
     prog.env <- progress.env
     n.jobs <- length(u.chroms) * length(samples)
+    ## -------------------------------------------------------------------------
+
+    ## -------------------------------------------------------------------------
+    writeBin(0, thefifo)  # update the progress bar info
+    if (!parallel) {  # if running in serial mode
+        prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+    }  # else the forked process handles this
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
@@ -398,6 +416,13 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
     prog.env <- progress.env
     n.jobs <- length(u.chroms) * length(super.models)
     ## -------------------------------------------------------------------------
+
+    ## -------------------------------------------------------------------------
+    writeBin(0, thefifo)  # update the progress bar info
+    if (!parallel) {  # if running in serial mode
+        prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+    }  # else the forked process handles this
+    ## -------------------------------------------------------------------------
     ## Progress bar code
 
 
@@ -470,7 +495,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             else
                 "0/0"
         } else {
-            stop("invalid state; this should never happen")
+            stop(paste0("invalid state: ", state, "; this should never happen"))
         }
     }
 
@@ -482,9 +507,9 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
         p1.ref <- p1.is.ref[chroms==chrom]
 
         if (sample == parents[1])
-            best.states <- rep(1, length(p1.ref))
+            best.states <- rep(1, length(p1.ref))  # 1 is homozygous parent 1
         else if (sample == parents[2])
-            best.states <- rep(4, length(p1.ref))
+            best.states <- rep(3, length(p1.ref))  # 3 is homozygous parent 2
         else {
             emm <- emm.structures[[chrom]][[sample]]
             model.trans <- trans.structures[[chrom]]
@@ -522,15 +547,19 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     prog.env <- progress.env
     n.jobs <- length(u.chroms) * length(samples)
     ## -------------------------------------------------------------------------
+
+    ## -------------------------------------------------------------------------
+    writeBin(0, thefifo)  # update the progress bar info
+    if (!parallel) {  # if running in serial mode
+        prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+    }  # else the forked process handles this
+    ## -------------------------------------------------------------------------
     ## Progress bar code
 
+    mytimer <- new.timer()
+    imputed.samples <- lapply(samples, function(sample) {
 
-    ## combine columns of each imputed sample
-    ret.val <- do.call(cbind, listapply(samples, function(sample) {
-
-        ## to impute an entire sample, 'stack' (or rbind) the columns of imputed
-        ## chromosomes
-        do.call(rbind, listapply(u.chroms, function(chrom) {
+        imputed.chroms <- lapply(u.chroms, function(chrom) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
 
@@ -545,10 +574,16 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             ## Progress bar code
 
 
-            as.matrix(ret.val)  # column matrix  # implicit return
-        }))
+            matrix(ret.val, ncol=1)  # column matrix  # implicit return
+        })
 
-    }))
+        do.call(rbind, imputed.chroms)  # implicit return
+
+    })
+
+    browser()
+    ## combine columns of each imputed sample
+    ret.val <- do.call(cbind, imputed.samples)
 
 
     ## Progress bar code
@@ -664,8 +699,12 @@ get.lapply <- function(parallel, cores=1) {
         lapply(...)
     }
 
-    parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
-        mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+    ## parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
+    ##     mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+    ## }
+
+    parallel.lapply <- function(...) {
+        mclapply(..., mc.preschedule=F, mc.cores=cores)
     }
 
     ## implicit return
@@ -673,7 +712,7 @@ get.lapply <- function(parallel, cores=1) {
         require(parallel, quietly=T)
         parallel.lapply
     } else {
-        serial.lapply
+        lapply
     }
 }
 
@@ -743,6 +782,8 @@ analyze <- function(orig, mask, imp) {
     get.gt <- function(vcf)
         extract.gt(vcf, "GT")
 
+    browser()
+
     orig <- load(orig)
     mask <- load(mask)
     imp <- load(imp)
@@ -761,6 +802,14 @@ analyze <- function(orig, mask, imp) {
 }
 
 
+quick.check <- function() {
+    an <- analyze("./analysis/first-25-orig.vcf.gz",
+                  "./analysis/first-25-masked.vcf.gz", "./analysis/first-25-imp-f3.vcf.gz")
+    interest <- an$correct[an$masked==T]; sum(interest) / length(interest)
+}
+
+## LabyrinthImpute("./analysis/first-25-masked.vcf.gz", c("LAKIN", "FULLER"), 5, "./analysis/first-25-imp-f5.vcf.gz")
+
 ## INPROGRESS
 ## write code from emission to calls
 ## decide how to present the probabilities in the output vcf
@@ -769,6 +818,10 @@ analyze <- function(orig, mask, imp) {
 ## estimate generation using equations for P(G|R) which are in the Libre Calc sheet
 ## fix the forward-backward algorithm from numerical instability
 ## check if extract.gt with na param as F is sufficient for both ad and gt fields
+
+## check if cbind error is still occurring on the smaller vcf file
+##   if so, normalize the emission probabilities
+
 
 ## To tell Tintle
 ##  * scrapped almost all original code
