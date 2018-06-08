@@ -20,7 +20,7 @@ require(abind, quietly=T)
 
 LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              read.err=0.05, genotype.err=0.05,
-                             recomb.dist=1e6, write=TRUE, parallel=TRUE,
+                             recomb.dist=1e6, parallel=TRUE,
                              cores=4, quiet=FALSE) {
 
     ## begin timer
@@ -75,19 +75,36 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
 
 
     ## transition probability code
-    timer <- new.timer()
-    display(0, "Generating transition probabilities")
-    transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
-    display(1, "Completed in ", timer(), "\n")
-    transition.structures <<- transition.structures  # for debugging
+    trans.file <- paste0("./transition-structures-f", generation, ".rds")
+    if (file.exists(trans.file)) {
+        timer <- new.timer()
+        display(0, "Loading transition probabilities")
+        transition.structures <- readRDS(trans.file)
+        display(1, "Completed in ", timer(), "\n")
+    } else {
+        timer <- new.timer()
+        display(0, "Generating transition probabilities")
+        transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
+        display(1, "Completed in ", timer(), "\n")
+        transition.structures <<- transition.structures  # for debugging
+        saveRDS(transition.structures, trans.file)  # for debugging
+    }
 
     ## emission probability code
-    timer <- new.timer()
-    display(0, "Generating emission probabilities")
-    emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
-    display(1, "Completed in ", timer(), "\n")
-    emission.structures <<- emission.structures  # for debugging
-
+    emm.file <- paste0("./emission-structures-f", generation, ".rds")
+    if (file.exists(emm.file)) {
+        timer <- new.timer()
+        display(0, "Loading emission probabilities")
+        emission.structures <- readRDS(emm.file)
+        display(1, "Completed in ", timer(), "\n")
+    } else {
+        timer <- new.timer()
+        display(0, "Generating emission probabilities")
+        emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
+        display(1, "Completed in ", timer(), "\n")
+        emission.structures <<- emission.structures  # for debugging
+        saveRDS(emission.structures, emm.file)  # for debugging
+    }
 
 
     ## imputation code
@@ -199,7 +216,20 @@ str.split <- function(str, sep) {
 
 ## return the total probabilities of each state at each site. Adapted from
 ## https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm
+## forward and backward probabilities are not technically correct because they
+## are frequently being normalized. This is done to decrease the numerical
+## instability that results when the probabilities become very low
 fwd.bkwd <- function(emm, trans) {
+    normalize <- function(mat, col) {
+        s <- sum(mat[, col])
+        if (s == 0){
+            mat[, col] <- 1 / nrow(mat)
+        } else {
+            mat[, col] <- mat[, col] / s
+        }
+        mat
+    }
+
     n.states <- nrow(emm)
     n.sites <- ncol(emm)
 
@@ -209,6 +239,7 @@ fwd.bkwd <- function(emm, trans) {
 
     start.probs <- rep(1/n.states, n.states)
     f.probs[, 1] <- start.probs * emm[, 1]
+    f.probs <- normalize(f.probs, 1)
 
     for (site in 2:n.sites) {
         t.index <- site - 1
@@ -217,12 +248,13 @@ fwd.bkwd <- function(emm, trans) {
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
         }
+        f.probs <- normalize(f.probs, site)
     }
-    fwd.prob <- sum(f.probs[, n.sites])
 
     ## backward probabilities
     end.probs <- rep(1, n.states)
     b.probs[, n.sites] <- end.probs
+    b.probs <- normalize(b.probs, n.sites)
 
     for (site in (n.sites-1):1) {
         t.index <- site
@@ -231,14 +263,14 @@ fwd.bkwd <- function(emm, trans) {
             b.probs[from, site] <-
                 sum(trans[from, , t.index] * b.probs[, next.site] * emm[ , next.site])
         }
+        b.probs <- normalize(b.probs, site)
     }
-    bkw.prob <- sum(start.probs * b.probs[, 1] * emm[ , 1])
 
-    ret.val <- f.probs * b.probs / fwd.prob  # implicit return
-    n.rows <- nrow(ret.val)
-    ret.val.2 <- matrix(sapply(ret.val, function(prob) {ifelse(is.nan(prob), 1e-300, prob)}), nrow=n.rows)
-    ## TODO(Jason): THIS IS VERY WRONG. NEED TO ADD TO 1
-    ret.val.2  # implicit return
+    res <- f.probs * b.probs
+    for (site in 1:n.sites) {
+        res <- normalize(res, site)
+    }
+    res
 }
 
 
@@ -334,7 +366,7 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
     ## Progress bar code
 
 
-    ret.val <- listapply(u.chroms, function(chrom) {
+    ret.val <- lapply(u.chroms, function(chrom) {
         ret.val.2  <- listapply(samples, function(sample) {
             ## emissions will be useless for parents, but that is fine
             ret.val.3 <- reads.emm.probs(ad[chroms==chrom,
@@ -369,15 +401,20 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
 }
 
 
-get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, cores=1) {
+get.transition.structures <- function(vcf, generation, recomb.dist, parallel, cores) {
 
     states <- 1:4
     names(states) <- c("P1", "H1", "H2", "P2")
 
     listapply <- get.lapply(parallel, cores)
 
+    ## trans.mat <- function(generation, p.model, q.model) {
+    source(paste0("./transition-probs/F", generation, ".R"))
+    trans.mat <- do.call(paste0("get.trans.mat.F", generation), list())
+    ## }
+
     phys.recomb.prob <- function(dist, recomb.dist) {
-        ## this is the value that LB-Impute used
+        ## this is twice the value that LB-Impute used
         (1 - exp(-1.0 * dist / recomb.dist))
     }
 
@@ -391,7 +428,7 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
         trans.matrices <- lapply(phys.recomb.probs, function(phys.r.prob) {
             p.probs <- ifelse(p.model, phys.r.prob, 0)
             q.probs <- ifelse(q.model, phys.r.prob, 0)
-            trans.mat(generation, p.probs, q.probs)
+            trans.mat(p.probs, q.probs)
         })
 
         abind.args <- c(
@@ -425,9 +462,9 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
-
-    ret.val <- listapply(u.chroms, function(chrom) {
+    ret.val <- lapply(u.chroms, function(chrom) {
         ret.val.2  <- listapply(super.models, function(super.model) {
+
             p.model <- super.model[1:n.selfings]
             q.model <- super.model[(n.selfings+1):(2*n.selfings)]
 
@@ -442,7 +479,6 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
             }  # else the forked process handles this
             ## -----------------------------------------------------------------
             ## Progress bar code
-
 
             ret.val.3
         })
@@ -463,16 +499,9 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel=F, 
 }
 
 
-trans.mat <- function(generation, p.model, q.model) {
-    source(paste0("./transition-probs/F", generation, ".R"))
-    do.call(paste0("trans.mat.F", generation), list(p.model, q.model))
-}
-
-
 impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cores) {
 
     listapply <- get.lapply(parallel, cores)
-    ## listapply <- lapply  # for debuggin and also might not be any slower
 
     ## determine at which sites parent 1 is reference
     str.ad <- getAD(vcf)[ , parents[1]]
@@ -504,6 +533,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     samples <- getSAMPLES(vcf)
 
     impute.sample.chrom <- function(sample, chrom) {
+        
         p1.ref <- p1.is.ref[chroms==chrom]
 
         if (sample == parents[1])
@@ -516,7 +546,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             n.models <- length(model.trans)
 
             list.of.posterior.matrices <-
-                listapply(model.trans, function(trans) {
+                lapply(model.trans, function(trans) {
                     fwd.bkwd(emm, trans)
                 })
 
@@ -556,13 +586,19 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
-    mytimer <- new.timer()
+
+    ## TODO(Jason): run chroms w/in samples or even do conditional to run larger
+    ## inside. This will have an advantage because for a given chromosome, the
+    ## samples will all have a similar length and so the compute times for
+    ## imputation should be fairly similar. When having the samples in the inner
+    ## loop, the chromosomes for that sample have drastically different sizes
+    ## and can have quite varying runtimes. Ideally, 
     imputed.samples <- lapply(samples, function(sample) {
 
-        imputed.chroms <- lapply(u.chroms, function(chrom) {
+        imputed.chroms <- listapply(u.chroms, function(chrom) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
-
+            display(1, "Imputed chromosome ", chrom, " of sample ", sample)
 
             ## Progress bar code
             ## -----------------------------------------------------------------
@@ -581,7 +617,6 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
 
     })
 
-    browser()
     ## combine columns of each imputed sample
     ret.val <- do.call(cbind, imputed.samples)
 
@@ -594,6 +629,19 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
 
 
     ret.val  # implicit return
+}
+
+
+save.trans <- function(data, chrom, model) {
+    dir <- "./.saved_trans"
+    dir.create(dir, recursive=TRUE)
+    saveRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
+}
+
+
+get.trans <- function(data, chrom, model) {
+    dir <- "./.saved_trans"
+    readRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
 }
 
 
@@ -822,6 +870,7 @@ quick.check <- function() {
 ## check if cbind error is still occurring on the smaller vcf file
 ##   if so, normalize the emission probabilities
 
+## look into whether it is worth changing the precomputed R files into C files
 
 ## To tell Tintle
 ##  * scrapped almost all original code
@@ -833,3 +882,4 @@ quick.check <- function() {
 ##  * logo!
 ##  * currently testing lakin-fuller imputed as f2
 ##  * currently debugging
+
