@@ -52,7 +52,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
             display(1, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-
     non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
     if (length(non.hom.poly) != 0) {
         display(0, "The parents are not homozygous within and ",
@@ -593,9 +592,9 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     ## imputation should be fairly similar. When having the samples in the inner
     ## loop, the chromosomes for that sample have drastically different sizes
     ## and can have quite varying runtimes. Ideally, 
-    imputed.samples <- lapply(samples, function(sample) {
-
-        imputed.chroms <- listapply(u.chroms, function(chrom) {
+    imputed.chroms <- lapply(u.chroms, function(chrom) {
+        
+        imputed.samples <- listapply(samples, function(sample) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
             display(1, "Imputed chromosome ", chrom, " of sample ", sample)
@@ -613,12 +612,12 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             matrix(ret.val, ncol=1)  # column matrix  # implicit return
         })
 
-        do.call(rbind, imputed.chroms)  # implicit return
+        do.call(cbind, imputed.samples)  # implicit return
 
     })
 
     ## combine columns of each imputed sample
-    ret.val <- do.call(cbind, imputed.samples)
+    ret.val <- do.call(rbind, imputed.chroms)
 
 
     ## Progress bar code
