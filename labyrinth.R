@@ -19,7 +19,7 @@ require(abind, quietly=T)
 
 
 LabyrinthImpute <- function (vcf, parents, generation, out.file,
-                             read.err=0.05, genotype.err=0.05,
+                             read.err=0.05, geno.err=0.05,
                              recomb.dist=1e6, parallel=TRUE,
                              cores=4, quiet=FALSE) {
 
@@ -99,7 +99,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     } else {
         timer <- new.timer()
         display(0, "Generating emission probabilities")
-        emission.structures <- get.emission.structures(vcf, parents, read.err, parallel, cores)
+        emission.structures <- get.emission.structures(vcf, parents, read.err, geno.err, generation, parallel, cores)
         display(1, "Completed in ", timer(), "\n")
         emission.structures <<- emission.structures  # for debugging
         saveRDS(emission.structures, emm.file)  # for debugging
@@ -280,7 +280,7 @@ fwd.bkwd <- function(emm, trans) {
 ## should be a vector of strings where each string is a numeric value followed
 ## by a comma and another numeric value. This is the format that the vcfR
 ## package stores the reads in.
-get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
+get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parallel=F, cores=1) {
 
     ## determine at which sites parent 1 is reference
     str.ad <- getAD(vcf)[ , parents[1]]
@@ -288,6 +288,9 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
         ## split the string and check if reference read is nonzero
         ad.to.num(str)[1] != 0
     })
+
+    perc.het <- 0.5^(generation - 1)
+    perc.p1 <- perc.p2 <- (1 - perc.het) / 2
 
     states <- 1:4
     names(states) <- c("P1", "H1", "H2", "P2")
@@ -305,15 +308,24 @@ get.emission.structures <- function(vcf, parents, rerr, parallel=F, cores=1) {
         names(n1) <- NULL  # these pick up names from ifelse
         names(n2) <- NULL  # debugging is easier without them
 
-        if (state == states["P1"])
-            ret <- choose(n, n1) * (1-rerr)^n1 * (rerr)^n2
-        else if (state == states["P2"])
-            ret <- choose(n, n2) * (1-rerr)^n2 * (rerr)^n1
-        else if (state == states["H1"] || state == states["H2"])
-            ret <- choose(n, n1) * (0.5)^n
-        else
-            stop("Invalid state; this should never happen")
+	p1.read.emm <- choose(n, n1) * (1-rerr)^n1 * (rerr)^n2
+	p2.read.emm <- choose(n, n2) * (1-rerr)^n2 * (rerr)^n1
+	het.read.emm <- choose(n, n1) * (0.5)^n
 
+	err.prob <- gerr * (perc.p1 * p1.read.emm + perc.p2 * p2.read.emm + perc.het * het.read.emm)
+
+        if (state == states["P1"]) {
+	    ret <- (1-gerr) * p1.read.emm + err.prob
+            ## ret <- choose(n, n1) * (1-rerr)^n1 * (rerr)^n2
+        } else if (state == states["P2"]) {
+	    ret <- (1-gerr) * p2.read.emm + err.prob
+            ## ret <- choose(n, n2) * (1-rerr)^n2 * (rerr)^n1
+        } else if (state == states["H1"] || state == states["H2"]) {
+	    ret <- (1-gerr) * het.read.emm + err.prob
+            ## ret <- choose(n, n1) * (0.5)^n
+        } else {
+            stop("Invalid state; this should never happen")
+        }
         ret  # implicit return
     }
 
