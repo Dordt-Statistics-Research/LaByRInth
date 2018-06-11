@@ -222,22 +222,23 @@ def parse_all_model_probs_to_R(generation):
     print("## This function will return a list of transition matrices with one list entry"      )
     print("## for each of the 4^(generation - 1) recomination models."                          )
     print(""                                                                                    )
-    print("get.all.model.trans.F" + str(generation) + " <- function(r) {"                       )
+    print("get.all.model.trans.F" + str(generation) + " <- function() {"                        )
     print(""                                                                                    )
     print("    list(")
 
     for i, model_probs in enumerate(model_probs_list):
         list_sep = "," if not i==last_model else ""
 
-        print("        matrix(c(")
+        print("        function (r) {")
+        print("            matrix(c(")
 
         last_row = len(model_probs) - 1
         for j, row in enumerate(model_probs):
             trailing = "," if not j==last_row else ""
 
-            print("            " + ", ".join([str(x) for x in row]) + trailing)
+            print("                " + ", ".join([str(x) for x in row]) + trailing)
 
-        print("        ), nrow=4, ncol=4, byrow=T)" + list_sep + "\n")
+        print("            ), nrow=4, ncol=4, byrow=T)}" + list_sep + "\n")
 
     print("    )")
     print("}")

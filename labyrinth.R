@@ -407,10 +407,8 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
 
     listapply <- get.lapply(parallel, cores)
 
-    ## trans.mat <- function(generation, p.model, q.model) {
-    source(paste0("./transition-probs/F", generation, ".R"))
-    trans.mat <- do.call(paste0("get.trans.mat.F", generation), list())
-    ## }
+    source(paste0("./new-transition-probs/F", generation, ".R"))
+    all.model.trans <- do.call(paste0("get.all.model.trans.F", generation), list())
 
     phys.recomb.prob <- function(dist, recomb.dist) {
         ## this is twice the value that LB-Impute used
@@ -418,18 +416,19 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     }
 
 
-    trans.probs <- function(chrom, p.model, q.model) {
+    trans.probs <- function(chrom, model) {
         positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
         distances <- diff(positions)  # difference b/w successive positions
 
         phys.recomb.probs <- lapply(distances, phys.recomb.prob, recomb.dist)
 
         trans.matrices <- lapply(phys.recomb.probs, function(phys.r.prob) {
-            p.probs <- ifelse(p.model, phys.r.prob, 0)
-            q.probs <- ifelse(q.model, phys.r.prob, 0)
-            trans.mat(p.probs, q.probs)
+            ## each element of list all.model.trans is a function of
+            ## phsyical recombination distance
+            all.model.trans[[model]](phys.r.prob)
         })
 
+        ## helper code for running do.call(abind, ...)
         abind.args <- c(
             list(along = 3),
             trans.matrices
@@ -441,7 +440,7 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     chroms <- getCHROM(vcf)
     u.chroms <- unique(chroms)
     n.selfings <- generation - 1
-    super.models <- all.bool.vec(2*n.selfings)
+    models <- 1:(4^n.selfings)
 
 
     ## Progress bar code
@@ -450,7 +449,7 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     thefifo <- ProgressMonitor(progress.env)
     assign("progress", 0.0, envir=progress.env)
     prog.env <- progress.env
-    n.jobs <- length(u.chroms) * length(super.models)
+    n.jobs <- length(u.chroms) * length(models)
     ## -------------------------------------------------------------------------
 
     ## -------------------------------------------------------------------------
@@ -462,12 +461,9 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     ## Progress bar code
 
     ret.val <- lapply(u.chroms, function(chrom) {
-        ret.val.2  <- listapply(super.models, function(super.model) {
+        ret.val.2  <- listapply(models, function(model) {
 
-            p.model <- super.model[1:n.selfings]
-            q.model <- super.model[(n.selfings+1):(2*n.selfings)]
-
-            ret.val.3 <- trans.probs(chrom, p.model, q.model)
+            ret.val.3 <- trans.probs(chrom, model)
 
 
             ## Progress bar code
@@ -503,7 +499,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     listapply <- get.lapply(parallel, cores)
 
     p1.is.ref <- is.parent.ref(vcf, parents[1])
-    
+
     abind1 <- function(...) {
         abind(..., along=1)
     }
@@ -517,10 +513,10 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     samples <- getSAMPLES(vcf)
 
     impute.sample.chrom <- function(sample, chrom) {
-        
+
         n.sites <- sum(chroms==chrom)  # boolean addition
         p1.ref <- p1.is.ref[chroms==chrom]
-        
+
         if (sample == parents[1]) {
             normalized <- rbind(rep(1, n.sites),
                                 0,
@@ -586,7 +582,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
         imputed.samples <- listapply(samples, function(sample) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
-            display(1, "Imputed chromosome ", chrom, " of sample ", sample)
+            ## display(1, "Imputed chromosome ", chrom, " of sample ", sample)
 
             ## Progress bar code
             ## -----------------------------------------------------------------
@@ -646,8 +642,6 @@ is.parent.ref <- function(vcf, parent) {
 update.vcf <- function(vcf, impute.res) {
     rounded.res <- apply(impute.res, 1:3, round, digits=2)
     rounded.res <- apply(rounded.res, 1:3, `*`, 100)
-
-    browser()
 
     gp <- apply(rounded.res, 1:2, paste0, collapse=",")
 
