@@ -109,14 +109,14 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## imputation code
     timer <- new.timer()
     display(0, "Imputing missing sites")
-    gt <- impute(vcf, parents, emission.structures, transition.structures, parallel, cores)
+    imp.res <- impute(vcf, parents, emission.structures, transition.structures,
+                      parallel, cores)
     display(1, "Completed in ", timer(), "\n")
-
 
     ## new vcf creation code
     timer <- new.timer()
     display(0, "Creating new vcf with imputed data")
-    vcf <- update.vcf(vcf, gt)
+    vcf <- update.vcf(vcf, imp.res)
     display(1, "Completed in ", timer(), "\n")
 
     write.vcf(vcf, out.file)
@@ -502,29 +502,14 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
 
     listapply <- get.lapply(parallel, cores)
 
-    ## determine at which sites parent 1 is reference
-    str.ad <- getAD(vcf)[ , parents[1]]
-    p1.is.ref <- sapply(str.ad, function(str) {
-        ## split the string and check if reference read is nonzero
-        ad.to.num(str)[1] != 0
-    })
+    p1.is.ref <- is.parent.ref(vcf, parents[1])
+    
+    abind1 <- function(...) {
+        abind(..., along=1)
+    }
 
-    state.to.gt <- function(state, p1.ref) {
-        if (state == 1) {
-            if (p1.ref)
-                "0/0"
-            else
-                "1/1"
-        } else if (state == 2) {
-            "0/1"
-        } else if (state == 3) {
-            if (p1.ref)
-                "1/1"
-            else
-                "0/0"
-        } else {
-            stop(paste0("invalid state: ", state, "; this should never happen"))
-        }
+    abind2 <- function(...) {
+        abind(..., along=2)
     }
 
     chroms <- getCHROM(vcf)
@@ -533,13 +518,20 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
 
     impute.sample.chrom <- function(sample, chrom) {
         
+        n.sites <- sum(chroms==chrom)  # boolean addition
         p1.ref <- p1.is.ref[chroms==chrom]
-
-        if (sample == parents[1])
-            best.states <- rep(1, length(p1.ref))  # 1 is homozygous parent 1
-        else if (sample == parents[2])
-            best.states <- rep(3, length(p1.ref))  # 3 is homozygous parent 2
-        else {
+        
+        if (sample == parents[1]) {
+            normalized <- rbind(rep(1, n.sites),
+                                0,
+                                0,
+                                0)
+        } else if (sample == parents[2]) {
+            normalized <- rbind(0,
+                                0,
+                                0,
+                                rep(1, n.sites))
+        } else {
             emm <- emm.structures[[chrom]][[sample]]
             model.trans <- trans.structures[[chrom]]
             n.models <- length(model.trans)
@@ -550,21 +542,18 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
                 })
 
             summed.posteriors <- Reduce(`+`, list.of.posterior.matrices)
-            normalized <- 1/n.models * summed.posteriors  # implicit return
+            normalized <- 1/n.models * summed.posteriors
 
-            ## merge H1 and H2
-            het.merged <- rbind(normalized[1, ],
-                                normalized[2, ] + normalized[3, ],
-                                normalized[4, ])
-
-            best.states <- apply(het.merged, 2, which.max)
         }
 
-        if (length(best.states) == 0)
-            browser()
-        if (length(p1.ref) == 0)
-            browser()
-        mapply(FUN=state.to.gt, best.states, p1.is.ref[chroms==chrom])
+        ref <- ifelse(p1.ref, normalized[1, ], normalized[4, ])
+        alt <- ifelse(p1.ref, normalized[4, ], normalized[1, ])
+        het <- normalized[2, ] + normalized[3, ]
+
+        array(c(ref,                     # homozygous reference allele prob
+                alt,                     # homozygous alternate allele prob
+                het),                    # heterozygous prob
+              dim=c(n.sites, 1, 3))
     }
 
 
@@ -591,9 +580,9 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     ## samples will all have a similar length and so the compute times for
     ## imputation should be fairly similar. When having the samples in the inner
     ## loop, the chromosomes for that sample have drastically different sizes
-    ## and can have quite varying runtimes. Ideally, 
+    ## and can have quite varying runtimes. Ideally,
     imputed.chroms <- lapply(u.chroms, function(chrom) {
-        
+
         imputed.samples <- listapply(samples, function(sample) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
@@ -609,15 +598,15 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             ## Progress bar code
 
 
-            matrix(ret.val, ncol=1)  # column matrix  # implicit return
+            ret.val  # implicit return
         })
 
-        do.call(cbind, imputed.samples)  # implicit return
+        do.call(abind2, imputed.samples)  # implicit return
 
     })
 
     ## combine columns of each imputed sample
-    ret.val <- do.call(rbind, imputed.chroms)
+    ret.val <- do.call(abind1, imputed.chroms)
 
 
     ## Progress bar code
@@ -644,16 +633,37 @@ get.trans <- function(data, chrom, model) {
 }
 
 
+is.parent.ref <- function(vcf, parent) {
+    str.ad <- getAD(vcf)[ , parent]
+    sapply(str.ad, function(str) {
+        ## split the string and check if reference read is nonzero
+        ad.to.num(str)[1] != 0
+    })
+}
+
+
 ## modify the vcf in place to add imputed calls in gt
-update.vcf <- function(vcf, gt) {
+update.vcf <- function(vcf, impute.res) {
+    rounded.res <- apply(impute.res, 1:3, round, digits=2)
+    rounded.res <- apply(rounded.res, 1:3, `*`, 100)
+
+    browser()
+
+    gp <- apply(rounded.res, 1:2, paste0, collapse=",")
+
+    gt <- apply(impute.res, 1:2, function(states) {
+        c("0/0","1/1","0/1")[which.max(states)]
+    })
+
     ad <- getAD(vcf)
+
     n.rows <- nrow(ad)
     if (n.rows != nrow(gt))
         stop("conflict in number of rows; should never happen")
 
-    concat <- matrix(paste0(gt, ":", ad), nrow=n.rows)
+    concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=n.rows)
 
-    vcf@gt <- cbind("GT:AD", concat)
+    vcf@gt <- cbind("GT:AD:GP", concat)
     colnames(vcf@gt) <- c("FORMAT", colnames(ad))
     rownames(vcf@gt) <- rownames(ad)
 
@@ -675,10 +685,20 @@ getGT <- function(vcf) {
 }
 
 
+getGP <- function(vcf) {
+    extract.gt(vcf, "GP")
+}
+
+
 ## convert string representation to numeric vector
 ad.to.num <- function(str) {
     as.numeric(str.split(str, ","))
 
+}
+
+
+gp.to.num <- function(str) {
+    ad.to.num(str)
 }
 
 
@@ -829,20 +849,28 @@ analyze <- function(orig, mask, imp) {
     get.gt <- function(vcf)
         extract.gt(vcf, "GT")
 
-    browser()
-
     orig <- load(orig)
     mask <- load(mask)
     imp <- load(imp)
 
     depths <- sapply(getAD(orig), ad.to.num)
 
+    post.probs <- getGP(imp)
+
+    max.post.probs <- sapply(post.probs, function(gp) {
+        max(gp.to.num(gp))
+    })
+
+    browser()
+
     data <- data.frame(
-        ref.depth = depths[1, ],
-        alt.depth = depths[2, ],
-        depth     = depths[1, ] + depths[2, ],
-        correct   = mapply(FUN=check.correct, getGT(orig), getGT(imp)),
-        masked    = mapply(FUN=check.masked, getAD(orig), getAD(mask))
+        ref.depth  = depths[1, ],
+        alt.depth  = depths[2, ],
+        depth      = depths[1, ] + depths[2, ],
+        correct    = mapply(FUN=check.correct, getGT(orig), getGT(imp)),
+        masked     = mapply(FUN=check.masked, getAD(orig), getAD(mask)),
+        max.prob   = max.post.probs
+        ## post.probs = post.probs
     )
 
     data  # implicit return
@@ -850,9 +878,64 @@ analyze <- function(orig, mask, imp) {
 
 
 quick.check <- function() {
-    an <- analyze("./analysis/first-25-orig.vcf.gz",
-                  "./analysis/first-25-masked.vcf.gz", "./analysis/first-25-imp-f3.vcf.gz")
-    interest <- an$correct[an$masked==T]; sum(interest) / length(interest)
+    ## an <- analyze("./analysis/filtered_lakin_fuller.vcf", "./analysis/masked_files_LF_from_sandesh/masked_01_filtered_lakin_fuller.vcf", "./thresh-90.vcf.gz")
+    ## an <- analyze("./analysis/first-25-orig.vcf.gz",
+    ##               "./analysis/first-25-masked.vcf.gz", "./analysis/first-25-imp-f3.vcf.gz")
+    ## interest <- an$correct[an$masked==T]; sum(interest) / length(interest)
+
+
+
+
+
+    ## an <- analyze("./analysis/filtered_lakin_fuller.vcf", "./analysis/masked_files_LF_from_sandesh/masked_01_filtered_lakin_fuller.vcf", "~/Desktop/imputed/imputed-mask-01-f5-1e8.vcf.gz")
+
+    for (qual in seq(from=0, to=100, by=5)) {
+        interest <- an$correct[an$masked & an$max.prob >= qual]
+        display(1, "thresh: ", qual, "\tn: ", length(interest), "\tquality: ", sum(interest) / length(interest))
+
+    }
+}
+
+
+LabyrinthQC <- function(vcf) {
+    ## vcf load code
+    if (! inherits(vcf, "vcfR")) {
+        timer <- new.timer()
+        display(0, "Loading vcf")
+        vcf <- read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
+    }
+
+    gp <- getGP(vcf)
+    gt <- getGT(vcf)
+    ad <- getAD(vcf)
+
+    highest.posterior <- apply(gp, 1:2, function(gp) {
+        max(gp.to.num(gp))
+    })
+
+    ## y <- sapply(0:100, function(x) {sum(highest.posterior >= x) / length(highest.posterior)})
+    ## plot((0:100)/100, y, type="l", main="Imputation Posterior Probabilities",
+    ## xlab="Posterior Probabilities",
+    ## ylab="Proportion of Sites with Higher Posterior",
+    ## ylim=c(0,1), xlim=c(0,1))
+
+    browser()
+
+    thresh.mask <- apply(highest.posterior, 1:2, `>=`, 90)
+
+    gt <- ifelse(thresh.mask, gt, "./.")
+
+    concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=nrow(ad))
+
+    vcf@gt <- cbind("GT:AD:GP", concat)
+    colnames(vcf@gt) <- c("FORMAT", colnames(ad))
+    rownames(vcf@gt) <- rownames(ad)
+
+
+    write.vcf(vcf, "thresh-90.vcf.gz")
+
+    print("done")
 }
 
 ## LabyrinthImpute("./analysis/first-25-masked.vcf.gz", c("LAKIN", "FULLER"), 5, "./analysis/first-25-imp-f5.vcf.gz")
@@ -871,6 +954,9 @@ quick.check <- function() {
 
 ## look into whether it is worth changing the precomputed R files into C files
 
+## do the incorrect calls typically happen at sites with low confidence in
+## parental information?
+
 ## To tell Tintle
 ##  * scrapped almost all original code
 ##  * using vcf library
@@ -882,3 +968,49 @@ quick.check <- function() {
 ##  * currently testing lakin-fuller imputed as f2
 ##  * currently debugging
 
+
+## THIS SHOWS THAT THE POSTERIOR PROBABILITIES ARE INFLATED
+## > interest <- an$correct[an$masked & an$max.prob >= 10 & an$max.prob <= 20]; sum(interest) / length(interest)
+## [1] NaN
+## > interest <- an$correct[an$masked & an$max.prob >= 20 & an$max.prob <= 30]; sum(interest) / length(interest)
+## [1] NaN
+## > interest <- an$correct[an$masked & an$max.prob >= 30 & an$max.prob <= 40]; sum(interest) / length(interest)
+## [1] 0.5
+## > length(interest)
+## [1] 2
+## > interest <- an$correct[an$masked & an$max.prob >= 40 & an$max.prob <= 50]; sum(interest) / length(interest)
+## [1] 0.3142857
+## > interest <- an$correct[an$masked & an$max.prob >= 50 & an$max.prob <= 60]; sum(interest) / length(interest)
+## [1] 0.3191489
+## > interest <- an$correct[an$masked & an$max.prob >= 60 & an$max.prob <= 70]; sum(interest) / length(interest)
+## [1] 0.4369748
+## > interest <- an$correct[an$masked & an$max.prob >= 70 & an$max.prob <= 80]; sum(interest) / length(interest)
+## [1] 0.5182482
+## > interest <- an$correct[an$masked & an$max.prob >= 80 & an$max.prob <= 90]; sum(interest) / length(interest)
+## [1] 0.6733668
+## > interest <- an$correct[an$masked & an$max.prob >= 90 & an$max.prob <= 100]; sum(interest) / length(interest)
+## [1] 0.8978936
+
+
+## > quick.check()
+##     * thresh: 0	n: 6732	quality: 0.867944147355912
+##     * thresh: 5	n: 6732	quality: 0.867944147355912
+##     * thresh: 10	n: 6732	quality: 0.867944147355912
+##     * thresh: 15	n: 6732	quality: 0.867944147355912
+##     * thresh: 20	n: 6732	quality: 0.867944147355912
+##     * thresh: 25	n: 6732	quality: 0.867944147355912
+##     * thresh: 30	n: 6732	quality: 0.867944147355912
+##     * thresh: 35	n: 6732	quality: 0.867944147355912
+##     * thresh: 40	n: 6732	quality: 0.867944147355912
+##     * thresh: 45	n: 6725	quality: 0.868550185873606
+##     * thresh: 50	n: 6705	quality: 0.870096942580164
+##     * thresh: 55	n: 6670	quality: 0.873013493253373
+##     * thresh: 60	n: 6620	quality: 0.877190332326284
+##     * thresh: 65	n: 6572	quality: 0.879945222154595
+##     * thresh: 70	n: 6512	quality: 0.884674447174447
+##     * thresh: 75	n: 6451	quality: 0.888389396992714
+##     * thresh: 80	n: 6389	quality: 0.892158397245265
+##     * thresh: 85	n: 6317	quality: 0.894253601393066
+##     * thresh: 90	n: 6219	quality: 0.897893552018009
+##     * thresh: 95	n: 6080	quality: 0.903125
+##     * thresh: 100	n: 4174	quality: 0.914710110206037
