@@ -19,14 +19,32 @@ require(abind, quietly=T)
 
 
 LabyrinthImpute <- function (vcf, parents, generation, out.file,
+                             use.fwd.bkwd=FALSE, use.viterbi=TRUE,
+                             calc.posteriors=TRUE,
                              read.err=0.05, geno.err=0.05,
                              recomb.dist=1e6, parallel=TRUE,
                              cores=4, quiet=FALSE) {
+
+    display(0, "Test Version 2.0.1")
 
     ## begin timer
     total.timer <- new.timer()
     print.labyrinth.header()
 
+
+    ## parameter verification
+    if (use.fwd.bkwd && use.viterbi) {
+        display(0, "Cannot use both fwd.bkwd and viterbi algorithms to impute\n")
+        stop()
+    } else if (!use.fwd.bkwd && !use.viterbi) {
+        display(0, "Must select either fwd.bkwd or viterbi algorithm to impute\n")
+        stop()
+    }
+
+    if (use.fwd.bkwd && !calc.posteriors) {
+        display(0, "When using fwd.bkwd, posterior probabilities must be calculated")
+        display(0, "These probabilities will be included in the output file\n")
+    }
 
     ## vcf load code
     if (! inherits(vcf, "vcfR")) {
@@ -81,11 +99,15 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ##     transition.structures <- readRDS(trans.file)
     ##     display(1, "Completed in ", timer(), "\n")
     ## } else {
-        timer <- new.timer()
-        display(0, "Generating transition probabilities")
-        transition.structures <- get.transition.structures(vcf, generation, recomb.dist, parallel, cores)
-        display(1, "Completed in ", timer(), "\n")
-        transition.structures <<- transition.structures  # for debugging
+    timer <- new.timer()
+    display(0, "Generating transition probabilities")
+    transition.structures <- get.transition.structures(vcf,
+                                                       generation,
+                                                       recomb.dist,
+                                                       parallel,
+                                                       cores)
+    display(1, "Completed in ", timer(), "\n")
+    transition.structures <<- transition.structures  # for debugging
     ##     saveRDS(transition.structures, trans.file)  # for debugging
     ## }
 
@@ -97,20 +119,25 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ##     emission.structures <- readRDS(emm.file)
     ##     display(1, "Completed in ", timer(), "\n")
     ## } else {
-        timer <- new.timer()
-        display(0, "Generating emission probabilities")
-        emission.structures <- get.emission.structures(vcf, parents, read.err, geno.err, generation, parallel, cores)
-        display(1, "Completed in ", timer(), "\n")
-        emission.structures <<- emission.structures  # for debugging
+    timer <- new.timer()
+    display(0, "Generating emission probabilities")
+    emission.structures <- get.emission.structures(vcf,
+                                                   parents,
+                                                   read.err,
+                                                   geno.err,
+                                                   generation,
+                                                   parallel,
+                                                   cores)
+    display(1, "Completed in ", timer(), "\n")
+    emission.structures <<- emission.structures  # for debugging
     ##     saveRDS(emission.structures, emm.file)  # for debugging
     ## }
-
 
     ## imputation code
     timer <- new.timer()
     display(0, "Imputing missing sites")
     imp.res <- impute(vcf, parents, emission.structures, transition.structures,
-                      parallel, cores)
+                      parallel, cores, use.fwd.bkwd, calc.posteriors)
     display(1, "Completed in ", timer(), "\n")
 
     ## new vcf creation code
@@ -232,21 +259,20 @@ fwd.bkwd <- function(emm, trans) {
     n.states <- nrow(emm)
     n.sites <- ncol(emm)
 
-    ## forward probabilities
-    f.probs <- matrix(data=0, nrow=n.states, ncol=n.sites)
-    b.probs <- f.probs
+    f.probs <- b.probs <- matrix(data=0, nrow=n.states, ncol=n.sites)
 
+    ## forward probabilities
     start.probs <- rep(1/n.states, n.states)
     f.probs[, 1] <- start.probs * emm[, 1]
     f.probs <- normalize(f.probs, 1)
 
     for (site in 2:n.sites) {
-        t.index <- site - 1
+        t.index <- site - 1  # transition structure index
         prev.site <- site - 1
         for (to in 1:n.states) {
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
-        }
+         }
         f.probs <- normalize(f.probs, site)
     }
 
@@ -270,6 +296,43 @@ fwd.bkwd <- function(emm, trans) {
         res <- normalize(res, site)
     }
     res
+}
+
+
+## MAKE SURE THAT THE EMISSION PROBABIITIES ARE NOT NORMALIZED FOR THE VITERBI!
+## Actually, it is probably fine because even for every transition model, the
+## same emission matrix is being used
+viterbi <- function(emm, trans) {
+    n.states <- nrow(emm)
+    n.sites <- ncol(emm)
+
+    path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
+
+    start.probs <- log(rep(1/n.states, n.states))
+    probs <- start.probs + log(emm[, 1])
+
+    STOP <- 27
+    for (site in 2:n.sites) {
+        t.index <- site - 1  # transition structure index
+        prev.site <- site - 1
+        new.probs <- probs
+        for (to in 1:n.states) {
+            x <- probs + log(trans[ , to, t.index])
+            new.probs[to] <- max(x) + log(emm[to, site])
+            path.tracker[to, site] <- which.max(x)
+        }
+        probs <- new.probs
+    }
+
+    ## reconstruct the path
+    path <- rep(NA, n.sites)
+    best.state <- which.max(probs)
+    for (site in n.sites:1) {
+        path[site] <- best.state
+        best.state <- path.tracker[best.state, site]
+    }
+
+    list(path=path, prob=max(probs))
 }
 
 
@@ -330,7 +393,7 @@ get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parall
     }
 
     reads.emm.probs <- function(reads, p1.is.ref) {
-        names(reads) <- NULL  # makes debuggin easier
+        names(reads) <- NULL  # makes debugging easier
         ret.val <- do.call(rbind,
                 lapply(states, function(state) {
                     ## mapply will repeat state as many times as necessary
@@ -506,7 +569,8 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
 }
 
 
-impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cores) {
+impute <- function(vcf, parents, emm.structures, trans.structures, parallel,
+                   cores, use.fwd.bkwd, calc.posteriors) {
 
     listapply <- get.lapply(parallel, cores)
 
@@ -529,39 +593,120 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
         n.sites <- sum(chroms==chrom)  # boolean addition
         p1.ref <- p1.is.ref[chroms==chrom]
 
-        if (sample == parents[1]) {
-            normalized <- rbind(rep(1, n.sites),
-                                0,
-                                0,
-                                0)
-        } else if (sample == parents[2]) {
-            normalized <- rbind(0,
-                                0,
-                                0,
-                                rep(1, n.sites))
-        } else {
-            emm <- emm.structures[[chrom]][[sample]]
-            model.trans <- trans.structures[[chrom]]
-            n.models <- length(model.trans)
+        res <- list()
+        res$posteriors <- NULL
 
-            list.of.posterior.matrices <-
-                lapply(model.trans, function(trans) {
-                    fwd.bkwd(emm, trans)
+        if (use.fwd.bkwd || calc.posteriors) {
+            if (sample == parents[1]) {
+                normalized <- rbind(rep(1, n.sites),
+                                    0,
+                                    0,
+                                    0)
+            } else if (sample == parents[2]) {
+                normalized <- rbind(0,
+                                    0,
+                                    0,
+                                    rep(1, n.sites))
+            } else {
+                emm <- emm.structures[[chrom]][[sample]]
+                model.trans <- trans.structures[[chrom]]
+                n.models <- length(model.trans)
+
+                list.of.posterior.matrices <-
+                    lapply(model.trans, function(trans) {
+                        fwd.bkwd(emm, trans)
+                    })
+
+                summed.posteriors <- Reduce(`+`, list.of.posterior.matrices)
+                normalized <- 1/n.models * summed.posteriors
+
+            }
+
+            ref <- ifelse(p1.ref, normalized[1, ], normalized[4, ])
+            alt <- ifelse(p1.ref, normalized[4, ], normalized[1, ])
+            het <- normalized[2, ] + normalized[3, ]
+
+            posteriors <- rbind(ref, het, alt)
+
+            phred.scaled <- apply(posteriors, 1:2, function(x) {
+                ## 1-x is the probability the call is wrong
+                ## use min to prevent infinity from getting throughk
+                min(-10*log((1-x), base=10), 100)
+            })
+
+            res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
+
+            ## res$posteriors <- array(c(ref,   # homozygous reference allele prob
+            ##                           het,   # heterozygous prob
+            ##                           alt),  # homozygous alternate allele prob
+            ##                         dim=c(n.sites, 1, 3))
+
+            if (use.fwd.bkwd) {
+                res$gt <- apply(posteriors, 2, function(states) {
+                    c("0/0","0/1","1/1")[which.max(states)]
                 })
+            }
+        }
 
-            summed.posteriors <- Reduce(`+`, list.of.posterior.matrices)
-            normalized <- 1/n.models * summed.posteriors
+        if (!use.fwd.bkwd) {
+            if (sample == parents[1]) {
+                best.path <- rep(1, n.sites)
+            } else if (sample == parents[2]) {
+                best.path <- rep(4, n.sites)
+            } else {
+                emm <- emm.structures[[chrom]][[sample]]
+                model.trans <- trans.structures[[chrom]]
+                n.models <- length(model.trans)
+
+                list.of.paths.and.probs <-
+                    lapply(model.trans, function(trans) {
+                        viterbi(emm, trans)
+                    })
+
+                probs <- unlist(lapply(list.of.paths.and.probs, function(result) {
+                    result$prob
+                }))
+
+                best.path <- list.of.paths.and.probs[[which.max(probs)]]$path
+                ## In best.path,
+                ##    1: parent 1
+                ##    2: het type 1
+                ##    3: het type 2
+                ##    4: parent 2
+            }
+
+            res$gt <- sapply(seq_along(best.path), function(index) {
+                state <- best.path[index]
+
+                if (state == 1)
+                    ifelse(p1.ref[index], "0/0", "1/1")
+                else if (state == 2)
+                    "0/1"
+                else if (state == 3)
+                    "1/0"
+                else if (state == 4)
+                    ifelse(p1.ref[index], "1/1", "0/0")
+                else
+                    stop("invalid state; this should never happen")
+            })
 
         }
 
-        ref <- ifelse(p1.ref, normalized[1, ], normalized[4, ])
-        alt <- ifelse(p1.ref, normalized[4, ], normalized[1, ])
-        het <- normalized[2, ] + normalized[3, ]
+        res  # implicit return
+    }
 
-        array(c(ref,                     # homozygous reference allele prob
-                alt,                     # homozygous alternate allele prob
-                het),                    # heterozygous prob
-              dim=c(n.sites, 1, 3))
+
+    get.posteriors <- function(list) {
+        lapply(list, function(result) {
+            result$posteriors
+        })
+    }
+
+
+    get.listed.gt <- function(list) {
+        lapply(list, function(result) {
+            result$gt
+        })
     }
 
 
@@ -589,6 +734,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
     ## imputation should be fairly similar. When having the samples in the inner
     ## loop, the chromosomes for that sample have drastically different sizes
     ## and can have quite varying runtimes. Ideally,
+
     imputed.chroms <- lapply(u.chroms, function(chrom) {
 
         imputed.samples <- listapply(samples, function(sample) {
@@ -609,12 +755,21 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel, cor
             ret.val  # implicit return
         })
 
-        do.call(abind2, imputed.samples)  # implicit return
+        ret.val <- list()
+        ret.val$posteriors <- do.call(cbind, get.posteriors(imputed.samples))
+        ret.val$gt <- do.call(cbind, get.listed.gt(imputed.samples))
+
+                                        #do.call(abind2, imputed.samples)  # implicit return
+        ret.val  # implicit return
 
     })
 
+    ret.val <- list()
+    ret.val$posteriors <- do.call(rbind, get.posteriors(imputed.chroms))
+    ret.val$gt <- do.call(rbind, get.listed.gt(imputed.chroms))
+
     ## combine columns of each imputed sample
-    ret.val <- do.call(abind1, imputed.chroms)
+    ## ret.val <- do.call(abind1, imputed.chroms)
 
 
     ## Progress bar code
@@ -652,24 +807,36 @@ is.parent.ref <- function(vcf, parent) {
 
 ## modify the vcf in place to add imputed calls in gt
 update.vcf <- function(vcf, impute.res) {
-    rounded.res <- apply(impute.res, 1:3, round, digits=2)
-    rounded.res <- apply(rounded.res, 1:3, `*`, 100)
+    ## phred.scaled.res <- apply(impute.res, 1:3, function(x) {
+    ##     ## 1-x is the probability the call is wrong
+    ##     ## use min to prevent infinity from getting throughk
+    ##     min(-10*log((1-x), base=10), 100)
+    ## })
 
-    gp <- apply(rounded.res, 1:2, paste0, collapse=",")
+    ## ## rounded.res <- apply(phred.scaled.res, 1:3, round)
 
-    gt <- apply(impute.res, 1:2, function(states) {
-        c("0/0","1/1","0/1")[which.max(states)]
-    })
+    ## gp <- apply(phred.scaled.res, 1:2, paste0, collapse=",")
 
+    ## gt <- apply(impute.res, 1:2, function(states) {
+    ##     c("0/0","0/1","1/1")[which.max(states)]
+    ## })
+
+    gt <- impute.res$gt
+    gp <- impute.res$posteriors
     ad <- getAD(vcf)
 
     n.rows <- nrow(ad)
     if (n.rows != nrow(gt))
         stop("conflict in number of rows; should never happen")
 
-    concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=n.rows)
+    if (is.null(gp)) {
+        concat <- matrix(paste0(gt, ":", ad), nrow=n.rows)
+        vcf@gt <- cbind("GT:AD", concat)
+    } else {
+        concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=n.rows)
+        vcf@gt <- cbind("GT:AD:GP", concat)
+    }
 
-    vcf@gt <- cbind("GT:AD:GP", concat)
     colnames(vcf@gt) <- c("FORMAT", colnames(ad))
     rownames(vcf@gt) <- rownames(ad)
 
@@ -867,8 +1034,6 @@ analyze <- function(orig, mask, imp) {
         max(gp.to.num(gp))
     })
 
-    browser()
-
     data <- data.frame(
         ref.depth  = depths[1, ],
         alt.depth  = depths[2, ],
@@ -926,8 +1091,6 @@ LabyrinthQC <- function(vcf) {
     ## ylab="Proportion of Sites with Higher Posterior",
     ## ylim=c(0,1), xlim=c(0,1))
 
-    browser()
-
     thresh.mask <- apply(highest.posterior, 1:2, `>=`, 90)
 
     gt <- ifelse(thresh.mask, gt, "./.")
@@ -943,80 +1106,3 @@ LabyrinthQC <- function(vcf) {
 
     print("done")
 }
-
-## LabyrinthImpute("./analysis/first-25-masked.vcf.gz", c("LAKIN", "FULLER"), 5, "./analysis/first-25-imp-f5.vcf.gz")
-
-## INPROGRESS
-## write code from emission to calls
-## decide how to present the probabilities in the output vcf
-## don't compute the emission probabilities for H2 because they are the same as H1
-## cache the emission probabilities because they will often be the same
-## estimate generation using equations for P(G|R) which are in the Libre Calc sheet
-## fix the forward-backward algorithm from numerical instability
-## check if extract.gt with na param as F is sufficient for both ad and gt fields
-
-## check if cbind error is still occurring on the smaller vcf file
-##   if so, normalize the emission probabilities
-
-## look into whether it is worth changing the precomputed R files into C files
-
-## do the incorrect calls typically happen at sites with low confidence in
-## parental information?
-
-## To tell Tintle
-##  * scrapped almost all original code
-##  * using vcf library
-##  * made code more readible and more maintainable
-##  * implemented desired improvement (multi-model)
-##  * now using forward-backward instead of viterbi
-##     * posterior probabilities
-##  * logo!
-##  * currently testing lakin-fuller imputed as f2
-##  * currently debugging
-
-
-## THIS SHOWS THAT THE POSTERIOR PROBABILITIES ARE INFLATED
-## > interest <- an$correct[an$masked & an$max.prob >= 10 & an$max.prob <= 20]; sum(interest) / length(interest)
-## [1] NaN
-## > interest <- an$correct[an$masked & an$max.prob >= 20 & an$max.prob <= 30]; sum(interest) / length(interest)
-## [1] NaN
-## > interest <- an$correct[an$masked & an$max.prob >= 30 & an$max.prob <= 40]; sum(interest) / length(interest)
-## [1] 0.5
-## > length(interest)
-## [1] 2
-## > interest <- an$correct[an$masked & an$max.prob >= 40 & an$max.prob <= 50]; sum(interest) / length(interest)
-## [1] 0.3142857
-## > interest <- an$correct[an$masked & an$max.prob >= 50 & an$max.prob <= 60]; sum(interest) / length(interest)
-## [1] 0.3191489
-## > interest <- an$correct[an$masked & an$max.prob >= 60 & an$max.prob <= 70]; sum(interest) / length(interest)
-## [1] 0.4369748
-## > interest <- an$correct[an$masked & an$max.prob >= 70 & an$max.prob <= 80]; sum(interest) / length(interest)
-## [1] 0.5182482
-## > interest <- an$correct[an$masked & an$max.prob >= 80 & an$max.prob <= 90]; sum(interest) / length(interest)
-## [1] 0.6733668
-## > interest <- an$correct[an$masked & an$max.prob >= 90 & an$max.prob <= 100]; sum(interest) / length(interest)
-## [1] 0.8978936
-
-
-## > quick.check()
-##     * thresh: 0	n: 6732	quality: 0.867944147355912
-##     * thresh: 5	n: 6732	quality: 0.867944147355912
-##     * thresh: 10	n: 6732	quality: 0.867944147355912
-##     * thresh: 15	n: 6732	quality: 0.867944147355912
-##     * thresh: 20	n: 6732	quality: 0.867944147355912
-##     * thresh: 25	n: 6732	quality: 0.867944147355912
-##     * thresh: 30	n: 6732	quality: 0.867944147355912
-##     * thresh: 35	n: 6732	quality: 0.867944147355912
-##     * thresh: 40	n: 6732	quality: 0.867944147355912
-##     * thresh: 45	n: 6725	quality: 0.868550185873606
-##     * thresh: 50	n: 6705	quality: 0.870096942580164
-##     * thresh: 55	n: 6670	quality: 0.873013493253373
-##     * thresh: 60	n: 6620	quality: 0.877190332326284
-##     * thresh: 65	n: 6572	quality: 0.879945222154595
-##     * thresh: 70	n: 6512	quality: 0.884674447174447
-##     * thresh: 75	n: 6451	quality: 0.888389396992714
-##     * thresh: 80	n: 6389	quality: 0.892158397245265
-##     * thresh: 85	n: 6317	quality: 0.894253601393066
-##     * thresh: 90	n: 6219	quality: 0.897893552018009
-##     * thresh: 95	n: 6080	quality: 0.903125
-##     * thresh: 100	n: 4174	quality: 0.914710110206037

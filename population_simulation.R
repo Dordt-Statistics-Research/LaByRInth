@@ -231,22 +231,23 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
     ## Each parent has two homologous chromosomes (denoted here as cA and cB)
     ## and the parents are homozygous within and polymorphic between.
     p1 <- p2 <- list()  # empty object initialization
-    p1$cA <- p1$cB <- rep(TRUE, times=n.sites)  # parent 1
-    p2$cA <- p2$cB <- rep(FALSE, times=n.sites)  # parent 2
+    p1$cA <- p1$cB <- rep(FALSE, times=n.sites)  # parent 1
+    p2$cA <- p2$cB <- rep(TRUE, times=n.sites)  # parent 2
     class(p1) <- class(p2) <- c("genome", class(p1))
 
-    f1 <- cross(p1, p2, recomb.fun)
+    ## not necessary because f1 will have either cA or cB be all TRUE and the
+    ## other all FALSE, but this allows for introducing error later
+    f1 <- cross(p1, p2, recomb.probs)
 
     f2s <- lapply(seq(n.mem), function(i){cross(f1, f1, recomb.probs)})
-
-    if (n.gen == 2) {
-        return (f2s)
-    }
-
     fis <- f2s
-    for (i in 3:n.gen) {
-        fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
+
+    if (n.gen != 2) {
+        for (i in 3:n.gen) {
+            fis <- lapply(fis, function(member){cross(member, member, recomb.probs)})
+        }
     }
+
     fis <- c(list(p1), list(p2), fis)  # prepend parents to list of progeny
     class(fis) <- c("population", class(fis))
     fis  # implicit return
@@ -257,7 +258,7 @@ create.ril.pop <- function(n.gen, n.mem, recomb.probs) {
 ## This assumes that the parents are the first two entries in the population and
 ## will not be sampled
 ## TODO(Jason): allow for false reads
-SamplePopulation <- function(pop, coverage=1, type="uniform", parents=TRUE) {
+sample.population <- function(pop, rerr, coverage=1, type="uniform", parents=TRUE) {
     if (! "population" %in% class(pop)) {
         stop("pop must be of class population")
     }
@@ -265,31 +266,200 @@ SamplePopulation <- function(pop, coverage=1, type="uniform", parents=TRUE) {
         stop("currently only type supported is uniform")
     }
 
-    n.variants <- length(pop)  # how many members
-    n.sites <- length(pop[[1]]$cA)  # check length of one chrom of first variant
+    n.taxa <- length(pop)  # how many members
+    n.loci <- length(pop[[1]]$cA)  # check length of one chrom of first variant
     ## 2 parents are not sampled and 2 chromosomes per member
     ## TODO(Jason): verify that this is how coverage is computed
-    total <- (n.variants - 2) * n.sites * 2
-    n.coverage.sites <- total * coverage
-    variants <- sample(3:n.variants, size=n.coverage.sites, replace=TRUE)
-    sites    <- sample(1:n.sites,    size=n.coverage.sites, replace=TRUE)
-    chroms   <- sample(1:2,          size=n.coverage.sites, replace=TRUE)
+    total <- (n.taxa - 2) * n.loci * 2
+    n.coverage.loci <- total * coverage * 1/2
+    taxa <- sample(3:n.taxa, size=n.coverage.loci, replace=TRUE)
+    loci    <- sample(1:n.loci,    size=n.coverage.loci, replace=TRUE)
+    chroms   <- sample(1:2,          size=n.coverage.loci, replace=TRUE)
+    erroneous <- runif(n=n.coverage.loci) < rerr
 
     ## also sample both chromosomes of both parents at every site
-    p.variants <- rep(1:2, each=2*n.sites)  # 1,1,...,1,2,...,2,2
-    p.chroms <- rep(rep(1:2, each=n.sites), times=2)
-    p.sites <- rep(1:n.sites, times=2*2)  # 1,2,3,...,n,1,2,3,...
+    p.taxa <- rep(1:2, each=2*n.loci)  # 1,1,...,1,2,...,2,2
+    p.chroms <- rep(rep(1:2, each=n.loci), times=2)
+    p.loci <- rep(1:n.loci, times=2*2)  # 1,2,3,...,n,1,2,3,...
+    p.erroneous <- rep(FALSE, 4*n.loci)
 
-    variants <- c(p.variants, variants)
-    sites <- c(p.sites, sites)
+    taxa <- c(p.taxa, taxa)
+    loci <- c(p.loci, loci)
     chroms <- c(p.chroms, chroms)
+    erroneous <- c(p.erroneous, erroneous)
+
+    res <- array(0, dim=c(n.taxa, n.loci, 2))
+
+    for (read.index in seq_along(erroneous)) {
+        which.taxa <- taxa[read.index]
+        which.chrom <- chroms[read.index]
+        which.loci <- loci[read.index]
+
+        read <- pop[[which.taxa]][[which.chrom]][which.loci]
+
+        if (erroneous[read.index])
+            read <- !read
+
+        which.allele <- ifelse(read, 1, 0)
+
+        res[which.taxa, which.loci, which.allele+1] <-
+            res[which.taxa, which.loci, which.allele+1] + 1
+    }
+
+    return(res)
 
     result <- list()
     class(result) <- c("sample", class(result))
     result$population <- pop
-    result$sample <- list.of.cols(rbind(variants, sites, chroms))
+    result$sample <- list.of.cols(rbind(taxa, loci, chroms))
 
     result  # implicit return
+}
+
+
+population.to.vcf <- function(pop, n.gen, out.file, sites=NA) {
+    pop <- pop.to.geno.matrix(pop)
+
+    ## add generic row and column names if missing
+    if (length(sites) == 1 && is.na(sites)) {
+        sites <- 1:ncol(pop)
+    } else if (length(sites) != ncol(pop))
+        stop("sites has incompatible length")
+
+    parent.names <- c("P_1", "P_2")
+    progeny.names <- paste0("F", n.gen, "_", seq(nrow(pop)-2))
+    names <- c(parent.names, progeny.names)
+
+    lines <- c(
+        "##fileformat=VCFv4.2",
+        paste0(
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t",
+            paste0(names, collapse="\t"))
+        )
+
+    chrom <- "UN"
+    ## make sure sci notation is not used in writing vcf
+    pos <- sapply(sites, format, scientific=FALSE)
+    id <- paste0("ID_", seq(ncol(pop)))
+    ref <- "A"
+    alt <- "G"
+    qual <- "."
+    filter <- "PASS"
+    info <- "."
+    format <- "GT:AD"
+
+    gt <- apply(pop, 1:2, function(num) {
+        if (num == 0)
+            "0/0"
+        else if (num == 1)
+            "0/1"
+        else if (num == 2)
+            "1/1"
+        else
+            stop("invalid num; this should never happen")
+    })
+
+    data <- t(gt)
+
+    data <- cbind(chrom, pos, id, ref, alt, qual, filter, info, format, data)
+    data <- apply(data, 1, paste0, collapse="\t")
+
+    data <- c(lines, data)
+
+    con <- file(out.file, "w")
+    writeLines(data, con)
+    close(con)
+}
+
+
+sample.to.vcf <- function(sample, n.gen, out.file, sites=NA) {
+    ## add generic row and column names if missing
+    if (length(sites) == 1 && is.na(sites)) {
+        sites <- 1:ncol(sample)
+    } else if (length(sites) != ncol(sample))
+        stop("sites has incompatible length")
+
+    parent.names <- c("P_1", "P_2")
+    progeny.names <- paste0("F", n.gen, "_", seq(nrow(sample)-2))
+    names <- c(parent.names, progeny.names)
+
+    ## if (is.null(colnames(sample))) {
+    ##     if (length(sites) == 1 && is.na(sites)) {
+    ##         colnames(sample) <- paste0("loc_", seq(ncol(sample)))
+    ##     } else {
+    ##         if (length(sites) == ncol(sample))
+    ##             colnames(sample) <- paste0("loc_", sites)
+    ##         else
+    ##             stop("sites has incompatible length")
+    ##     }
+    ## }
+    ## if (is.null(rownames(sample))) {
+    ##     parent.names <- c("P_1", "P_2")
+    ##     progeny.names <- paste0("F", n.gen, "_", seq(nrow(sample)-2))
+    ##     rownames(sample) <- c(parent.names, progeny.names)
+    ## }
+
+    sample.to.ad <- function(sample) {
+        ## collapse the 3rd dimension (which indicates number of reference reads
+        ## and number of alternate reads) into text form for vcf
+        apply(sample, 1:2, paste0, collapse=",")
+    }
+
+    sample.to.gt <- function(sample) {
+        ## collapse the 3rd dimension (which indicates number of reference reads
+        ## and number of alternate reads) into directly inferred genotype text
+        ## form for vcf
+        apply(sample, 1:2, read.to.gt)
+    }
+
+    read.to.gt <- function(read) {
+        ## read is expected to be a numeric vector of length 2 where the first
+        ## index is number of reference reads and the sencond is the number of
+        ## alternate reads
+        if (any(is.na(read)))
+            stop("a read is na. this should never happen")
+        if (all(read != 0))     # read both alleles
+            "0/1"
+        else if (read[1] != 0)  # read only reference
+            "0/0"
+        else if (read[2] != 0)  # read only alternate
+            "1/1"
+        else                    # no reads at locus
+            "./."
+    }
+
+    lines <- c(
+        "##fileformat=VCFv4.2",
+        paste0(
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t",
+            paste0(names, collapse="\t"))
+        )
+
+    chrom <- "UN"
+    ## make sure sci notation is not used in writing vcf
+    pos <- sapply(sites, format, scientific=FALSE)
+    id <- paste0("ID_", seq(ncol(sample)))
+    ref <- "A"
+    alt <- "G"
+    qual <- "."
+    filter <- "PASS"
+    info <- "."
+    format <- "GT:AD:DP"
+
+    gt <- t(sample.to.gt(sample))
+    ad <- t(sample.to.ad(sample))
+    dp <- t(apply(sample, 1:2, sum))
+
+    data <- matrix(paste0(gt, ":", ad, ":", dp), nrow=nrow(gt))
+
+    data <- cbind(chrom, pos, id, ref, alt, qual, filter, info, format, data)
+    data <- apply(data, 1, paste0, collapse="\t")
+
+    data <- c(lines, data)
+
+    con <- file(out.file, "w")
+    writeLines(data, con)
+    close(con)
 }
 
 
@@ -383,62 +553,62 @@ FullPopulationVCF <- function(pop, sites){
 }
 
 
-SamplePopulationVCF <- function(sample.result, sites){
-    if (! "sample" %in% class(sample.result)) {
-        stop("sample.result must be of class sample")
-    }
-    require(abind)
+## sample.population.vcf <- function(sample.result, sites){
+##     if (! "sample" %in% class(sample.result)) {
+##         stop("sample.result must be of class sample")
+##     }
+##     require(abind)
 
-    pop <- sample.result$population
-    sample <- sample.result$sample
-    vcf <- EmptyVCF(pop, sites)
+##     pop <- sample.result$population
+##     sample <- sample.result$sample
+##     vcf <- EmptyVCF(pop, sites)
 
-    ## properly set the AD fields based on the population
-    for (observation in sample) {
-        var    <- observation[1]
-        site   <- observation[2]
-        chrom  <- observation[3]
-        ## add 1 to allele to compensate for 1 based indexing so allele will
-        ## either equal 1 if the site is FALSE or 2 if the site is TRUE
-        if (chrom == 1) {
-            allele <- as.numeric(pop[[var]]$cA[site]) + 1
-        } else {
-            allele <- as.numeric(pop[[var]]$cB[site]) + 1
-        }
-        vcf$AD[site, var, allele] <- 1 + vcf$AD[site, var, allele]
-    }
+##     ## properly set the AD fields based on the population
+##     for (observation in sample) {
+##         var    <- observation[1]
+##         site   <- observation[2]
+##         chrom  <- observation[3]
+##         ## add 1 to allele to compensate for 1 based indexing so allele will
+##         ## either equal 1 if the site is FALSE or 2 if the site is TRUE
+##         if (chrom == 1) {
+##             allele <- as.numeric(pop[[var]]$cA[site]) + 1
+##         } else {
+##             allele <- as.numeric(pop[[var]]$cB[site]) + 1
+##         }
+##         vcf$AD[site, var, allele] <- 1 + vcf$AD[site, var, allele]
+##     }
 
-    ## properly set the GT and DP fields based on the AD field
-    vcf$DP <- apply(vcf$AD, 1:2, sum)  # sum both allele counts at each site
+##     ## properly set the GT and DP fields based on the AD field
+##     vcf$DP <- apply(vcf$AD, 1:2, sum)  # sum both allele counts at each site
 
-    gt.1 <- apply(vcf$AD, 1:2, function(depths) {
-        if (depths[1] == 0 && depths[2] == 0) {
-            NA_integer_
-        } else if (depths[1] == 0) {
-            1
-        } else if (depths[2] == 0) {
-            0
-        } else {  # both non-zero
-            0
-        }
-    })
+##     gt.1 <- apply(vcf$AD, 1:2, function(depths) {
+##         if (depths[1] == 0 && depths[2] == 0) {
+##             NA_integer_
+##         } else if (depths[1] == 0) {
+##             1
+##         } else if (depths[2] == 0) {
+##             0
+##         } else {  # both non-zero
+##             0
+##         }
+##     })
 
-    gt.2 <- apply(vcf$AD, 1:2, function(depths) {
-        if (depths[1] == 0 && depths[2] == 0) {
-            NA_integer_
-        } else if (depths[1] == 0) {
-            1
-        } else if (depths[2] == 0) {
-            0
-        } else {  # both non-zero
-            1
-        }
-    })
+##     gt.2 <- apply(vcf$AD, 1:2, function(depths) {
+##         if (depths[1] == 0 && depths[2] == 0) {
+##             NA_integer_
+##         } else if (depths[1] == 0) {
+##             1
+##         } else if (depths[2] == 0) {
+##             0
+##         } else {  # both non-zero
+##             1
+##         }
+##     })
 
-    vcf$GT <- abind(gt.1, gt.2, along=3)
+##     vcf$GT <- abind(gt.1, gt.2, along=3)
 
-    vcf  # implicit return
-}
+##     vcf  # implicit return
+## }
 
 ##' .. content for \description{} (no empty lines) ..
 ##'
@@ -555,3 +725,69 @@ checkAccuracy <- function(correct.vcf, call.vcf) {
         quality       = qualities
     )
 }
+
+
+pop.to.geno.matrix <- function(pop) {
+    reduce.member <- function(member) {
+        member$cA + member$cB
+    }
+    do.call(rbind, lapply(pop, reduce.member))
+}
+
+
+simulate.ril.geno.matrix <- function(n.samples, genetic.dists, n.gen) {
+    pop.to.geno.matrix(create.ril.pop(n.gen, n.samples, genetic.dists))
+}
+
+
+pheno.from.geno <- function(geno, betas, baseline, sd, n.sim, seed=NULL) {
+    ## SNPs are columns in geno and plants are rows
+    ## length(betas) should be length(SNPS)=ncol(geno) and are effects
+    ## baseline
+
+    if (length(baseline) != 1)
+        stop("There should only be one baseline value")
+    if (length(sd) != 1)
+        stop("There should only be one standard deviation")
+    if (length(betas) != ncol(geno))
+        stop("length of betas and ncol of geno should be equal")
+
+    pheno.means <- geno %*% (betas/2) + baseline
+
+    observed.phenos <- function() {
+        rnorm(n=length(pheno.means),
+              mean=pheno.means,
+              sd=sd)
+    }
+
+    ## allow setting random generator seed to get the same result every time for
+    ## testing
+    if (! is.null(seed))
+        set.seed(seed)
+
+    pheno.types <- replicate(n.sim, observed.phenos())
+
+    colnames(pheno.types) <- paste0("sim_", seq(ncol(pheno.types)))
+    rownames(pheno.types) <- rownames(geno)
+
+    pheno.types
+}
+
+
+test.pheno.creation <- function(n.samples, genetic.dists, n.gen, betas, n.sims, baseline=0, sd=1) {
+    pop <- simulate.ril.geno.matrix(n.samples, genetic.dists, n.gen)
+    ## remove parents from population
+    pop <- pop[3:nrow(pop), ]
+    colnames(pop) <- paste0("loc_", seq(ncol(pop)))
+    rownames(pop) <- paste0("F", n.gen, "_", seq(nrow(pop)))
+
+    message("Here is the population:")
+    print(pop)
+
+    phenos <- pheno.from.geno(pop, betas, baseline, sd, n.sims)
+
+    message("Here are the phenos:")
+    print(phenos)
+}
+
+
