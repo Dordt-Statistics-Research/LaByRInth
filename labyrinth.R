@@ -90,12 +90,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
 
     ## transition probability code
     trans.file <- paste0("./transition-structures-f", generation, ".rds")
-    ## if (file.exists(trans.file)) {
-    ##     timer <- new.timer()
-    ##     display(0, "Loading transition probabilities")
-    ##     transition.structures <- readRDS(trans.file)
-    ##     display(1, "Completed in ", timer(), "\n")
-    ## } else {
     timer <- new.timer()
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf,
@@ -104,18 +98,9 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                        parallel,
                                                        cores)
     display(1, "Completed in ", timer(), "\n")
-    transition.structures <<- transition.structures  # for debugging
-    ##     saveRDS(transition.structures, trans.file)  # for debugging
-    ## }
 
     ## emission probability code
     emm.file <- paste0("./emission-structures-f", generation, ".rds")
-    ## if (file.exists(emm.file)) {
-    ##     timer <- new.timer()
-    ##     display(0, "Loading emission probabilities")
-    ##     emission.structures <- readRDS(emm.file)
-    ##     display(1, "Completed in ", timer(), "\n")
-    ## } else {
     timer <- new.timer()
     display(0, "Generating emission probabilities")
     emission.structures <- get.emission.structures(vcf,
@@ -126,9 +111,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                    parallel,
                                                    cores)
     display(1, "Completed in ", timer(), "\n")
-    emission.structures <<- emission.structures  # for debugging
-    ##     saveRDS(emission.structures, emm.file)  # for debugging
-    ## }
 
     ## imputation code
     timer <- new.timer()
