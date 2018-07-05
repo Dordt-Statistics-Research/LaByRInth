@@ -146,7 +146,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     vcf <- update.vcf(vcf, imp.res)
     display(1, "Completed in ", timer(), "\n")
 
-    write.vcf(vcf, out.file)
+    write.vcf(vcf, paste0(out.file, ".vcf.gz"))
     display(0, "LaByRInth imputation completed in ", total.timer())
 
 }
