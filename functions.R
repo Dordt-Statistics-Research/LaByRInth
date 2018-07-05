@@ -1375,7 +1375,6 @@ fwd.bkwd <- function(emm, trans) {
     b.probs <- f.probs
 
     start.probs <- rep(1/n.states, n.states)
-    start.probs <- c(0.6, 0.4)                             ##############   REMOVE   ######
     f.probs[, 1] <- start.probs * emm[, 1]
 
     for (site in 2:n.sites) {
@@ -1412,11 +1411,21 @@ fwd.bkwd <- function(emm, trans) {
     f.probs * b.probs / fwd.prob  # implicit return
 }
 
+
+
+getVARIANTS <- function(x) {
+    ## column names are the variants except the first column which is "FORMAT"
+    colnames(x@gt)[-1]
+}
+
+
+
+
 em <- matrix(c(0.5, 0.4, 0.5, 0.1,
                0.1, 0.3, 0.1, 0.6), byrow=T, nrow=2)
-
 tran <- matrix(c(0.7, 0.3,
                  0.4, 0.6), byrow=T, nrow=2)
 trans <- abind(tran, tran, tran, along=3)
-
 fwd.bkwd(em, trans)
+
+

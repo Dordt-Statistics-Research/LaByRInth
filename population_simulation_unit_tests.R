@@ -276,3 +276,46 @@ summary(with(res, gen.type[quality=="skipped"]))  ## 10% of skips are heterozygo
 ## probabilities by 0.05, there are more het calls which makes sense, but there
 ## are fewer correct calls and few partial calls (which also makes sense) and
 ## fewer correct calls and twice as many wrong calls
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Tests for forward-backward algorithm
+source("functions.R")  # need vcf functions
+
+## note: peak=5, trough=0.1, d=5e5 looks similar to current lakin fuller imputation
+sites  <- get.sites("analysis/simulated_population/lakin_fuller_sites/1A.csv")
+n.sites <- length(sites)
+peak <- 5
+trough <- 0.1
+d <- 5e5
+
+recomb.probs <- get.recomb.probs(peak=peak, trough=trough, d=d, sites=sites)
+n.gen <- 5
+n.mem <- 100
+cov <- 0.25
+
+set.seed(1)
+ril.pop <- create.ril.pop(n.gen=n.gen, n.mem=n.mem, recomb.probs)
+full.vcf <- FullPopulationVCF(ril.pop, sites)
+sample.vcf <- SamplePopulationVCF(SamplePopulation(ril.pop, coverage=cov), sites)
+
+
+
+python.print <- function(sample.vcf, variant) {
+    apply(sample.vcf$AD[, variant, ], 2, function(col) {
+        print(paste0(col, collapse=", "))
+    })
+    print(paste0(as.numeric(sample.vcf$variants[, "POS"]), collapse=", "))
+}
+
+python.print(sample.vcf, 3)
