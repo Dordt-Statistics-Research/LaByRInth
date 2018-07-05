@@ -21,7 +21,11 @@ def get_progeny_probs(generation):
     if (generation < 1):
         exit("generation must be 1 or greater")
 
-    # F1 probabilities. Must be heterozygous
+    # F1 probabilities. Must be heterozygous. Row is binary representation of
+    # two sites of homolog 1. Col is binary representation of two sites of
+    # homolog 2. This says that the only two options for the F1 generation are
+    # in a 2-site genome is that homolog 1 is 00 and homolog 2 is 11 or that
+    # homolog 1 is 11 and homolog 2 is 00
     probs = [[0,   0, 0, 1/2],
              [0,   0, 0, 0  ],
              [0,   0, 0, 0  ],
@@ -34,7 +38,19 @@ def get_progeny_probs(generation):
 
 
 def _next_probs_helper(progeny_probs, gen):
-    # set up the symbolic variables
+
+    # Set up the symbolic variables. 'ps' is the probability of each of the four
+    # gamete types for from parent 1 and 'qs' is the probability of each of the
+    # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
+    # identical.
+    #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
+    #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
+    #           in parent 1 and the second allele is from homolog 2 of parent 1
+    #    ps[2]: probability that the first allele of gamete 1 is from homolog 2
+    #           in parent 1 and the second allele is from homolog 1 of parent 1
+    #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
+    #
+    #    qs   : same idea but gamete 2 from parent 2
     p = var("p_%d" % gen)
     q = var("q_%d" % gen)
 
@@ -55,6 +71,15 @@ def _next_probs_helper(progeny_probs, gen):
                  [0,0,0,0],
                  [0,0,0,0]]
 
+    # Next, iterate over every possible 2-site genetic makeup, check the
+    # probability that it occurs in the current generation, then check what
+    # progeny can be produced from such an individual
+
+    # Each genetic individual can be identified by the two homologs where each
+    # homolog is encoded as a value in 0..3 inclusive. The binary representation
+    # of the homolog indicates if the allele is ancestral reference (0) or
+    # ancestral alternate (1).
+
     # for each first possible homolog
     for h1 in range(4):
         # for each second possible homolog
@@ -64,10 +89,11 @@ def _next_probs_helper(progeny_probs, gen):
             prev_prob = progeny_probs[h1][h2]
 
             # define possible gametes that can be produced from the progeny
-            gametes = [h1,
-                      (h1 & 0b10) + (h2 & 0b01),
-                      (h2 & 0b10) + (h1 & 0b01),
-                      h2]
+            # using bitwise selection of the alleles
+            gametes = [h1,                      # associated with ps[0] and qs[0]
+                      (h1 & 0b10) + (h2 & 0b01),# associated with ps[1] and qs[1]
+                      (h2 & 0b10) + (h1 & 0b01),# associated with ps[2] and qs[2]
+                       h2]                      # associated with ps[3] and qs[3]
 
             # for each possible gamete formed under p probabilities
             for i in range(4):
@@ -82,13 +108,21 @@ def _next_probs_helper(progeny_probs, gen):
 
 # The from_to_matrix will be such that if the current state is i, the
 # probability of transitioning to state j is from_to_matrix[i][j]
+
+# i and j are not longer binary encodings of homologs, but are each binary
+# encodings of the two alleles at a given site where order of alleles at a given
+# site matters (because the first site is homolog 1 and the second site is
+# homolog 2). i is for the first of the two sites, and j is for the second of
+# the two sites.
 def get_from_to_matrix(generation):
     prog_probs = get_progeny_probs(generation)
+    # ftmat is from_to_matrix
     ftmat = [[0,0,0,0],
              [0,0,0,0],
              [0,0,0,0],
              [0,0,0,0]]
 
+    # all cases where the first state is 00
     prob0 = prog_probs[0][0] + prog_probs[0][1] + prog_probs[1][0] + prog_probs[1][1]
     if (prob0 == 0):
         prob0 = 1  # if 0 all terms are 0 so dividing by 1 prevents error
@@ -160,7 +194,8 @@ def get_from_to_matrix(generation):
 #              q_4 = r).expand() for entry in row] for row in mat]
 
 
-
+# Each model indicates whether or not crossover is allowed in each gamete for
+# each selfing even that occurs
 def get_all_model_probs(generation):
     r = var("r")
     ps = [var("p_%d" % gen) for gen in range(1,generation)]
@@ -169,7 +204,7 @@ def get_all_model_probs(generation):
     all_vars = ps + qs  # array concatenation
 
     n.selfs = generation - 1  # number of selfing events
-    n.models = 2^len(all_vars)
+    n.models = 2^len(all_vars)  # 2 choices for each var
 
     ftmat = get_from_to_matrix(generation)
 
@@ -247,3 +282,91 @@ def parse_all_model_probs_to_R(generation):
     # print("get.trans.mat.F" + str(generation) + " <- function() {"                             )
     # print("    trans.mat.F" + str(generation)                                                  )
     # print("}"                                                                                  )
+
+
+def condensed_model_probs(generation):
+    probs = get_all_model_probs(generation)
+
+    def mat_sum(mat1, mat2):
+        return [vec_sum(mat1[i], mat2[i]) for i in range(len(mat1))]
+
+    def vec_sum(v1, v2):
+        return [sum(x) for x in zip(v1, v2)]
+
+    summed = reduce(mat_sum, probs)
+
+    return rec_apply(lambda x: x / len(probs), summed)
+
+
+def rec_apply(fun, data):
+    try:
+        return [rec_apply(fun, x) for x in data]
+    except TypeError:
+        return fun(data)
+
+
+def verify(generation):
+    cond = condensed_model_probs(generation)
+
+    # AA = BB
+    assert bool(cond[0][0] == cond[3][3]), "cond[0][0] == cond[3][3]"
+
+    # AH = HA = BH = HB
+    assert bool(cond[0][1] == cond[0][2]), "cond[0][1] == cond[0][2]"
+    assert bool(cond[0][1] == cond[1][0]), "cond[0][1] == cond[1][0]"
+    assert bool(cond[0][1] == cond[2][0]), "cond[0][1] == cond[2][0]"
+    assert bool(cond[0][1] == cond[1][3]), "cond[0][1] == cond[1][3]"
+    assert bool(cond[0][1] == cond[2][3]), "cond[0][1] == cond[2][3]"
+    assert bool(cond[0][1] == cond[3][1]), "cond[0][1] == cond[3][1]"
+    assert bool(cond[0][1] == cond[3][2]), "cond[0][1] == cond[3][2]"
+
+    # HH = HH
+    assert bool(cond[1][1] == cond[2][2]), "cond[1][1] == cond[2][2]"
+    assert bool(cond[1][2] == cond[2][1]), "cond[1][1] == cond[1][2]"
+
+    # AB = BA
+    assert bool(cond[0][3] == cond[3][0]), "cond[0][3] == cond[3][0]"
+
+
+def get_generalized_trans_probs(generation):
+    # get a list of progeny probabilities for each generation
+    def get_all_model_progeny_probs(generation):
+        r = var("r")
+        ps = [var("p_%d" % gen) for gen in range(1,generation)]
+        qs = [var("q_%d" % gen) for gen in range(1, generation)]
+
+        all_vars = ps + qs  # array concatenation
+
+        n.selfs = generation - 1  # number of selfing events
+        n.models = 2^len(all_vars)  # 2 choices for each var
+
+        ftmat = get_progeny_probs(generation)
+
+        def probs(model, all_vars, ftmat):
+            dictionary = {all_vars[i]: r if (model & 2^i) else 0 for i in range(len(all_vars))}
+            return [[entry.subs(dictionary).expand() for entry in row] for row in ftmat]
+
+        return [probs(model, all_vars, ftmat) for model in range(n.models)]
+
+    def prog_probs_to_general_transition_probs(p):
+        return [
+            # A to A and B to B
+            p[0][0] + p[3][3],
+            # H to H
+            p[0][3] + p[1][2] + p[2][1] + p[3][0],
+            # A to H, H to A, B to H, and H to B
+            p[0][1] + p[0][2] + p[1][0] + p[1][3] + p[2][0] + p[2][3] + p[3][1] + p[3][2],
+            # A to B and B to A
+            p[1][1] + p[2][2]
+        ]
+
+    # main function
+    gen_trans_probs = map(
+        prog_probs_to_general_transition_probs,
+        get_all_model_progeny_probs(generation)
+    )
+    # sum over the ith entry in each element of gen_trans_probs
+    summed = [sum(x) for x in zip(*gen_trans_probs)]
+    return rec_apply(lambda x: x/len(gen_trans_probs), summed)
+
+
