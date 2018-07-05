@@ -192,14 +192,16 @@ parent.hom.and.poly <- function(vcf, parents) {
         numeric!=0
 
     if (length(parents) != 2) {
-        stop("Lenght of parent must be 2")
+        stop("Length of parents must be 2")
     }
     par.mat <- getAD(vcf)[ , parents]
     apply(par.mat, 1, function(row) {
-        (n.zeros(ad.to.num(row[1])) > 0
-            && n.zeros(ad.to.num(row[2])) > 0
-            && ! any(nonzero(ad.to.num(row[1]))
-                     & nonzero(ad.to.num(row[2]))))
+        (n.zeros(ad.to.num(row[1])) > 0          # at least one allele not read in P1
+            && n.zeros(ad.to.num(row[2])) > 0    # at least one allele not read in P2
+            && ! any(nonzero(ad.to.num(row[1])) & nonzero(ad.to.num(row[2]))) # no common reads
+            && n.zeros(ad.to.num(row[1])) != 2    # TODO(Jason): remove condition and impute parents
+            && n.zeros(ad.to.num(row[2])) != 2    # TODO(Jason): remove condition and impute parents
+        )
     })
 }
 
