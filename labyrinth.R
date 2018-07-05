@@ -24,9 +24,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              read.err=0.05, geno.err=0.05,
                              recomb.dist=1e6, parallel=TRUE,
                              cores=4) {
-
-    display(0, "Test Version 2.0.1")
-
     ## begin timer
     total.timer <- new.timer()
     print.labyrinth.header()
