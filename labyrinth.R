@@ -23,7 +23,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              calc.posteriors=TRUE,
                              read.err=0.05, geno.err=0.05,
                              recomb.dist=1e6, parallel=TRUE,
-                             cores=4, quiet=FALSE) {
+                             cores=4) {
 
     display(0, "Test Version 2.0.1")
 
