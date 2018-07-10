@@ -32,12 +32,12 @@ def get_progeny_probs(generation):
              [1/2, 0, 0, 0  ]]
 
     for gen in range(1, generation):
-        probs = _next_probs_helper(probs, gen)
+        probs = _next_probs_helper(probs)
 
     return probs
 
 
-def _next_probs_helper(progeny_probs, gen):
+def _next_probs_helper(progeny_probs):
 
     # Set up the symbolic variables. 'ps' is the probability of each of the four
     # gamete types for from parent 1 and 'qs' is the probability of each of the
@@ -51,19 +51,13 @@ def _next_probs_helper(progeny_probs, gen):
     #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
     #
     #    qs   : same idea but gamete 2 from parent 2
-    p = var("p_%d" % gen)
-    q = var("q_%d" % gen)
+    r = var("r")
 
     # set up the probabilities of recombination
-    ps = [1/2 * (1-p),
-          1/2 * p,
-          1/2 * p,
-          1/2 * (1-p)]
-
-    qs = [1/2 * (1-q),
-          1/2 * q,
-          1/2 * q,
-          1/2 * (1-q)]
+    rs = [1/2 * (1-r),
+          1/2 * r,
+          1/2 * r,
+          1/2 * (1-r)]
 
     # initiate the next progeny probabilities
     new_probs = [[0,0,0,0],
@@ -101,7 +95,7 @@ def _next_probs_helper(progeny_probs, gen):
                 # for each possible gamete formed under q probabilities
                 for j in range(4):
                     g2 = gametes[j] # new gamete 2
-                    new_probs[g1][g2] += ps[i]*qs[j]*prev_prob
+                    new_probs[g1][g2] += rs[i]*rs[j]*prev_prob
 
     return new_probs
 
@@ -114,8 +108,7 @@ def _next_probs_helper(progeny_probs, gen):
 # site matters (because the first site is homolog 1 and the second site is
 # homolog 2). i is for the first of the two sites, and j is for the second of
 # the two sites.
-def get_from_to_matrix(generation):
-    prog_probs = get_progeny_probs(generation)
+def get_from_to_matrix(generation, prog_probs):
     # ftmat is from_to_matrix
     ftmat = [[0,0,0,0],
              [0,0,0,0],
@@ -165,67 +158,43 @@ def get_from_to_matrix(generation):
     return ftmat
 
 
-# def eval_mat(mat, ps, qs):
-#     return [[entry.subs(p_1 = ps[0],
-#                         p_2 = ps[1],
-#                         p_3 = ps[2],
-#                         p_4 = ps[3],
-#                         q_1 = qs[0],
-#                         q_2 = qs[1],
-#                         q_3 = qs[2],
-#                         q_4 = qs[3]) for entry in row] for row in mat]
-
-
-# def eval_mat(mat, ps, qs):
-#     return [[entry.subs(p_1 = ps[0],
-#                         p_2 = ps[1],
-#                         q_1 = qs[0],
-#                         q_2 = qs[1]) for entry in row] for row in mat]
-
-
-# var('r')
-# [[entry.subs(p_1 = r,
-#              p_2 = r,
-#              p_3 = r,
-#              p_4 = r,
-#              q_1 = r,
-#              q_2 = r,
-#              q_3 = r,
-#              q_4 = r).expand() for entry in row] for row in mat]
-
-
-# Each model indicates whether or not crossover is allowed in each gamete for
-# each selfing even that occurs
-def get_all_model_probs(generation):
-    r = var("r")
-    ps = [var("p_%d" % gen) for gen in range(1,generation)]
-    qs = [var("q_%d" % gen) for gen in range(1, generation)]
-
-    all_vars = ps + qs  # array concatenation
-
-    n.selfs = generation - 1  # number of selfing events
-    n.models = 2^len(all_vars)  # 2 choices for each var
-
-    ftmat = get_from_to_matrix(generation)
-
-    def probs(model, all_vars, ftmat):
-        dictionary = {all_vars[i]: r if (model & 2^i) else 0 for i in range(len(all_vars))}
-        return [[entry.subs(dictionary).expand() for entry in row] for row in ftmat]
-
-    return [probs(model, all_vars, ftmat) for model in range(n.models)]
-
-
-def parse_all_model_probs_to_R(generation):
+def parse_probs_to_R(generation):
     '''This function will print to the console the code for an R file so that the
     transition probabilities for an F{generation} can be calculated under each
     of the recombination models.
     '''
 
-    if (generation < 2):
-        exit("can only generate model probs for F2 and beyond")
+    if (generation < 1):
+        exit("can only generate model probs for F1 and beyond")
 
-    model_probs_list = get_all_model_probs(generation)
-    last_model = len(model_probs_list) - 1
+    ftmat = rec_apply(expand, get_from_to_matrix(generation, get_progeny_probs(generation)))
+    general = rec_apply(expand, get_generalized_trans_probs(generation))
+
+    def print_matrix(m):
+        print("    matrix(c(")
+
+        last_row = len(m) - 1
+        for j, row in enumerate(m):
+            trailing = "," if not j==last_row else ""
+
+            print("        " + ", ".join([str(x) for x in row]) + trailing)
+
+        print("    ), nrow=" +
+              str(len(m)) +
+              ", ncol=" +
+              str(len(m[0])) +
+              ", byrow=T)")
+
+
+    def print_vector(v):
+        names = ["AA", "HH", "AH", "AB"]
+        print("    c(")
+        last_elem = len(v) - 1
+        for i, elem in enumerate(v):
+            trailing = "," if not i==last_elem else ""
+            print("        " + names[i] + " = " + str(elem) + trailing)
+        print("    )")
+
 
     print("## Copyright 2017 Jason Vander Woude and Nathan Ryder"                               )
     print("##"                                                                                  )
@@ -245,7 +214,7 @@ def parse_all_model_probs_to_R(generation):
     print("## This file is auto-generated by multi-model-symbolics.sage for F" + str(generation))
     print("## generation plants. To generate a similar file for any generation of"              )
     print("## recombinant inbred line (RIL) plants, load this SAGE file in a SAGE"              )
-    print("## interpreter and run the function 'parse_all_model_probs_to_R' with the single"    )
+    print("## interpreter and run the function 'parse_probs_to_R' with the single"              )
     print("## parameter being the generation of the plants where a value of 2 corresponds"      )
     print("## to F2, 3 corresponds to F3, etc. Running the function will print the required"    )
     print("## text for the R file to the console where it must be copied and pasted into a"     )
@@ -254,48 +223,17 @@ def parse_all_model_probs_to_R(generation):
     print("## To download SAGE, visit https://www.sagemath.org/download.html"                   )
     print(""                                                                                    )
     print(""                                                                                    )
-    print("## This function will return a list of transition matrices with one list entry"      )
-    print("## for each of the 4^(generation - 1) recomination models."                          )
+    print("## There is a seperate function for each file because at runtime, only one"          )
+    print("## function will be needed, so there is no need to source to code for all other"     )
+    print("## generations"                                                                      )
     print(""                                                                                    )
-    print("get.all.model.trans.F" + str(generation) + " <- function() {"                        )
-    print(""                                                                                    )
-    print("    list(")
-
-    for i, model_probs in enumerate(model_probs_list):
-        list_sep = "," if not i==last_model else ""
-
-        print("        function (r) {")
-        print("            matrix(c(")
-
-        last_row = len(model_probs) - 1
-        for j, row in enumerate(model_probs):
-            trailing = "," if not j==last_row else ""
-
-            print("                " + ", ".join([str(x) for x in row]) + trailing)
-
-        print("            ), nrow=4, ncol=4, byrow=T)}" + list_sep + "\n")
-
-    print("    )")
+    print("get.trans <- function(r) {")
+    print_matrix(ftmat)
     print("}")
-    # print(""                                                                                   )
-    # print(""                                                                                   )
-    # print("get.trans.mat.F" + str(generation) + " <- function() {"                             )
-    # print("    trans.mat.F" + str(generation)                                                  )
-    # print("}"                                                                                  )
-
-
-def condensed_model_probs(generation):
-    probs = get_all_model_probs(generation)
-
-    def mat_sum(mat1, mat2):
-        return [vec_sum(mat1[i], mat2[i]) for i in range(len(mat1))]
-
-    def vec_sum(v1, v2):
-        return [sum(x) for x in zip(v1, v2)]
-
-    summed = reduce(mat_sum, probs)
-
-    return rec_apply(lambda x: x / len(probs), summed)
+    print("")
+    print("get.gen.trans <- function(r) {")
+    print_vector(general)
+    print("}")
 
 
 def rec_apply(fun, data):
@@ -305,48 +243,30 @@ def rec_apply(fun, data):
         return fun(data)
 
 
-def verify(generation):
-    cond = condensed_model_probs(generation)
+# def verify(generation):
+#     cond = condensed_model_probs(generation)
 
-    # AA = BB
-    assert bool(cond[0][0] == cond[3][3]), "cond[0][0] == cond[3][3]"
+#     # AA = BB
+#     assert bool(cond[0][0] == cond[3][3]), "cond[0][0] == cond[3][3]"
 
-    # AH = HA = BH = HB
-    assert bool(cond[0][1] == cond[0][2]), "cond[0][1] == cond[0][2]"
-    assert bool(cond[0][1] == cond[1][0]), "cond[0][1] == cond[1][0]"
-    assert bool(cond[0][1] == cond[2][0]), "cond[0][1] == cond[2][0]"
-    assert bool(cond[0][1] == cond[1][3]), "cond[0][1] == cond[1][3]"
-    assert bool(cond[0][1] == cond[2][3]), "cond[0][1] == cond[2][3]"
-    assert bool(cond[0][1] == cond[3][1]), "cond[0][1] == cond[3][1]"
-    assert bool(cond[0][1] == cond[3][2]), "cond[0][1] == cond[3][2]"
+#     # AH = HA = BH = HB
+#     assert bool(cond[0][1] == cond[0][2]), "cond[0][1] == cond[0][2]"
+#     assert bool(cond[0][1] == cond[1][0]), "cond[0][1] == cond[1][0]"
+#     assert bool(cond[0][1] == cond[2][0]), "cond[0][1] == cond[2][0]"
+#     assert bool(cond[0][1] == cond[1][3]), "cond[0][1] == cond[1][3]"
+#     assert bool(cond[0][1] == cond[2][3]), "cond[0][1] == cond[2][3]"
+#     assert bool(cond[0][1] == cond[3][1]), "cond[0][1] == cond[3][1]"
+#     assert bool(cond[0][1] == cond[3][2]), "cond[0][1] == cond[3][2]"
 
-    # HH = HH
-    assert bool(cond[1][1] == cond[2][2]), "cond[1][1] == cond[2][2]"
-    assert bool(cond[1][2] == cond[2][1]), "cond[1][1] == cond[1][2]"
+#     # HH = HH
+#     assert bool(cond[1][1] == cond[2][2]), "cond[1][1] == cond[2][2]"
+#     assert bool(cond[1][2] == cond[2][1]), "cond[1][1] == cond[1][2]"
 
-    # AB = BA
-    assert bool(cond[0][3] == cond[3][0]), "cond[0][3] == cond[3][0]"
+#     # AB = BA
+#     assert bool(cond[0][3] == cond[3][0]), "cond[0][3] == cond[3][0]"
 
 
 def get_generalized_trans_probs(generation):
-    # get a list of progeny probabilities for each generation
-    def get_all_model_progeny_probs(generation):
-        r = var("r")
-        ps = [var("p_%d" % gen) for gen in range(1,generation)]
-        qs = [var("q_%d" % gen) for gen in range(1, generation)]
-
-        all_vars = ps + qs  # array concatenation
-
-        n.selfs = generation - 1  # number of selfing events
-        n.models = 2^len(all_vars)  # 2 choices for each var
-
-        ftmat = get_progeny_probs(generation)
-
-        def probs(model, all_vars, ftmat):
-            dictionary = {all_vars[i]: r if (model & 2^i) else 0 for i in range(len(all_vars))}
-            return [[entry.subs(dictionary).expand() for entry in row] for row in ftmat]
-
-        return [probs(model, all_vars, ftmat) for model in range(n.models)]
 
     def prog_probs_to_general_transition_probs(p):
         return [
@@ -360,13 +280,4 @@ def get_generalized_trans_probs(generation):
             p[1][1] + p[2][2]
         ]
 
-    # main function
-    gen_trans_probs = map(
-        prog_probs_to_general_transition_probs,
-        get_all_model_progeny_probs(generation)
-    )
-    # sum over the ith entry in each element of gen_trans_probs
-    summed = [sum(x) for x in zip(*gen_trans_probs)]
-    return rec_apply(lambda x: x/len(gen_trans_probs), summed)
-
-
+    return prog_probs_to_general_transition_probs(get_progeny_probs(generation))

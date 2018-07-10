@@ -89,7 +89,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
 
 
     ## transition probability code
-    trans.file <- paste0("./transition-structures-f", generation, ".rds")
     timer <- new.timer()
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf,
@@ -100,7 +99,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(1, "Completed in ", timer(), "\n")
 
     ## emission probability code
-    emm.file <- paste0("./emission-structures-f", generation, ".rds")
     timer <- new.timer()
     display(0, "Generating emission probabilities")
     emission.structures <- get.emission.structures(vcf,
@@ -292,7 +290,6 @@ viterbi <- function(emm, trans) {
     start.probs <- log(rep(1/n.states, n.states))
     probs <- start.probs + log(emm[, 1])
 
-    STOP <- 27
     for (site in 2:n.sites) {
         t.index <- site - 1  # transition structure index
         prev.site <- site - 1
@@ -323,7 +320,13 @@ viterbi <- function(emm, trans) {
 ## the chromosome, and the second dimension corresponds to the sample. reads
 ## should be a vector of strings where each string is a numeric value followed
 ## by a comma and another numeric value. This is the format that the vcfR
-## package stores the reads in.
+## package stores the reads in. Computing all of the emission probabilities
+## before they are needed may use more memory than if they were computed as
+## needed; the reason for doing all of them before imputing is because in an
+## earlier version of the code, the data was imputed under a variety of
+## different models, and each model could utilize the same emission
+## probabilities, so it was faster to compute all of the emission probabilities
+## only once.
 get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parallel=F, cores=1) {
 
     ## determine at which sites parent 1 is reference
@@ -463,40 +466,35 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
 
     listapply <- get.lapply(parallel, cores)
 
-    source(paste0("./new-transition-probs/F", generation, ".R"))
-    all.model.trans <- do.call(paste0("get.all.model.trans.F", generation), list())
-
-    phys.recomb.prob <- function(dist, recomb.dist) {
-        ## this is twice the value that LB-Impute used
-        (1 - exp(-1.0 * dist / recomb.dist))
+    recomb.prob <- function(dist, recomb.dist) {
+        (1 - exp(-1.0 * dist / recomb.dist)) / 2
     }
 
+    ## get.trans and get.gen.trans will be loaded
+    source(paste0("./new-transition-probs/F", generation, ".R"))
 
-    trans.probs <- function(chrom, model) {
+    trans.probs <- function(chrom) {
         positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
         distances <- diff(positions)  # difference b/w successive positions
 
-        phys.recomb.probs <- lapply(distances, phys.recomb.prob, recomb.dist)
+        phys.recomb.probs <- lapply(distances, recomb.prob, recomb.dist)
 
-        trans.matrices <- lapply(phys.recomb.probs, function(phys.r.prob) {
-            ## each element of list all.model.trans is a function of
-            ## phsyical recombination distance
-            all.model.trans[[model]](phys.r.prob)
-        })
+        trans.matrices <- lapply(phys.recomb.probs, get.trans)
 
         ## helper code for running do.call(abind, ...)
+        ##TODO(Jason): move to main function abind3
         abind.args <- c(
             list(along = 3),
             trans.matrices
         )
 
-        do.call(abind, abind.args)
+        result <- do.call(abind, abind.args)
+        result[result < 0] <- 0  # handle numerical errors
+        result
     }
 
     chroms <- getCHROM(vcf)
     u.chroms <- unique(chroms)
-    n.selfings <- generation - 1
-    models <- 1:(4^n.selfings)
 
 
     ## Progress bar code
@@ -505,7 +503,7 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     thefifo <- ProgressMonitor(progress.env)
     assign("progress", 0.0, envir=progress.env)
     prog.env <- progress.env
-    n.jobs <- length(u.chroms) * length(models)
+    n.jobs <- length(u.chroms)
     ## -------------------------------------------------------------------------
 
     ## -------------------------------------------------------------------------
@@ -517,24 +515,20 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
     ## Progress bar code
 
     ret.val <- lapply(u.chroms, function(chrom) {
-        ret.val.2  <- listapply(models, function(model) {
 
-            ret.val.3 <- trans.probs(chrom, model)
+        ret.val.2 <- trans.probs(chrom)
 
+        ## Progress bar code
+        ## -----------------------------------------------------------------
+        writeBin(1/n.jobs, thefifo)  # update the progress bar info
+        if (!parallel) {  # if running in serial mode
+            prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+        }  # else the forked process handles this
+        ## -----------------------------------------------------------------
+        ## Progress bar code
 
-            ## Progress bar code
-            ## -----------------------------------------------------------------
-            writeBin(1/n.jobs, thefifo)  # update the progress bar info
-            if (!parallel) {  # if running in serial mode
-                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
-            }  # else the forked process handles this
-            ## -----------------------------------------------------------------
-            ## Progress bar code
-
-            ret.val.3
-        })
-        names(ret.val.2) <- NULL  # just to be clear the models aren't named
         ret.val.2
+
     })
 
 
@@ -579,33 +573,25 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel,
 
         if (use.fwd.bkwd || calc.posteriors) {
             if (sample == parents[1]) {
-                normalized <- rbind(rep(1, n.sites),
-                                    0,
-                                    0,
-                                    0)
+                posterior.mat <- rbind(rep(1, n.sites),
+                                       0,
+                                       0,
+                                       0)
             } else if (sample == parents[2]) {
-                normalized <- rbind(0,
-                                    0,
-                                    0,
-                                    rep(1, n.sites))
+                posterior.mat <- rbind(0,
+                                       0,
+                                       0,
+                                       rep(1, n.sites))
             } else {
                 emm <- emm.structures[[chrom]][[sample]]
-                model.trans <- trans.structures[[chrom]]
-                n.models <- length(model.trans)
+                trans <- trans.structures[[chrom]]
 
-                list.of.posterior.matrices <-
-                    lapply(model.trans, function(trans) {
-                        fwd.bkwd(emm, trans)
-                    })
-
-                summed.posteriors <- Reduce(`+`, list.of.posterior.matrices)
-                normalized <- 1/n.models * summed.posteriors
-
+                posterior.mat <- fwd.bkwd(emm, trans)
             }
 
-            ref <- ifelse(p1.ref, normalized[1, ], normalized[4, ])
-            alt <- ifelse(p1.ref, normalized[4, ], normalized[1, ])
-            het <- normalized[2, ] + normalized[3, ]
+            ref <- ifelse(p1.ref, posterior.mat[1, ], posterior.mat[4, ])
+            alt <- ifelse(p1.ref, posterior.mat[4, ], posterior.mat[1, ])
+            het <- posterior.mat[2, ] + posterior.mat[3, ]
 
             posteriors <- rbind(ref, het, alt)
 
@@ -636,19 +622,10 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel,
                 best.path <- rep(4, n.sites)
             } else {
                 emm <- emm.structures[[chrom]][[sample]]
-                model.trans <- trans.structures[[chrom]]
-                n.models <- length(model.trans)
+                trans <- trans.structures[[chrom]]
 
-                list.of.paths.and.probs <-
-                    lapply(model.trans, function(trans) {
-                        viterbi(emm, trans)
-                    })
-
-                probs <- unlist(lapply(list.of.paths.and.probs, function(result) {
-                    result$prob
-                }))
-
-                best.path <- list.of.paths.and.probs[[which.max(probs)]]$path
+                path.and.prob <- viterbi(emm, trans)
+                best.path <- path.and.prob$path
                 ## In best.path,
                 ##    1: parent 1
                 ##    2: het type 1
@@ -834,7 +811,7 @@ getAD <- function(vcf) {
 
 getGT <- function(vcf) {
     gt <- extract.gt(vcf, "GT")
-    gt[is.na(gt)] <- "0/0"  # replace NA entries
+    gt[is.na(gt)] <- "./."  # replace NA entries
     gt
 }
 
@@ -847,6 +824,14 @@ getGP <- function(vcf) {
 ## convert string representation to numeric vector
 ad.to.num <- function(str) {
     as.numeric(str.split(str, ","))
+
+}
+
+
+## convert string representation to numeric vector
+gt.to.num <- function(str) {
+    str <- gsub("\\|", "/", str)  # replace '|' with '/'
+    as.numeric(str.split(str, "/"))
 
 }
 
