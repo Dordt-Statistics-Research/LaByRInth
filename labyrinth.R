@@ -831,7 +831,7 @@ ad.to.num <- function(str) {
 ## convert string representation to numeric vector
 gt.to.num <- function(str) {
     str <- gsub("\\|", "/", str)  # replace '|' with '/'
-    as.numeric(str.split(str, "/"))
+    suppressWarnings(as.numeric(str.split(str, "/")))
 
 }
 

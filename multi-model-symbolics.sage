@@ -281,3 +281,29 @@ def get_generalized_trans_probs(generation):
         ]
 
     return prog_probs_to_general_transition_probs(get_progeny_probs(generation))
+
+
+# compute the probability of an odd number of recombination between distant
+# sites given the probability of an odd number of recombinations between every
+# pair of sequential sites betweeen
+def compute_distant_recomb(n):
+    rs = [var("r%d" % i) for i in range(1,n+1)]
+    expr = 0
+
+    ## for each possible odd-even recombination configurations
+    for i in range(2^n):
+        ## the binary representation of i will represent which of the n
+        ## recombination variables should be odd
+        if (bin(i).count("1") % 2 == 1):
+            ## There must be an odd number of recombination variables that allow
+            ## an odd number of recombinations
+            term = 1
+            for bit in range(n):
+                ## if bit is 1 (i.e. assume odd num recombs for this recomb var)
+                if (2**bit & i):
+                    term *= rs[bit]
+                else:
+                    term *= (1 - rs[bit])
+            expr += term
+
+    return expr.expand()
