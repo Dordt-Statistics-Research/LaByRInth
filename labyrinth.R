@@ -748,10 +748,10 @@ save.trans <- function(data, chrom, model) {
 }
 
 
-get.trans <- function(data, chrom, model) {
-    dir <- "./.saved_trans"
-    readRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
-}
+## get.trans <- function(data, chrom, model) {
+##     dir <- "./.saved_trans"
+##     readRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
+## }
 
 
 is.parent.ref <- function(vcf, parent) {
