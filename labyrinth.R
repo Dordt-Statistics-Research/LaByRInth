@@ -481,14 +481,7 @@ get.transition.structures <- function(vcf, generation, recomb.dist, parallel, co
 
         trans.matrices <- lapply(phys.recomb.probs, get.trans)
 
-        ## helper code for running do.call(abind, ...)
-        ##TODO(Jason): move to main function abind3
-        abind.args <- c(
-            list(along = 3),
-            trans.matrices
-        )
-
-        result <- do.call(abind, abind.args)
+        result <- do.call(abind3, trans.matrices)
         result[result < 0] <- 0  # handle numerical errors
         result
     }
@@ -550,14 +543,6 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parallel,
     listapply <- get.lapply(parallel, cores)
 
     p1.is.ref <- is.parent.ref(vcf, parents[1])
-
-    abind1 <- function(...) {
-        abind(..., along=1)
-    }
-
-    abind2 <- function(...) {
-        abind(..., along=2)
-    }
 
     chroms <- getCHROM(vcf)
     u.chroms <- unique(chroms)
@@ -848,6 +833,24 @@ all.bool.vec <- function(n) {
     lapply(0:(2^n-1), function(config) {
         as.logical(intToBits(config)[1:n])
     })
+}
+
+
+## The abind{i} functions are useful for cleaning the code for do.call(abind,
+## some.list) calls because otherwise the 'along' argument has to be appended to
+## the 'some.list' argument
+abind1 <- function(...) {
+    abind(..., along=1)
+}
+
+
+abind2 <- function(...) {
+    abind(..., along=2)
+}
+
+
+abind3 <- function(...) {
+    abind(..., along=3)
 }
 
 
