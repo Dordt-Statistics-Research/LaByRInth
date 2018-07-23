@@ -22,7 +22,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              use.fwd.bkwd=FALSE, use.viterbi=TRUE,
                              calc.posteriors=TRUE,
                              read.err=0.05, geno.err=0.05,
-                             recomb.dist=1e6, parallel=TRUE,
+                             recomb.probs, parallel=TRUE,
                              cores=4) {
     ## begin timer
     total.timer <- new.timer()
@@ -93,7 +93,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf,
                                                        generation,
-                                                       recomb.dist,
+                                                       recomb.probs,
                                                        parallel,
                                                        cores)
     display(1, "Completed in ", timer(), "\n")
@@ -126,6 +126,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     write.vcf(vcf, paste0(out.file, ".vcf.gz"))
     display(0, "LaByRInth imputation completed in ", total.timer())
 
+    invisible(vcf)
 }
 
 
@@ -459,27 +460,29 @@ get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parall
 }
 
 
-get.transition.structures <- function(vcf, generation, recomb.dist, parallel, cores) {
+get.transition.structures <- function(vcf, generation, recomb.probs, parallel, cores) {
 
     states <- 1:4
     names(states) <- c("P1", "H1", "H2", "P2")
 
     listapply <- get.lapply(parallel, cores)
 
-    recomb.prob <- function(dist, recomb.dist) {
-        (1 - exp(-1.0 * dist / recomb.dist)) / 2
-    }
+    ## recomb.prob <- function(dist, recomb.dist) {
+    ##     (1 - exp(-1.0 * dist / recomb.dist)) / 2
+    ## }
 
     ## get.trans and get.gen.trans will be loaded
     source(paste0("./new-transition-probs/F", generation, ".R"))
 
     trans.probs <- function(chrom) {
-        positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
-        distances <- diff(positions)  # difference b/w successive positions
+        ## positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
+        ## distances <- diff(positions)  # difference b/w successive positions
 
-        phys.recomb.probs <- lapply(distances, recomb.prob, recomb.dist)
+        ## phys.recomb.probs <- lapply(distances, recomb.prob, recomb.dist)
 
-        trans.matrices <- lapply(phys.recomb.probs, get.trans)
+        ## trans.matrices <- lapply(phys.recomb.probs, get.trans)
+
+        trans.matrices <- lapply(recomb.probs[[chrom]], get.site.pair.trans)
 
         result <- do.call(abind3, trans.matrices)
         result[result < 0] <- 0  # handle numerical errors
@@ -949,12 +952,12 @@ print.labyrinth.header <- function() {
     ## the image looks funny because '\' in the displayed image must be '\\' in the code
     writeLines("")
     writeLines(" _____________________________________________________________________")
-    writeLines("|          __          ____        _____  _____                       |")
-    writeLines("|         / /         / __ \\      / ___ \\/_  _/                       |")
-    writeLines("|        / /   ____  / /_/ /_  __/ /__/ / / / __   __________  __     |")
-    writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  __/ / / /  | / /_  __/ /_/ /     |")
-    writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\ _/ /_/ /||/ / / / / __  /      |")
-    writeLines("|     /_____/_/ /_/______/  /_/_/  /_/_____/_/ |__/ /_/ /_/ /_/       |")
+    writeLines("|          __          ____        ____  _____                        |")
+    writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
+    writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
+    writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
+    writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
+    writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
     writeLines("|                                                                     |")
     writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
     writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
