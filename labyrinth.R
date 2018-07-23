@@ -961,7 +961,7 @@ print.labyrinth.header <- function() {
     writeLines("| Licensed under the Apache License, Version 2.0                      |")
     writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
     writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
-    writeLines("| Funding recieved from the National Science Foundation (IOS-1238187) |")
+    writeLines("| Funding received from the National Science Foundation (IOS-1238187) |")
     writeLines("|_____________________________________________________________________|")
     writeLines("")
 
