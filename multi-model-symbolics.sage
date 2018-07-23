@@ -26,6 +26,9 @@ def get_progeny_probs(generation):
     # homolog 2. This says that the only two options for the F1 generation are
     # in a 2-site genome is that homolog 1 is 00 and homolog 2 is 11 or that
     # homolog 1 is 11 and homolog 2 is 00
+
+    # probs = [[var("s%d" %(4*i + j)) for j in range(4)] for i in range(4)]
+
     probs = [[0,   0, 0, 1/2],
              [0,   0, 0, 0  ],
              [0,   0, 0, 0  ],
@@ -168,7 +171,7 @@ def parse_probs_to_R(generation):
         exit("can only generate model probs for F1 and beyond")
 
     ftmat = rec_apply(expand, get_from_to_matrix(generation, get_progeny_probs(generation)))
-    general = rec_apply(expand, get_generalized_trans_probs(generation))
+    general = rec_apply(expand, get_site_pair_trans_probs(generation))
 
     def print_matrix(m):
         print("    matrix(c(")
@@ -231,8 +234,8 @@ def parse_probs_to_R(generation):
     print_matrix(ftmat)
     print("}")
     print("")
-    print("get.gen.trans <- function(r) {")
-    print_vector(general)
+    print("get.site.pair.trans <- function(r) {")
+    print_matrix(general)
     print("}")
 
 
@@ -280,7 +283,33 @@ def get_generalized_trans_probs(generation):
             p[1][1] + p[2][2]
         ]
 
-    return prog_probs_to_general_transition_probs(get_progeny_probs(generation))
+    def print_vector(v):
+        print("        c(")
+        last_elem = len(v) - 1
+        for i, elem in enumerate(v):
+            trailing = "," if not i==last_elem else ""
+            print("            function(r){" + str(elem) + "}" + trailing)
+        print("        )")
+
+    result = rec_apply(expand,
+        prog_probs_to_general_transition_probs(get_progeny_probs(generation)))
+
+    print_vector(result)
+
+
+def get_site_pair_trans_probs(generation):
+
+    def prog_probs_to_4_state_transition_probs(p):
+        # from row to column
+        return [
+            #  P1          H1          H2          P2
+            [p[0][0],     p[0][1],     p[1][0],     p[1][1]],
+            [p[0][2],     p[0][3],     p[1][2],     p[1][3]],
+            [p[2][0],     p[2][1],     p[3][0],     p[3][1]],
+            [p[2][2],     p[2][3],     p[3][2],     p[3][3]]
+        ]
+
+    return prog_probs_to_4_state_transition_probs(get_progeny_probs(generation))
 
 
 # compute the probability of an odd number of recombination between distant
@@ -307,3 +336,75 @@ def compute_distant_recomb(n):
             expr += term
 
     return expr.expand()
+
+
+# TODO
+def initial_probs():
+
+    # Set up the symbolic variables. 'ps' is the probability of each of the four
+    # gamete types for from parent 1 and 'qs' is the probability of each of the
+    # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
+    # identical.
+    #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
+    #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
+    #           in parent 1 and the second allele is from homolog 2 of parent 1
+    #    ps[2]: probability that the first allele of gamete 1 is from homolog 2
+    #           in parent 1 and the second allele is from homolog 1 of parent 1
+    #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
+    #
+    #    qs   : same idea but gamete 2 from parent 2
+    r = var("r")
+
+    # set up the probabilities of recombination
+    rs = [1/2 * (1-r),
+          1/2 * r,
+          1/2 * r,
+          1/2 * (1-r)]
+
+    # initiate the next progeny probabilities
+    init_probs = [[0,0,0,0],
+                  [0,0,0,0],
+                  [0,0,0,0],
+                  [0,0,0,0]]
+
+    # Next, iterate over every possible 2-site genetic makeup, check the
+    # probability that it occurs in the current generation, then check what
+    # progeny can be produced from such an individual
+
+    # Each genetic individual can be identified by the two homologs where each
+    # homolog is encoded as a value in 0..3 inclusive. The binary representation
+    # of the homolog indicates if the allele is ancestral reference (0) or
+    # ancestral alternate (1).
+
+    # for each first possible homolog of parent 1
+    for h1 in range(4):
+        # for each second possible homolog of parent 1
+        for h2 in range(4):
+            # for each second possible homolog of parent 2
+            for h3 in range(4):
+                # for each second possible homolog of parent 2
+                for h4 in range(4):
+
+                    # define possible gametes that can be produced from the progeny
+                            # using bitwise selection of the alleles
+                    parent_1_gametes = [h1,                      # associated with ps[0] and qs[0]
+                                        (h1 & 0b10) + (h2 & 0b01),# associated with ps[1] and qs[1]
+                                        (h2 & 0b10) + (h1 & 0b01),# associated with ps[2] and qs[2]
+                                        h2]                      # associated with ps[3] and qs[3]
+
+                    # define possible gametes that can be produced from the progeny
+                    # using bitwise selection of the alleles
+                    parent_2_gametes = [h3,                      # associated with ps[0] and qs[0]
+                                        (h3 & 0b10) + (h4 & 0b01),# associated with ps[1] and qs[1]
+                                        (h4 & 0b10) + (h3 & 0b01),# associated with ps[2] and qs[2]
+                                        h4]                      # associated with ps[3] and qs[3]
+
+                    # for each possible parent 1 gamete
+                    for i in range(4):
+                        g1 = parent_1_gametes[i]     # new gamete 1
+                        # for each possible parent 2 gamete
+                        for j in range(4):
+                            g2 = parent_2_gametes[j] # new gamete 2
+                            init_probs[g1][g2] += rs[i]*rs[j]
+
+                            return init_probs
