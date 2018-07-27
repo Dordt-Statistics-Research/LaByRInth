@@ -29,16 +29,139 @@ def get_progeny_probs(generation):
 
     # probs = [[var("s%d" %(4*i + j)) for j in range(4)] for i in range(4)]
 
-    probs = [[0,   0, 0, 1/2],
-             [0,   0, 0, 0  ],
-             [0,   0, 0, 0  ],
-             [1/2, 0, 0, 0  ]]
+    # Initial symbolic probabilities in the F1 generation. Symbolics allows
+    # setting the F1 progeny probabilities later. While in theory we know what
+    # the F1 progeny should look like, it is possible that the two parents are
+    # not truely homozygous within and polymorphic between at all sites
+    probs = [[var("s%d%d" %(i, j)) for j in range(4)] for i in range(4)]
+
+    # probs = [[0,   0, 0, 1/2],
+    #          [0,   0, 0, 0  ],
+    #          [0,   0, 0, 0  ],
+    #          [1/2, 0, 0, 0  ]]
 
     for gen in range(1, generation):
         probs = _next_probs_helper(probs)
 
     return probs
 
+
+def breed_parents(p1h1, p1h2, p2h1, p2h2):
+    # Set up the symbolic variables. 'ps' is the probability of each of the four
+    # gamete types for from parent 1 and 'qs' is the probability of each of the
+    # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
+    # identical.
+    #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
+    #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
+    #           in parent 1 and the second allele is from homolog 2 of parent 1
+    #    ps[2]: probability that the first allele of gamete 1 is from homolog 2
+    #           in parent 1 and the second allele is from homolog 1 of parent 1
+    #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
+    #
+    #    qs   : same idea but gamete 2 from parent 2
+    r = var("r")
+
+    # set up the probabilities of recombination
+    rs = [1/2 * (1-r),
+          1/2 * r,
+          1/2 * r,
+          1/2 * (1-r)]
+
+    # initiate the next progeny probabilities
+    progeny_probs = [[0,0,0,0],
+                     [0,0,0,0],
+                     [0,0,0,0],
+                     [0,0,0,0]]
+
+    # define possible gametes that can be produced from the progeny
+    # using bitwise selection of the alleles
+    p1gametes = [p1h1,                        # associated with ps[0] and qs[0]
+                (p1h1 & 0b10) + (p1h2 & 0b01),# associated with ps[1] and qs[1]
+                (p1h2 & 0b10) + (p1h1 & 0b01),# associated with ps[2] and qs[2]
+                 p1h2]                        # associated with ps[3] and qs[3]
+
+    p2gametes = [p2h1,                        # associated with ps[0] and qs[0]
+                (p2h1 & 0b10) + (p2h2 & 0b01),# associated with ps[1] and qs[1]
+                (p2h2 & 0b10) + (p2h1 & 0b01),# associated with ps[2] and qs[2]
+                 p2h2]                        # associated with ps[3] and qs[3]
+
+    # for each possible gamete from parent 1
+    for i in range(4):
+        g1 = p1gametes[i]  # new gamete 1
+        # for each possible gamete from parent 2
+        for j in range(4):
+            g2 = p2gametes[j]  # new gamete 2
+            progeny_probs[g1][g2] += rs[i]*rs[j] / 2
+            progeny_probs[g2][g1] += rs[i]*rs[j] / 2
+
+    return progeny_probs
+
+
+def sub_w_parents(data, p1h1, p1h2, p2h1, p2h2):
+    init_progeny_probs = breed_parents(p1h1, p1h2, p2h1, p2h2)
+    d = {var("s%d%d" %(i, j)): init_progeny_probs[i][j] for j in range(4) for i in range(4)}
+
+    return rec_apply(lambda x: x.subs(d).expand(), data)
+
+
+def parse_all_gen_probs_to_R(generation):
+
+    def print_vector(v):
+        print("        c(")
+        last_elem = len(v) - 1
+        for i, elem in enumerate(v):
+            trailing = "," if not i==last_elem else ""
+            print("            function(r){" + str(elem) + "}" + trailing)
+        print("        )")
+
+    def print_matrix(m):
+        print("            matrix(c(")
+
+        last_row = len(m) - 1
+        for j, row in enumerate(m):
+            trailing = "," if not j==last_row else ""
+
+            print("                " + ", ".join([str(x) for x in row]) + trailing)
+
+        print("            ), nrow=" +
+              str(len(m)) +
+              ", ncol=" +
+              str(len(m[0])) +
+              ", byrow=T)")
+
+    # print_matrix(sub_w_parents(get_site_pair_trans_probs(generation),
+    #                      p1h1, p1h2, p2h1, p2h2))
+
+    site_pair_trans_probs = get_site_pair_trans_probs(generation)
+
+    print("site.pair.transition.probs <- list(")
+    last_list = 15  # 16 - 1
+    for marker1 in range(16):
+        print("    list(")
+        for marker2 in range(16):
+            p1h1 = ((marker1 & 0b1000) >> 2) + ((marker2 & 0b1000) >> 3)
+            p1h2 = ((marker1 & 0b0100) >> 1) + ((marker2 & 0b0100) >> 2)
+            p2h1 = ((marker1 & 0b0010) << 0) + ((marker2 & 0b0010) >> 1)
+            p2h2 = ((marker1 & 0b0001) << 1) + ((marker2 & 0b0001) >> 0)
+
+
+            print("        function(r) {")
+            print_matrix(
+                sub_w_parents(
+                    site_pair_trans_probs,
+                    p1h1, p1h2, p2h1, p2h2))
+
+            if marker2 != 15:
+                print("        },\n")
+            else:
+                print("        }")
+
+
+        if marker1 != 15:
+            print("    ),\n")
+        else:
+            print("    )")
+    print(")")
 
 def _next_probs_helper(progeny_probs):
 
@@ -291,10 +414,11 @@ def get_generalized_trans_probs(generation):
             print("            function(r){" + str(elem) + "}" + trailing)
         print("        )")
 
-    result = rec_apply(expand,
-        prog_probs_to_general_transition_probs(get_progeny_probs(generation)))
+    # result = rec_apply(expand,
+    #     prog_probs_to_general_transition_probs(get_progeny_probs(generation)))
 
-    print_vector(result)
+    return prog_probs_to_general_transition_probs(get_progeny_probs(generation))
+
 
 
 def get_site_pair_trans_probs(generation):
@@ -338,73 +462,83 @@ def compute_distant_recomb(n):
     return expr.expand()
 
 
-# TODO
-def initial_probs():
+# # TODO
+# def initial_probs():
 
-    # Set up the symbolic variables. 'ps' is the probability of each of the four
-    # gamete types for from parent 1 and 'qs' is the probability of each of the
-    # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
-    # identical.
-    #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
-    #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
-    #           in parent 1 and the second allele is from homolog 2 of parent 1
-    #    ps[2]: probability that the first allele of gamete 1 is from homolog 2
-    #           in parent 1 and the second allele is from homolog 1 of parent 1
-    #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
-    #
-    #    qs   : same idea but gamete 2 from parent 2
-    r = var("r")
+#     # Set up the symbolic variables. 'ps' is the probability of each of the four
+#     # gamete types for from parent 1 and 'qs' is the probability of each of the
+#     # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
+#     # identical.
+#     #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
+#     #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
+#     #           in parent 1 and the second allele is from homolog 2 of parent 1
+#     #    ps[2]: probability that the first allele of gamete 1 is from homolog 2
+#     #           in parent 1 and the second allele is from homolog 1 of parent 1
+#     #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
+#     #
+#     #    qs   : same idea but gamete 2 from parent 2
+#     r = var("r")
 
-    # set up the probabilities of recombination
-    rs = [1/2 * (1-r),
-          1/2 * r,
-          1/2 * r,
-          1/2 * (1-r)]
+#     # set up the probabilities of recombination
+#     rs = [1/2 * (1-r),
+#           1/2 * r,
+#           1/2 * r,
+#           1/2 * (1-r)]
 
-    # initiate the next progeny probabilities
-    init_probs = [[0,0,0,0],
-                  [0,0,0,0],
-                  [0,0,0,0],
-                  [0,0,0,0]]
+#     # initiate the next progeny probabilities
+#     init_probs = [[0,0,0,0],
+#                   [0,0,0,0],
+#                   [0,0,0,0],
+#                   [0,0,0,0]]
 
-    # Next, iterate over every possible 2-site genetic makeup, check the
-    # probability that it occurs in the current generation, then check what
-    # progeny can be produced from such an individual
+#     # Next, iterate over every possible 2-site genetic makeup, check the
+#     # probability that it occurs in the current generation, then check what
+#     # progeny can be produced from such an individual
 
-    # Each genetic individual can be identified by the two homologs where each
-    # homolog is encoded as a value in 0..3 inclusive. The binary representation
-    # of the homolog indicates if the allele is ancestral reference (0) or
-    # ancestral alternate (1).
+#     # Each genetic individual can be identified by the two homologs where each
+#     # homolog is encoded as a value in 0..3 inclusive. The binary representation
+#     # of the homolog indicates if the allele is ancestral reference (0) or
+#     # ancestral alternate (1).
 
-    # for each first possible homolog of parent 1
-    for h1 in range(4):
-        # for each second possible homolog of parent 1
-        for h2 in range(4):
-            # for each second possible homolog of parent 2
-            for h3 in range(4):
-                # for each second possible homolog of parent 2
-                for h4 in range(4):
+#     # for each first possible homolog of parent 1
+#     for h1 in range(4):
+#         # for each second possible homolog of parent 1
+#         for h2 in range(4):
+#             # for each first possible homolog of parent 2
+#             for h3 in range(4):
+#                 # for each second possible homolog of parent 2
+#                 for h4 in range(4):
 
-                    # define possible gametes that can be produced from the progeny
-                            # using bitwise selection of the alleles
-                    parent_1_gametes = [h1,                      # associated with ps[0] and qs[0]
-                                        (h1 & 0b10) + (h2 & 0b01),# associated with ps[1] and qs[1]
-                                        (h2 & 0b10) + (h1 & 0b01),# associated with ps[2] and qs[2]
-                                        h2]                      # associated with ps[3] and qs[3]
+#                     # define possible gametes that can be produced from the progeny
+#                             # using bitwise selection of the alleles
+#                     parent_1_gametes = [h1,                      # associated with ps[0] and qs[0]
+#                                         (h1 & 0b10) + (h2 & 0b01),# associated with ps[1] and qs[1]
+#                                         (h2 & 0b10) + (h1 & 0b01),# associated with ps[2] and qs[2]
+#                                         h2]                      # associated with ps[3] and qs[3]
 
-                    # define possible gametes that can be produced from the progeny
-                    # using bitwise selection of the alleles
-                    parent_2_gametes = [h3,                      # associated with ps[0] and qs[0]
-                                        (h3 & 0b10) + (h4 & 0b01),# associated with ps[1] and qs[1]
-                                        (h4 & 0b10) + (h3 & 0b01),# associated with ps[2] and qs[2]
-                                        h4]                      # associated with ps[3] and qs[3]
+#                     # define possible gametes that can be produced from the progeny
+#                     # using bitwise selection of the alleles
+#                     parent_2_gametes = [h3,                      # associated with ps[0] and qs[0]
+#                                         (h3 & 0b10) + (h4 & 0b01),# associated with ps[1] and qs[1]
+#                                         (h4 & 0b10) + (h3 & 0b01),# associated with ps[2] and qs[2]
+#                                         h4]                      # associated with ps[3] and qs[3]
 
-                    # for each possible parent 1 gamete
-                    for i in range(4):
-                        g1 = parent_1_gametes[i]     # new gamete 1
-                        # for each possible parent 2 gamete
-                        for j in range(4):
-                            g2 = parent_2_gametes[j] # new gamete 2
-                            init_probs[g1][g2] += rs[i]*rs[j]
+#                     # for each possible parent 1 gamete
+#                     for i in range(4):
+#                         g1 = parent_1_gametes[i]     # new gamete 1
+#                         # for each possible parent 2 gamete
+#                         for j in range(4):
+#                             g2 = parent_2_gametes[j] # new gamete 2
+#                             init_probs[g1][g2] += rs[i]*rs[j]
 
-                            return init_probs
+#                             return init_probs
+
+
+
+def print_vector(v):
+    print("        c(")
+    last_elem = len(v) - 1
+    for i, elem in enumerate(v):
+        trailing = "," if not i==last_elem else ""
+        print("            function(r){" + str(elem) + "}" + trailing)
+    print("        )")

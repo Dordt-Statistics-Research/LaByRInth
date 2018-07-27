@@ -177,6 +177,8 @@ props.from.vcf <- function(vcf, snp1, snp2, n.gen) {
 
 
 est.recombs <- function(pop.ad, n.gen, n.recombs, rerr) {
+    if (n.recombs != 1)
+        stop("invalid n.recombs")
 
     init <- rep(0.1, ncol(pop.ad) - 1)
 
@@ -186,22 +188,27 @@ est.recombs <- function(pop.ad, n.gen, n.recombs, rerr) {
 
         fun <- objective.fun(important.markers, n.gen, rerr)
 
-        ## result <- optim(init[i:(i+n.recombs-1)],
-        ##                 fun,
-        ##                 method="L-BFGS-B",
-        ##                 lower=0,
-        ##                 upper=0.5)
-        ## result <- result$par
+        result <- optim(init[i:(i+n.recombs-1)],
+                        fun,
+                        method="L-BFGS-B",
+                        lower=0,
+                        upper=0.5)
+        result <- result$par
 
-        x <- seq(0, 0.5, 0.01)
-        result <- x[which.max(sapply(x, fun))]
+        x <- seq(0, 0.5, 0.05)
+        result <- x[which.min(sapply(x, fun))]
 
-        c(rep(NA, i-1), result, rep(NA, (ncol(pop.ad) - n.recombs - i)))
+        if (result > 0.5 - 1e-2)
+            print(paste0(ncol(pop.ad), "--", i, ": ", result))
+
+        ## c(rep(NA, i-1), result, rep(NA, (ncol(pop.ad) - n.recombs - i)))
+        result
     }
 
-    df <- do.call(rbind, lapply(1:(ncol(pop.ad) - n.recombs), inter.df))
-    ## print(df)
-    return(apply(df, 2, mean, na.rm=T))
+    ## df <- do.call(rbind, lapply(1:(ncol(pop.ad) - n.recombs), inter.df))
+    ## return(apply(df, 2, mean, na.rm=T))
+
+    sapply(1:(ncol(pop.ad) - 1), inter.df)
 }
 
 
@@ -537,12 +544,15 @@ test.stuff <- function() {
 
     ## LaByRInth recomb estimates vs physical distance
     vcf <- read.vcfR("~/Desktop/LaByRInth-master/out2.vcf.gz")
-    rerr <- 0
+    vcf <- read.vcfR("~/Desktop/LaByRInth-master/Untitled Folder/masked-3-out2.vcf.gz")
+    rerr <- 0.01
     pop.ad <- get.ad.array.w.p1.ref(vcf, c("LAKIN", "FULLER"))
-    lf.indices <- which(rownames(lb.pop.ad) %in% c("LAKIN","FULLER"))
+    lf.indices <- which(rownames(pop.ad) %in% c("LAKIN","FULLER"))
     all.chroms <- getCHROM(vcf)
     chroms <- unique(all.chroms)
-    recomb.ests <- est.recombs(pop.ad, 5, 1, 0)
+    recomb.ests <- lapply(chroms, function(chrom) {
+        est.recombs(pop.ad[, chrom==all.chroms, ], 5, 1, rerr)
+    })
     dists <- diff(getPOS(vcf))
     dists[dists < 0] <- 0
 
@@ -677,6 +687,111 @@ plot.theory <- function(gen) {
 }
 
 
+plot.theory.junk <- function() {
+    gen <- 5
+    ## funs1 <-    matrix(c(
+    ##     function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 2*r^3 + 3/2*r^2 - 15/16*r + 15/32}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 1/2*r^3 - 1/2*r^2 + 11/16*r},
+    ##     function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 7/4*r^3 + 7/8*r^2 - 1/4*r + 1/32}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 3/4*r^3 + 1/8*r^2}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r},
+    ##     function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 3/4*r^3 + 1/8*r^2}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 7/4*r^3 + 7/8*r^2 - 1/4*r + 1/32}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r},
+    ##     function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 1/2*r^3 - 1/2*r^2 + 11/16*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 2*r^3 + 3/2*r^2 - 15/16*r + 15/32}
+    ## ), nrow=4, ncol=4, byrow=T)
+
+
+    ## funs2 <-    matrix(c(
+    ##     function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 1/2*r^3 - 1/2*r^2 + 11/16*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 2*r^3 + 3/2*r^2 - 15/16*r + 15/32},
+    ##     function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 3/4*r^3 + 1/8*r^2}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 7/4*r^3 + 7/8*r^2 - 1/4*r + 1/32}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r},
+    ##     function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 7/4*r^3 + 7/8*r^2 - 1/4*r + 1/32}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 3/4*r^3 + 1/8*r^2}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r},
+    ##     function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 19/8*r^4 - 2*r^3 + 3/2*r^2 - 15/16*r + 15/32}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {-1/4*r^8 + r^7 - 2*r^6 + 5/2*r^5 - 17/8*r^4 + 5/4*r^3 - 1/2*r^2 + 1/8*r}, function(r) {1/4*r^8 - r^7 + 2*r^6 - 5/2*r^5 + 15/8*r^4 - 1/2*r^3 - 1/2*r^2 + 11/16*r}
+    ## ), nrow=4, ncol=4, byrow=T)
+
+    funs1 <-         c(
+            function(r){1/2*r^8 - 2*r^7 + 4*r^6 - 5*r^5 + 19/4*r^4 - 4*r^3 + 3*r^2 - 15/8*r + 15/16},
+            function(r){r^8 - 4*r^7 + 8*r^6 - 10*r^5 + 17/2*r^4 - 5*r^3 + 2*r^2 - 1/2*r + 1/16},
+            function(r){-2*r^8 + 8*r^7 - 16*r^6 + 20*r^5 - 17*r^4 + 10*r^3 - 4*r^2 + r},
+            function(r){1/2*r^8 - 2*r^7 + 4*r^6 - 5*r^5 + 15/4*r^4 - r^3 - r^2 + 11/8*r}
+    )
+
+
+    funs2 <-        c(
+            function(r){1/2*r^10 - 5/2*r^9 + 25/4*r^8 - 10*r^7 + 45/4*r^6 - 35/4*r^5 + 31/8*r^4 + 1/4*r^3 - 59/32*r^2 + 13/8*r},
+            function(r){r^10 - 5*r^9 + 25/2*r^8 - 20*r^7 + 45/2*r^6 - 37/2*r^5 + 45/4*r^4 - 5*r^3 + 25/16*r^2 - 5/16*r + 1/32},
+            function(r){-2*r^10 + 10*r^9 - 25*r^8 + 40*r^7 - 45*r^6 + 37*r^5 - 45/2*r^4 + 10*r^3 - 25/8*r^2 + 5/8*r},
+            function(r){1/2*r^10 - 5/2*r^9 + 25/4*r^8 - 10*r^7 + 45/4*r^6 - 39/4*r^5 + 59/8*r^4 - 21/4*r^3 + 109/32*r^2 - 31/16*r + 31/32}
+    )
+
+    color1 <- "#37474F"
+    color2 <- '#CACACA'
+    xlims <- c(0, 0.5)
+    ylims <- c(0, 1)
+    gentext <- ifelse(gen==2, "Generation", "Generations")
+    thickness <- 1
+    ggplot(data.frame(x=xlims), aes(x)) +
+        stat_function(aes(color="AA"), fun=funs1[[1]], xlim=xlims, size=thickness) +
+        stat_function(aes(color="HH"), fun=funs1[[2]], xlim=xlims, size=thickness) +
+        stat_function(aes(color="AH"), fun=funs1[[3]], xlim=xlims, size=thickness) +
+        stat_function(aes(color="AB"), fun=funs1[[4]], xlim=xlims, size=thickness) +
+        stat_function(aes(color="AA"), fun=funs2[[1]], xlim=xlims, size=thickness+2) +
+        stat_function(aes(color="HH"), fun=funs2[[2]], xlim=xlims, size=thickness+2) +
+        stat_function(aes(color="AH"), fun=funs2[[3]], xlim=xlims, size=thickness+2) +
+        stat_function(aes(color="AB"), fun=funs2[[4]], xlim=xlims, size=thickness+2) +
+
+##         ## stat_function(aes(color="1"), fun=funs1[[1]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="2"), fun=funs1[[2]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="3"), fun=funs1[[3]], xlim=xlims, size=thickness) +
+##         stat_function(aes(color="4"), fun=funs1[[4]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="5"), fun=funs1[[5]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="6"), fun=funs1[[6]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="7"), fun=funs1[[7]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="8"), fun=funs1[[8]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="9"), fun=funs1[[9]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="10"), fun=funs1[[10]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="11"), fun=funs1[[11]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="12"), fun=funs1[[12]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="13"), fun=funs1[[13]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="14"), fun=funs1[[14]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="15"), fun=funs1[[15]], xlim=xlims, size=thickness) +
+## ##        stat_function(aes(color="16"), fun=funs1[[16]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="1"), fun=funs2[[1]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="2"), fun=funs2[[2]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="3"), fun=funs2[[3]], xlim=xlims, size=thickness) +
+##         stat_function(aes(color="4"), fun=funs2[[4]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="5"), fun=funs2[[5]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="6"), fun=funs2[[6]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="7"), fun=funs2[[7]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="8"), fun=funs2[[8]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="9"), fun=funs2[[9]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="10"), fun=funs2[[10]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="11"), fun=funs2[[11]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="12"), fun=funs2[[12]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="13"), fun=funs2[[13]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="14"), fun=funs2[[14]], xlim=xlims, size=thickness) +
+##         ## stat_function(aes(color="15"), fun=funs2[[15]], xlim=xlims, size=thickness) +
+## ##        stat_function(aes(color="16"), fun=funs2[[16]], xlim=xlims, size=thickness) +
+        coord_cartesian(xlim = xlims) +
+        coord_cartesian(ylim = ylims) +
+        scale_y_continuous(breaks=seq(0, 1, 0.2)) +
+        ggtitle(paste0("Transitional Characteristics for\n", gen-1, " ", gentext, " of Inbreeding (F", gen, ")")) +
+        xlab("Probability of Recombinations (Odd Number)") +
+        ylab("Proportion of Population") +
+        scale_color_discrete(name="Type") +
+        theme(plot.title = element_text(hjust = 0.5),
+              plot.background = element_rect(fill = '#37474F', colour = '#37474F'),
+              panel.background = element_rect(fill = color2, color = color2),
+              text = element_text(size=20),
+              legend.key = element_rect(fill = color1, color=color1),
+              legend.background = element_rect(fill = color1, color=color1),
+              axis.text.x=element_text(color = color2),
+              axis.text.y=element_text(color = color2),
+              axis.title.x=element_text(color = color2, vjust = -3),
+              axis.title.y=element_text(color = color2, vjust = 3),
+              legend.title=element_text(color = color2),
+              legend.text=element_text(color = color2),
+              title=element_text(color = color2),
+              plot.margin = unit(c(1,1,1,1), "cm"),
+              legend.key.size = unit(3, 'lines'))
+}
+
+
 depths.to.gt <- function(depths) {
     if (depths[1] == 0 && depths[2] == 0) {
         NA
@@ -698,18 +813,19 @@ vcf.to.p1.gt <- function(vcf, parents) {
 }
 
 
-get.ad.array.w.p1.ref <- function(vcf, parents) {
+get.ad.array <- function(vcf) {
+    ads <- apply(getAD(vcf), 1:2, ad.to.num)
+    abind(ads[1, , ], ads[2, , ], along=3)
+}
 
-    get.ad.array <- function(vcf) {
-        ads <- apply(getAD(vcf), 1:2, ad.to.num)
-        abind(ads[1, , ], ads[2, , ], along=3)
-    }
+
+get.ad.array.w.p1.ref <- function(vcf, parents) {
 
     str.ad <- getAD(vcf)[ , parents[1]]
     p1.is.ref <- sapply(str.ad, function(str) {
         ## split the string and check if reference read is nonzero
         ad.to.num(str)[1] != 0
-    })
+    )}
 
     str.ad <- getAD(vcf)[ , parents[2]]
     p2.is.ref <- sapply(str.ad, function(str) {
@@ -764,8 +880,8 @@ get.obj.fun <- function(snp.a.reads, snp.b.reads, rerr) {
           )
     }
 
-    ## list of 3x3 matrices representing probability of reads given the genetic
-    ## state of each site (P1, H, P2)
+    ## list of 4x4 matrices representing probability of reads given the genetic
+    ## state of each site (P1, H1, H2, P2)
     trans.prob.mats <- lapply(seq(nrow(snp.a.reads)), function(i) {
         ## construct column and row vectors for matrix multiplication
         a.read.probs <- read.probs.given.states(snp.a.reads[i,])
@@ -791,8 +907,8 @@ get.obj.fun <- function(snp.a.reads, snp.b.reads, rerr) {
             ## to get the probabilty of the reads at this site given the genetic
             ## transition probabilities
             sum(trans.probs * genetic.probs)
-        }
-)
+        })
+
         ## return the sum of the log of the site.probs instead of the product of
         ## all the site probs for numerical stability
         sum(log(site.probs))
@@ -869,13 +985,95 @@ estimate <- function(pop.ad, a,b,c) {
 }
 
 
-masked.deep.calls.vcf <- function(vcf, parents, depth) {
-    ad <- get.ad.array.w.p1.ref(vcf, parents)
-    depths <- apply(ad, 1:2, sum)
-    locations <- which(depths >= depth, arr.ind=TRUE)
-    parent.rows <- which(getSAMPLES(vcf) %in% parents)
-    non.parent.loc <- locations[! locations[,"row"] %in% parent.rows, ]
-    # update vcf@fix based on the non.parent.loc to have not gt or ad or dp
+masked.vcf <- function(vcf, parents, depth=0, lik.ratio=100, rerr=0.01) {
     browser()
-    print("DONE")
+
+    ad.arr <- get.ad.array(vcf)
+    depths <- apply(ad.arr, 1:2, sum)  # sum individual allelic reads
+    liklihood.ratios <- apply(ad.arr, 1:2, function(reads) {
+        get.liklihood.ratio(reads[1], reads[2], rerr)
+    })
+
+    parental         <- matrix(rep(getSAMPLES(vcf) %in% parents, nrow(ad.arr)),
+                               nrow=nrow(ad.arr),
+                               byrow=TRUE)
+    sufficient.depth <- depths >= depth
+    sufficient.ratio <- liklihood.ratios >= lik.ratio
+    mask <- sufficient.depth & sufficient.ratio & !parental
+    print(paste0("Masking ", sum(mask), " sites"))
+
+    new.ad <- getAD(vcf)
+    new.ad[mask] <- "0,0"
+
+    new.gt <- getGT(vcf)
+    new.gt[mask] <- "./."
+
+    new.dp <- depths
+    new.dp[mask] <- "0"
+
+
+    concat <- matrix(paste0(new.gt, ":", new.ad, ":", new.dp), nrow=nrow(new.ad))
+    vcf@gt <- cbind("GT:AD:DP", concat)
+
+    colnames(vcf@gt) <- c("FORMAT", colnames(new.ad))
+    rownames(vcf@gt) <- rownames(new.ad)
+
+    vcf  # implicit return
+
+
+
+
+    ## locations <- which(depths >= depth, arr.ind=TRUE)
+    ## parent.rows <- which(getSAMPLES(vcf) %in% parents)
+    ## non.parent.loc <- locations[! locations[,"row"] %in% parent.rows, ]
+    ## ## TESTING AND VALIDATION:
+    ## lik.rats <- apply(non.parent.loc, 1, function(row.col) {AB <- ad[row.col["row"], row.col["col"],]; get.liklihood.ratio(AB[1], AB[2], rerr)})
+    ## homozygous <- apply(non.parent.loc, 1, function(row.col) {AB <- ad[row.col["row"], row.col["col"],]; any(AB==0)})
+    ## perc(homozygous)  # based on original calls, what percent is homozygous?
+    ## perc(homozygous[lik.rats > 100])  # based on the more confident calls, what percent is homozygous?
+    ## ## find which liklihood ratio threshhold gets closest to the theoretical proportion of homozygosity
+    ## x <- seq(0, 5, 0.01); y <- sapply(x, function(x) {perc(homozygous[lik.rats > 10^x])}); qplot(x,y)
+    ## ## END TESTING AND VALIDATION
+
+    ## # update vcf@fix based on the non.parent.loc to have not gt or ad or dp
+    ## browser()
+
+    ## liklihood.ratios <- apply(ad, 1:2, function(AB) {get.liklihood.ratio(AB[1], AB[2], rerr)})
+
+    ## parental         <- rep(getSAMPLES(vcf) %in% parents,
+
+    ## ## the non-parental sites where the liklihood ratio of the called genotype
+    ## ## is greater than the specified lik.ratio will be masked
+    ## mask.loc <- non.parent.loc[lik.rats >= lik.ratio]
+
+
+    ## get.snp.gt <- function(snp.data) {
+    ##     format <- snp.data[1]
+    ##     member.data <- snp.data[-1]
+    ##     ad.index <-
+    ## }
+    ## print("DONE")
+}
+
+
+get.liklihood.ratio <- function(depth.a, depth.b, rerr) {
+    if (length(depth.a) > 1)
+        stop("length of depth.a must be 1")
+    if (length(depth.b) > 1)
+        stop("length of depth.b must be 1")
+
+    pa <- (1-rerr)^depth.a * (rerr)^depth.b
+    pb <- (rerr)^depth.a * (1-rerr)^depth.b
+    ph <- (0.5)^depth.a * (0.5)^depth.b
+
+    if (depth.a == 0) {
+        if (depth.b == 0)
+            0.5
+        else
+            pb / (pa + ph)
+    } else if (depth.b == 0) {
+        pa / (pb + ph)
+    } else {
+        ph / (pa + pb)
+    }
 }

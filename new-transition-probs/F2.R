@@ -38,11 +38,11 @@ get.trans <- function(r) {
     ), nrow=4, ncol=4, byrow=T)
 }
 
-get.gen.trans <- function(r) {
-    c(
-        AA = 1/2*r^2 - r + 1/2,
-        HH = r^2 - r + 1/2,
-        AH = -2*r^2 + 2*r,
-        AB = 1/2*r^2
-    )
+get.site.pair.trans <- function(r) {
+    matrix(c(
+        1/4*r^2 - 1/2*r + 1/4, -1/4*r^2 + 1/4*r, -1/4*r^2 + 1/4*r, 1/4*r^2,
+        -1/4*r^2 + 1/4*r, 1/4*r^2 - 1/2*r + 1/4, 1/4*r^2, -1/4*r^2 + 1/4*r,
+        -1/4*r^2 + 1/4*r, 1/4*r^2, 1/4*r^2 - 1/2*r + 1/4, -1/4*r^2 + 1/4*r,
+        1/4*r^2, -1/4*r^2 + 1/4*r, -1/4*r^2 + 1/4*r, 1/4*r^2 - 1/2*r + 1/4
+    ), nrow=4, ncol=4, byrow=T)
 }

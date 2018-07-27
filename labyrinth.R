@@ -22,8 +22,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              use.fwd.bkwd=FALSE, use.viterbi=TRUE,
                              calc.posteriors=TRUE,
                              read.err=0.05, geno.err=0.05,
-                             recomb.probs, parallel=TRUE,
-                             cores=4) {
+                             parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
     print.labyrinth.header()
@@ -88,15 +87,36 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(1, "Completed in ", timer(), "\n")
 
 
+    ## site.pair.transition.probs variable will be loaded
+    timer <- new.timer()
+    display(0, "Loading data specific to F", generation)
+    source(paste0("./new-transition-probs/F", generation, ".R"))
+    display(1, "Completed in ", timer(), "\n")
+
+
+    ## parental imputation and recombination rate estimates
+    timer <- new.timer()
+    display(0, "Imputing ", parents[1], " and ", parents[2], " and determining recombination rates")
+    parental.results <- determine.parents.and.recombs(vcf,
+                                                      parents,
+                                                      read.err,
+                                                      generation,
+                                                      parallel,
+                                                      cores)
+    display(1, "Completed in ", timer(), "\n")
+
+
     ## transition probability code
     timer <- new.timer()
     display(0, "Generating transition probabilities")
     transition.structures <- get.transition.structures(vcf,
                                                        generation,
                                                        recomb.probs,
+                                                       parental.state,
                                                        parallel,
                                                        cores)
     display(1, "Completed in ", timer(), "\n")
+
 
     ## emission probability code
     timer <- new.timer()
@@ -109,6 +129,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                    parallel,
                                                    cores)
     display(1, "Completed in ", timer(), "\n")
+
 
     ## imputation code
     timer <- new.timer()
@@ -126,7 +147,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     write.vcf(vcf, paste0(out.file, ".vcf.gz"))
     display(0, "LaByRInth imputation completed in ", total.timer())
 
-    invisible(vcf)
+    invisible(vcf) ## implicit return
 }
 
 
@@ -279,25 +300,29 @@ fwd.bkwd <- function(emm, trans) {
 }
 
 
-## MAKE SURE THAT THE EMISSION PROBABIITIES ARE NOT NORMALIZED FOR THE VITERBI!
-## Actually, it is probably fine because even for every transition model, the
-## same emission matrix is being used
-viterbi <- function(emm, trans) {
+## If emm.log is TRUE, then the data passed in emm should already be
+## log-scaled. Similarly with trans.log
+viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
+    if (!emm.log)
+        emm <- log(emm)
+    if (!trans.log)
+        trans <- log(trans)
+
     n.states <- nrow(emm)
     n.sites <- ncol(emm)
 
     path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
 
     start.probs <- log(rep(1/n.states, n.states))
-    probs <- start.probs + log(emm[, 1])
+    probs <- start.probs + emm[, 1]
 
     for (site in 2:n.sites) {
         t.index <- site - 1  # transition structure index
         prev.site <- site - 1
         new.probs <- probs
         for (to in 1:n.states) {
-            x <- probs + log(trans[ , to, t.index])
-            new.probs[to] <- max(x) + log(emm[to, site])
+            x <- probs + trans[ , to, t.index]
+            new.probs[to] <- max(x) + emm[to, site]
             path.tracker[to, site] <- which.max(x)
         }
         probs <- new.probs
@@ -313,6 +338,39 @@ viterbi <- function(emm, trans) {
 
     list(path=path, prob=max(probs))
 }
+
+
+## viterbi <- function(emm, trans) {
+##     n.states <- nrow(emm)
+##     n.sites <- ncol(emm)
+
+##     path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
+
+##     start.probs <- log(rep(1/n.states, n.states))
+##     probs <- start.probs + log(emm[, 1])
+
+##     for (site in 2:n.sites) {
+##         t.index <- site - 1  # transition structure index
+##         prev.site <- site - 1
+##         new.probs <- probs
+##         for (to in 1:n.states) {
+##             x <- probs + log(trans[ , to, t.index])
+##             new.probs[to] <- max(x) + log(emm[to, site])
+##             path.tracker[to, site] <- which.max(x)
+##         }
+##         probs <- new.probs
+##     }
+
+##     ## reconstruct the path
+##     path <- rep(NA, n.sites)
+##     best.state <- which.max(probs)
+##     for (site in n.sites:1) {
+##         path[site] <- best.state
+##         best.state <- path.tracker[best.state, site]
+##     }
+
+##     list(path=path, prob=max(probs))
+## }
 
 
 ## returns the emission probabilities for a given variant and chromosome. Note
@@ -460,29 +518,16 @@ get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parall
 }
 
 
-get.transition.structures <- function(vcf, generation, recomb.probs, parallel, cores) {
+get.transition.structures <- function(vcf, generation, recomb.probs,
+                                      parental.state, parallel, cores) {
 
     states <- 1:4
     names(states) <- c("P1", "H1", "H2", "P2")
 
     listapply <- get.lapply(parallel, cores)
 
-    ## recomb.prob <- function(dist, recomb.dist) {
-    ##     (1 - exp(-1.0 * dist / recomb.dist)) / 2
-    ## }
-
-    ## get.trans and get.gen.trans will be loaded
-    source(paste0("./new-transition-probs/F", generation, ".R"))
-
     trans.probs <- function(chrom) {
-        ## positions <- getPOS(vcf)[getCHROM(vcf) == chrom]
-        ## distances <- diff(positions)  # difference b/w successive positions
-
-        ## phys.recomb.probs <- lapply(distances, recomb.prob, recomb.dist)
-
-        ## trans.matrices <- lapply(phys.recomb.probs, get.trans)
-
-        trans.matrices <- lapply(recomb.probs[[chrom]], get.site.pair.trans)
+        trans.matrices <- lapply(recomb.probs[[chrom]], get.trans)
 
         result <- do.call(abind3, trans.matrices)
         result[result < 0] <- 0  # handle numerical errors
@@ -1077,4 +1122,234 @@ LabyrinthQC <- function(vcf) {
     write.vcf(vcf, "thresh-90.vcf.gz")
 
     print("done")
+}
+
+
+get.ad.array <- function(vcf) {
+    ads <- apply(getAD(vcf), 1:2, ad.to.num)
+    abind(ads[1, , ], ads[2, , ], along=3)
+}
+
+
+determine.parents.and.recombs <- function(vcf, parents, rerr,
+                                          generation, parallel=F, cores=1) {
+    timer <- new.timer()
+    chroms <- getCHROM(vcf)
+    u.chroms <- unique(chroms)
+    all.ad <- get.ad.array(vcf)  # 3D array with 2 reads as the third dimension
+    parent.indices <- which(colnames(all.ad) %in% parents)  # find parents
+    ad <- all.ad[ , -parent.indices, ]  # remove parents
+
+    rm(all.ad)
+    listapply <- get.lapply(parallel, cores)
+
+
+    hom.ref.read.emm <- (1-rerr)^all.ad[ , , 1] * (rerr)^all.ad[ , , 2]
+    hom.alt.read.emm <- (1-rerr)^all.ad[ , , 2] * (rerr)^all.ad[ , , 1]
+    het.read.emm     <-    (0.5)^all.ad[ , , 1] *  (0.5)^all.ad[ , , 2]
+
+    rm(ad)
+
+    rpgs <- abind(  # read probs given states
+        hom.ref.read.emm,
+        het.read.emm,
+        het.read.emm,
+        hom.alt.read.emm,
+
+        along=3
+    )
+
+    rm(hom.ref.read.emm, hom.alt.read.emm, het.read.emm)
+
+    parental.rpgs <- rpgs[ , parent.indices, ]
+    rpgs <- rpgs[ , -parent.indices, ]
+
+    get.trans.probs <- function(i) {
+        j <- i+1
+
+        ## snp.i will be constant along the third dimension and snp.j will be
+        ## constant along the second dimension. By binding additional copies in
+        ## this way we can replicate mathematical matrix multiplication with
+        ## element-by-element multiplication allowing us to do all SNPs at once
+        ## without needing an apply function which can be slower
+        snp.i <- abind(rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], along=3)
+        snp.j <- abind(rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], along=3)
+        snp.j <- aperm(snp.j, c(1,3,2))
+
+        rpgsp <- snp.i * snp.j  # read probs given state pair
+        rm(snp.i, snp.j)
+
+        get.objective.fun <- function(f) {
+            function(r) {
+                per.snp <- apply(rpgsp, 1, function(layer) {
+                    sum(layer * f(r))
+                })
+                sum(log(per.snp))
+            }
+        }
+
+        ## message("Starting double loop for ", i)
+        log.liklihood.mat <- matrix(-Inf, nrow=16, ncol=16)
+        recomb.val.mat <- matrix(0, nrow=16, ncol=16)
+        for (x in 2:15) {      # 1 and 16 are not biallelic parental states and there
+            for (y in 2:15) {  # is not optimal recombination probability
+                site.pair.probs.fun <- site.pair.transition.probs[[x]][[y]]
+                obj.fun <- get.objective.fun(site.pair.probs.fun)
+                ## browser()
+
+                init <- 0.1
+                result <- optim(par=init,
+                                obj.fun,
+                                method="Brent",
+                                lower=0,
+                                upper=0.5,
+                                control=list(ndeps=1e-2,  # step size
+                                             fnscale=-1))
+                recomb.val.mat[x,y] <- result$par
+                log.liklihood.mat[x,y] <- result$value
+                ## message(x, ",", y)
+            }
+        }
+
+        list(logliklihoods = log.liklihood.mat,
+             recombs = recomb.val.mat)
+    }
+
+    ## print("ready")
+    ## browser()
+    ## print("done")
+
+
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    progress.env <- new.env()
+    thefifo <- ProgressMonitor(progress.env)
+    assign("progress", 0.0, envir=progress.env)
+    prog.env <- progress.env
+    n.jobs <- length(chroms) - length(u.chroms)
+    ## -------------------------------------------------------------------------
+
+    ## -------------------------------------------------------------------------
+    writeBin(0, thefifo)  # update the progress bar info
+    if (!parallel) {  # if running in serial mode
+        prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+    }  # else the forked process handles this
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    ret.val <- lapply(u.chroms, function(chrom) {
+        indices <- which(chroms == chrom)  # which indices correspond with this chrom
+        indices <- indices[-length(indices)]  # remove the last element
+
+        ret.val.2  <- listapply(indices, function(index) {
+
+            ret.val.3 <- get.trans.probs(index)
+
+            ## Progress bar code
+            ## -----------------------------------------------------------------
+            writeBin(1/n.jobs, thefifo)  # update the progress bar info
+            if (!parallel) {  # if running in serial mode
+                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
+            }  # else the forked process handles this
+            ## -----------------------------------------------------------------
+            ## Progress bar code
+
+            ret.val.3
+        })
+
+        ret.val.2
+
+        ## do.call(abind3, ret.val.2)  # bind transmissions in 3rd dim and return
+    })
+
+
+    ## Progress bar code
+    ## -------------------------------------------------------------------------
+    close(thefifo)
+    ## -------------------------------------------------------------------------
+    ## Progress bar code
+
+
+    names(ret.val) <- u.chroms
+    transmissions <- ret.val
+
+
+
+    ## ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
+    ## p <- 0.99  # probability of a site in parents being heterozygous
+    ## log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
+    ##                      p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
+    ##                      p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
+    ##                      p^2, p*(1-p), p*(1-p), p^2))
+
+    emissions <- apply(parental.rpgs, 1, function(snp.depths) {
+        result <- sapply(1:16, function(i) {
+            i <- i-1            # deal with base 1 indexing
+            p1 <- floor(i / 4)  # bit shift i right twice to get two most sig bits
+            p2 <- i - p1*4      # two least significant bits
+            log(snp.depths[1, (p1+1)]) +
+                log(snp.depths[2, (p2+1)]) +
+                log.penalty[i+1]
+        })
+        names(result) <- NULL
+        result  # implicit return
+        ## browser()
+        ## print(round(result,2))
+        ## print(order(result, decreasing=TRUE))
+    })
+    ## print(timer())
+    ## browser()
+    ## print(timer())
+
+    ## TODO(Jason): verify that at least 2 sites are in the chromosome before runnin viterbi
+    parental.models <- listapply(u.chroms, function(chrom) {
+        viterbi(emissions[, chroms == chrom],
+                do.call(abind3, lapply(transitions[[chrom]], function(elem) {elem$logliklihoods})),
+                emm.log = TRUE,
+                trans.log = TRUE)
+    })
+
+    recombs <- listapply(u.chroms, function(chrom) {
+        parental.model <- parental.models[[chrom]]
+        recomb.matrices <- lapply(transitions[[chrom]], function(elem) {elem$recombs})
+        if (length(parental.model) != length(recomb.matrices) + 1)
+            stop("This should never happen. Error in model lengths")
+
+        sapply(seq_along(recomb.matrices), function(i) {
+            recomb.matrices[parental.model[i], parental.model[i+1]]
+        })
+    })
+
+    list(parental.models <- parental.models,
+         recombs <- recombs)  # implicit return
+}
+
+
+log.lik.path <- function(states, em, tr) {
+    if (length(states) != ncol(em))
+        stop("length of states must match number of cols of em")
+    if (length(states) != dim(tr)[3] + 1)
+        stop("length of states must match number of cols of tr + 1")
+
+    em.log.liks <- sum(sapply(seq_len(ncol(em)), function(i) {
+        em[states[i], i]
+    }))
+
+    tr.log.liks <- sum(sapply(seq_len(dim(tr)[3]), function(i) {
+        tr[states[i], states[i+1], i]
+    }))
+
+    log(1/16) + em.log.liks + tr.log.liks
+    ## em[states[1],1] +
+    ##     em[states[2],2] +
+    ##     em[states[3],3] +
+    ##     em[states[4],4] +
+    ##     em[states[5],5] +
+    ##     tr[states[1], states[2], 1] +
+    ##     tr[states[2], states[3], 2] +
+    ##     tr[states[3], states[4], 3] +
+    ##     tr[states[4], states[5], 4]
 }
