@@ -141,8 +141,8 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## transition probability code
     timer <- new.timer()
     display(0, "Generating transition probabilities")
-    transition.structures <- get.transition.structures(vcf,
-                                                       generation,
+    transition.structures <- get.transition.structures(snp.chroms,
+                                                       marker.names,
                                                        parental.results,
                                                        parallel,
                                                        cores)
@@ -444,17 +444,15 @@ get.emission.structures <- function(ad, sample.names, marker.names, read.err) {
 }
 
 
-get.transition.structures <- function(vcf, generation, parental.results,
-                                      parallel, cores) {
+get.transition.structures <- function(snp.chroms, marker.names,
+                                      parental.results, parallel, cores) {
 
-    states <- 1:4
-    names(states) <- c("P1", "H1", "H2", "P2")
-
+    u.chroms <- unique(snp.chroms)
     listapply <- get.lapply(parallel, cores)
 
     trans.probs <- function(chrom) {
         parental.model <- parental.results$parental.models[[chrom]]$path
-        recombs <- parental.results$recombs[[chrom]]
+        recombs <- parental.results$recombs[[chrom]]  # vector of functions
 
         ## site.pair.transition.probs was loaded when a file in
         ## new-transition-probs was sourced
@@ -468,12 +466,17 @@ get.transition.structures <- function(vcf, generation, parental.results,
 
         result <- do.call(abind3, trans.matrices)
         result[result < 0] <- 0  # handle numerical errors
-        ## dimnames(results)[[3]] <- 
+
+        marker.names <- marker.names[snp.chroms == chrom]
+        trans.names <- paste0(marker.names[-length(marker.names)],
+                              ".",
+                              marker.names[-1])
+
+        dimnames(result) <- list(c("hom.ref", "het.I", "het.II", "hom.alt"),
+                                 c("hom.ref", "het.I", "het.II", "hom.alt"),
+                                 trans.names)
         result
     }
-
-    chroms <- getCHROM(vcf)
-    u.chroms <- unique(chroms)
 
 
     ## Progress bar code
@@ -507,7 +510,6 @@ get.transition.structures <- function(vcf, generation, parental.results,
         ## Progress bar code
 
         ret.val.2
-
     })
 
 
