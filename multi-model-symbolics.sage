@@ -97,71 +97,13 @@ def breed_parents(p1h1, p1h2, p2h1, p2h2):
     return progeny_probs
 
 
+# any of the last four arguments should be between 0 and 3 inclusinve where 0b00 is homozygous reference, 0b01 is heterozygous type I, 0b10 is heterozygous type II, and 0b11 is homozygous alternate
 def sub_w_parents(data, p1h1, p1h2, p2h1, p2h2):
     init_progeny_probs = breed_parents(p1h1, p1h2, p2h1, p2h2)
     d = {var("s%d%d" %(i, j)): init_progeny_probs[i][j] for j in range(4) for i in range(4)}
 
     return rec_apply(lambda x: x.subs(d).expand(), data)
 
-
-def parse_all_gen_probs_to_R(generation):
-
-    def print_vector(v):
-        print("        c(")
-        last_elem = len(v) - 1
-        for i, elem in enumerate(v):
-            trailing = "," if not i==last_elem else ""
-            print("            function(r){" + str(elem) + "}" + trailing)
-        print("        )")
-
-    def print_matrix(m):
-        print("            matrix(c(")
-
-        last_row = len(m) - 1
-        for j, row in enumerate(m):
-            trailing = "," if not j==last_row else ""
-
-            print("                " + ", ".join([str(x) for x in row]) + trailing)
-
-        print("            ), nrow=" +
-              str(len(m)) +
-              ", ncol=" +
-              str(len(m[0])) +
-              ", byrow=T)")
-
-    # print_matrix(sub_w_parents(get_site_pair_trans_probs(generation),
-    #                      p1h1, p1h2, p2h1, p2h2))
-
-    site_pair_trans_probs = get_site_pair_trans_probs(generation)
-
-    print("site.pair.transition.probs <- list(")
-    last_list = 15  # 16 - 1
-    for marker1 in range(16):
-        print("    list(")
-        for marker2 in range(16):
-            p1h1 = ((marker1 & 0b1000) >> 2) + ((marker2 & 0b1000) >> 3)
-            p1h2 = ((marker1 & 0b0100) >> 1) + ((marker2 & 0b0100) >> 2)
-            p2h1 = ((marker1 & 0b0010) << 0) + ((marker2 & 0b0010) >> 1)
-            p2h2 = ((marker1 & 0b0001) << 1) + ((marker2 & 0b0001) >> 0)
-
-
-            print("        function(r) {")
-            print_matrix(
-                sub_w_parents(
-                    site_pair_trans_probs,
-                    p1h1, p1h2, p2h1, p2h2))
-
-            if marker2 != 15:
-                print("        },\n")
-            else:
-                print("        }")
-
-
-        if marker1 != 15:
-            print("    ),\n")
-        else:
-            print("    )")
-    print(")")
 
 def _next_probs_helper(progeny_probs):
 
@@ -285,43 +227,6 @@ def get_from_to_matrix(generation, prog_probs):
 
 
 def parse_probs_to_R(generation):
-    '''This function will print to the console the code for an R file so that the
-    transition probabilities for an F{generation} can be calculated under each
-    of the recombination models.
-    '''
-
-    if (generation < 1):
-        exit("can only generate model probs for F1 and beyond")
-
-    ftmat = rec_apply(expand, get_from_to_matrix(generation, get_progeny_probs(generation)))
-    general = rec_apply(expand, get_site_pair_trans_probs(generation))
-
-    def print_matrix(m):
-        print("    matrix(c(")
-
-        last_row = len(m) - 1
-        for j, row in enumerate(m):
-            trailing = "," if not j==last_row else ""
-
-            print("        " + ", ".join([str(x) for x in row]) + trailing)
-
-        print("    ), nrow=" +
-              str(len(m)) +
-              ", ncol=" +
-              str(len(m[0])) +
-              ", byrow=T)")
-
-
-    def print_vector(v):
-        names = ["AA", "HH", "AH", "AB"]
-        print("    c(")
-        last_elem = len(v) - 1
-        for i, elem in enumerate(v):
-            trailing = "," if not i==last_elem else ""
-            print("        " + names[i] + " = " + str(elem) + trailing)
-        print("    )")
-
-
     print("## Copyright 2017 Jason Vander Woude and Nathan Ryder"                               )
     print("##"                                                                                  )
     print("## Licensed under the Apache License, Version 2.0 (the \"License\");"                )
@@ -353,13 +258,60 @@ def parse_probs_to_R(generation):
     print("## function will be needed, so there is no need to source to code for all other"     )
     print("## generations"                                                                      )
     print(""                                                                                    )
-    print("get.trans <- function(r) {")
-    print_matrix(ftmat)
-    print("}")
-    print("")
-    print("get.site.pair.trans <- function(r) {")
-    print_matrix(general)
-    print("}")
+
+    def print_vector(v):
+        print("        c(")
+        last_elem = len(v) - 1
+        for i, elem in enumerate(v):
+            trailing = "," if not i==last_elem else ""
+            print("            function(r){" + str(elem) + "}" + trailing)
+        print("        )")
+
+    def print_matrix(m):
+        print("            matrix(c(")
+
+        last_row = len(m) - 1
+        for j, row in enumerate(m):
+            trailing = "," if not j==last_row else ""
+
+            print("                " + ", ".join([str(x) for x in row]) + trailing)
+
+        print("            ), nrow=" +
+              str(len(m)) +
+              ", ncol=" +
+              str(len(m[0])) +
+              ", byrow=T)")
+
+    site_pair_trans_probs = get_site_pair_trans_probs(generation)
+
+    print("site.pair.transition.probs <- list(")
+    last_list = 15  # 16 - 1
+    for marker1 in range(16):
+        print("    list(")
+        for marker2 in range(16):
+            p1h1 = ((marker1 & 0b1000) >> 2) + ((marker2 & 0b1000) >> 3)
+            p1h2 = ((marker1 & 0b0100) >> 1) + ((marker2 & 0b0100) >> 2)
+            p2h1 = ((marker1 & 0b0010) << 0) + ((marker2 & 0b0010) >> 1)
+            p2h2 = ((marker1 & 0b0001) << 1) + ((marker2 & 0b0001) >> 0)
+
+
+            print("        function(r) {")
+            print_matrix(
+                sub_w_parents(
+                    site_pair_trans_probs,
+                    p1h1, p1h2, p2h1, p2h2))
+
+            if marker2 != 15:
+                print("        },\n")
+            else:
+                print("        }")
+
+
+        if marker1 != 15:
+            print("    ),\n")
+        else:
+            print("    )")
+    print(")")
 
 
 def rec_apply(fun, data):
