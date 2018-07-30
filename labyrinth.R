@@ -102,7 +102,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     snp.chroms <- getCHROM(vcf)
     u.chroms <- unique(snp.chroms)
     ad <- get.ad.array(vcf)
-    listapply <- get.lapply(parallel, cores)
     sample.names <- getSAMPLES(vcf)
     marker.names <- getID(vcf)
     display(1, "Completed in ", timer(), "\n")
@@ -155,8 +154,16 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## imputation code
     timer <- new.timer()
     display(0, "Imputing missing sites")
-    imp.res <- impute(vcf, parents, emission.structures, transition.structures,
-                      parental.results, parallel, cores, use.fwd.bkwd, calc.posteriors)
+    imp.res <- impute(parents,
+                      emission.structures,
+                      transition.structures,
+                      parental.results,
+                      sample.names,
+                      snp.chroms,
+                      parallel,
+                      cores,
+                      use.fwd.bkwd,
+                      calc.posteriors)
     display(1, "Completed in ", timer(), "\n")
 
     ## new vcf creation code
@@ -278,6 +285,7 @@ fwd.bkwd <- function(emm, trans) {
         mat
     }
 
+    state.names <- rownames(emm)
     n.states <- nrow(emm)
     n.sites <- ncol(emm)
 
@@ -292,9 +300,6 @@ fwd.bkwd <- function(emm, trans) {
         t.index <- site - 1  # transition structure index
         prev.site <- site - 1
         for (to in 1:n.states) {
-            message(to, "   ", t.index)
-            ## if (to==1 && t.index==5)
-            ##     browser()
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
          }
@@ -320,6 +325,7 @@ fwd.bkwd <- function(emm, trans) {
     for (site in 1:n.sites) {
         res <- normalize(res, site)
     }
+    rownames(res) <- state.names
     res
 }
 
@@ -332,6 +338,7 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
     if (!trans.log)
         trans <- log(trans)
 
+    state.names <- rownames(emm)
     n.states <- nrow(emm)
     n.sites <- ncol(emm)
 
@@ -516,56 +523,56 @@ get.transition.structures <- function(vcf, generation, parental.results,
 }
 
 
-impute <- function(vcf, parents, emm.structures, trans.structures, parental.results, parallel,
-                   cores, use.fwd.bkwd, calc.posteriors) {
+## The following labeling schemes are used. Both the Viterbi algorithm and the
+## forward backward algorithm will keep track of the following four state types
+## when determining the best path
+##
+## hom.ref     het.I     het.II     hom.alt
+## 0|0         0|1       1|0        1|1
+##
+## When the Viterbi algorithm is used, a single opimal sequence of states is
+## determined which thus includes haplotypic information and can thus
+## distinguish betwee het.I and het.II. Thus the calls are phased and the
+## vertical bar is used in the VCF file as shown above. If the forward backward
+## algorithm is used, then it makes more sense to combine the het.I and het.II
+## types because the VCF format does not allow for specifying posterior
+## probabilities for both het.I and het.II. Then the following scheme is used:
+##
+## hom.ref     het     hom.alt
+## 0/0         0/1     1/1
+impute <- function(parents, emm.structures, trans.structures, parental.results,
+                   sample.names, snp.chroms, parallel, cores, use.fwd.bkwd,
+                   calc.posteriors) {
 
     listapply <- get.lapply(parallel, cores)
-
-    ## p1.is.ref <- is.parent.ref(vcf, parents[1])
-
-    chroms <- getCHROM(vcf)
-    u.chroms <- unique(chroms)
-    samples <- getSAMPLES(vcf)
+    u.chroms <- unique(snp.chroms)
 
     impute.sample.chrom <- function(sample, chrom) {
 
-        n.sites <- sum(chroms==chrom)  # boolean addition
+        n.sites <- sum(snp.chroms==chrom)  # boolean addition
         parent.paths <- parental.model.to.parents(
             parental.results$parental.models[[chrom]]$path
         )
 
-        emm <- t(emm.structures[chrom==chroms, sample, ])
-
-        ## p1.ref <- p1.is.ref[chroms==chrom]
+        emm <- t(emm.structures[chrom==snp.chroms, sample, ])
+        trans <- trans.structures[[chrom]]
 
         res <- list()
         res$posteriors <- NULL
 
         if (use.fwd.bkwd || calc.posteriors) {
-            if (sample == parents[1]) {
-                posterior.mat <- rbind(rep(1/4, n.sites),
-                                       rep(1/4, n.sites),
-                                       rep(1/4, n.sites),
-                                       rep(1/4, n.sites))
-            } else if (sample == parents[2]) {
-                posterior.mat <- rbind(rep(1/4, n.sites),
-                                       rep(1/4, n.sites),
-                                       rep(1/4, n.sites),
-                                       rep(1/4, n.sites))
+            if (sample %in% parents) {
+                posterior.mat <- rbind("hom.ref" = rep(1/4, n.sites),
+                                       "het.I"   = rep(1/4, n.sites),
+                                       "het.II"  = rep(1/4, n.sites),
+                                       "hom.alt" = rep(1/4, n.sites))
             } else {
-                trans <- trans.structures[[chrom]]
                 posterior.mat <- fwd.bkwd(emm, trans)
             }
 
-            ## ref <- ifelse(p1.ref, posterior.mat[1, ], posterior.mat[4, ])
-            ## alt <- ifelse(p1.ref, posterior.mat[4, ], posterior.mat[1, ])
-            ## het <- posterior.mat[2, ] + posterior.mat[3, ]
-
-            ## posteriors <- rbind(ref, het, alt)
-
-            posteriors <- rbind(posterior.mat[1, ],
-                                posterior.mat[2, ] + posterior.mat[3, ],
-                                posterior.mat[4, ])
+            posteriors <- rbind("hom.ref" = posterior.mat["hom.ref", ],
+                                "het"     = posterior.mat["het.I", ] + posterior.mat["het.II", ],
+                                "hom.alt" = posterior.mat["hom.alt", ])
 
             phred.scaled <- apply(posteriors, 1:2, function(x) {
                 ## 1-x is the probability the call is wrong
@@ -574,11 +581,6 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
             })
 
             res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
-
-            ## res$posteriors <- array(c(ref,   # homozygous reference allele prob
-            ##                           het,   # heterozygous prob
-            ##                           alt),  # homozygous alternate allele prob
-            ##                         dim=c(n.sites, 1, 3))
 
             if (use.fwd.bkwd) {
                 if (sample == parents[1])
@@ -597,31 +599,9 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
             } else if (sample == parents[2]) {
                 best.path <- parent.paths[[2]]
             } else {
-                trans <- trans.structures[[chrom]]
-
                 path.and.prob <- viterbi(emm, trans)
                 best.path <- path.and.prob$path
-                ## In best.path,
-                ##    1: parent 1
-                ##    2: het type 1
-                ##    3: het type 2
-                ##    4: parent 2
             }
-
-            ## res$gt <- sapply(seq_along(best.path), function(index) {
-            ##     state <- best.path[index]
-
-            ##     if (state == 1)
-            ##         ifelse(p1.ref[index], "0/0", "1/1")
-            ##     else if (state == 2)
-            ##         "0/1"
-            ##     else if (state == 3)
-            ##         "1/0"
-            ##     else if (state == 4)
-            ##         ifelse(p1.ref[index], "1/1", "0/0")
-            ##     else
-            ##         stop("invalid state; this should never happen")
-            ## })
 
             res$gt <- c("0|0", "0|1", "1|0", "1|1")[best.path]
         }
@@ -650,7 +630,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
     thefifo <- ProgressMonitor(progress.env)
     assign("progress", 0.0, envir=progress.env)
     prog.env <- progress.env
-    n.jobs <- length(u.chroms) * length(samples)
+    n.jobs <- length(u.chroms) * length(sample.names)
     ## -------------------------------------------------------------------------
 
     ## -------------------------------------------------------------------------
@@ -671,7 +651,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
 
     imputed.chroms <- lapply(u.chroms, function(chrom) {
 
-        imputed.samples <- listapply(samples, function(sample) {
+        imputed.samples <- listapply(sample.names, function(sample) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
             ## display(1, "Imputed chromosome ", chrom, " of sample ", sample)
