@@ -28,6 +28,8 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     print.labyrinth.header()
 
 
+
+
     ## parameter verification
     if (use.fwd.bkwd && use.viterbi) {
         display(0, "Cannot use both fwd.bkwd and viterbi algorithms to impute\n")
@@ -49,6 +51,8 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
         vcf <- read.vcfR(vcf, verbose=F)
         display(1, "Completed in ", timer(), "\n")
     }
+
+
 
 
     ## vcf requirement verification code
@@ -87,11 +91,35 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(1, "Completed in ", timer(), "\n")
 
 
-    ## site.pair.transition.probs variable will be loaded
+
+
+    ## Variable initialization and function loading
     timer <- new.timer()
     display(0, "Loading data specific to F", generation)
+    ## site.pair.transition.probs variable will be loaded
     source(paste0("./new-transition-probs/F", generation, ".R"))
+
+    snp.chroms <- getCHROM(vcf)
+    u.chroms <- unique(snp.chroms)
+    ad <- get.ad.array(vcf)
+    listapply <- get.lapply(parallel, cores)
+    sample.names <- getSAMPLES(vcf)
+    marker.names <- getID(vcf)
     display(1, "Completed in ", timer(), "\n")
+
+
+
+
+    ## emission probability code
+    timer <- new.timer()
+    display(0, "Generating emission probabilities")
+    emission.structures <- get.emission.structures(ad,
+                                                   sample.names,
+                                                   marker.names,
+                                                   read.err)
+    display(1, "Completed in ", timer(), "\n")
+
+
 
 
     ## parental imputation and recombination rate estimates
@@ -104,9 +132,11 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                       generation,
                                                       parallel,
                                                       cores)
-
+    ## load("testing/small_test_1_mask_1_parental_results.RData")
     save(parental.results, file="testing/small_test_1_mask_1_parental_results.RData")
     display(1, "Completed in ", timer(), "\n")
+
+
 
 
     ## transition probability code
@@ -120,17 +150,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(1, "Completed in ", timer(), "\n")
 
 
-    ## emission probability code
-    timer <- new.timer()
-    display(0, "Generating emission probabilities")
-    emission.structures <- get.emission.structures(vcf,
-                                                   parents,
-                                                   read.err,
-                                                   geno.err,
-                                                   generation,
-                                                   parallel,
-                                                   cores)
-    display(1, "Completed in ", timer(), "\n")
 
 
     ## imputation code
@@ -273,8 +292,8 @@ fwd.bkwd <- function(emm, trans) {
         t.index <- site - 1  # transition structure index
         prev.site <- site - 1
         for (to in 1:n.states) {
-            ## message(to, "   ", t.index)
-            ## if (to==5 && t.index==1)
+            message(to, "   ", t.index)
+            ## if (to==1 && t.index==5)
             ##     browser()
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
@@ -391,21 +410,17 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 ## different models, and each model could utilize the same emission
 ## probabilities, so it was faster to compute all of the emission probabilities
 ## only once.
-get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parallel=F, cores=1) {
+get.emission.structures <- function(ad, sample.names, marker.names, read.err) {
 
-    chroms <- getCHROM(vcf)
-    u.chroms <- unique(chroms)
-    all.ad <- get.ad.array(vcf)  # 3D array with 2 reads as the third dimension
+    hom.ref.read.emm <- (1-read.err)^ad[ , , 1] * (read.err)^ad[ , , 2]
+    hom.alt.read.emm <- (1-read.err)^ad[ , , 2] * (read.err)^ad[ , , 1]
+    het.read.emm     <-        (0.5)^ad[ , , 1] *      (0.5)^ad[ , , 2]
 
-    listapply <- get.lapply(parallel, cores)
-
-    hom.ref.read.emm <- (1-rerr)^all.ad[ , , 1] * (rerr)^all.ad[ , , 2]
-    hom.alt.read.emm <- (1-rerr)^all.ad[ , , 2] * (rerr)^all.ad[ , , 1]
-    het.read.emm     <-    (0.5)^all.ad[ , , 1] *  (0.5)^all.ad[ , , 2]
-
-    rm(all.ad)
-
-    rpgs <- abind(  # read probs given states
+    ## read probs given states
+    ## first dimension is the markers/loci/SNPs
+    ## second dimension is the members of the population
+    ## third dimension is the state (hom ref, het type I, het type II, hom alt)
+    rpgs <- abind(
         hom.ref.read.emm,
         het.read.emm,
         het.read.emm,
@@ -414,129 +429,11 @@ get.emission.structures <- function(vcf, parents, rerr, gerr, generation, parall
         along=3
     )
 
-    rm(hom.ref.read.emm, hom.alt.read.emm, het.read.emm)
+    dimnames(rpgs) <- list(marker.names,
+                           sample.names,
+                           c("hom.ref", "het.I", "het.II", "hom.alt"))
 
-    ## ## ## determine at which sites parent 1 is reference
-    ## ## str.ad <- getAD(vcf)[ , parents[1]]
-    ## ## p1.is.ref <- sapply(str.ad, function(str) {
-    ## ##     ## split the string and check if reference read is nonzero
-    ## ##     ad.to.num(str)[1] != 0
-    ## ## })
-
-    ## perc.het <- 0.5^(generation - 1)
-    ## perc.ref <- perc.alt <- (1 - perc.het) / 2
-
-    ## states <- 1:4
-    ## names(states) <- c("P1", "H1", "H2", "P2")
-
-    ## ## probability of a read given a genotype/state
-    ## prob <- function(state, read) {
-    ##     ad.num <- ad.to.num(read)
-    ##     n.ref <- ad.num[1]  # num reference reads
-    ##     n.alt <- ad.num[2]  # num alternate reads
-
-    ##     ref.read.emm <- choose(n, n.ref) * (1-rerr)^n.ref * (rerr)^n.alt
-    ##     alt.read.emm <- choose(n, n.alt) * (1-rerr)^n.alt * (rerr)^n.ref
-    ##     het.read.emm <- choose(n, n.ref) * (0.5)^(n.ref + n.alt)
-
-    ##     err.prob <- gerr * (perc.ref * ref.read.emm + perc.alt * alt.read.emm + perc.het * het.read.emm)
-
-    ##     if (state == states["P1"]) {
-    ##         ret <- (1-gerr) * ref.read.emm + err.prob
-    ##         ## ret <- choose(n, n1) * (1-rerr)^n1 * (rerr)^n2
-    ##     } else if (state == states["P2"]) {
-    ##         ret <- (1-gerr) * alt.read.emm + err.prob
-    ##         ## ret <- choose(n, n2) * (1-rerr)^n2 * (rerr)^n1
-    ##     } else if (state == states["H1"] || state == states["H2"]) {
-    ##         ret <- (1-gerr) * het.read.emm + err.prob
-    ##         ## ret <- choose(n, n1) * (0.5)^n
-    ##     } else {
-    ##         stop("Invalid state; this should never happen")
-    ##     }
-    ##     ret  # implicit return
-    ## }
-
-    ## reads.emm.probs <- function(reads, p1.is.ref) {
-    ##     names(reads) <- NULL  # makes debugging easier
-    ##     ret.val <- do.call(rbind,
-    ##             lapply(states, function(state) {
-    ##                 ## mapply will repeat state as many times as necessary
-    ##                 mapply(FUN=prob, state, reads, p1.is.ref)
-    ##             }))
-
-    ##     ## normalize the emission probabilities so that the forward-backward
-    ##     ## algorithm is more stable
-
-    ##     ret.val <- ret.val / colSums(ret.val)[col(ret.val)]  # normalize each
-    ##                                     # column
-
-    ##     l <- length(states)
-
-    ##     ret.val[is.na(ret.val)] <- 1 / l  # default normalize na columns
-
-    ##     ret.val
-
-    ## }
-
-    ## chroms <- getCHROM(vcf)
-    ## u.chroms <- unique(chroms)
-    samples <- getSAMPLES(vcf)
-    ## ad <- getAD(vcf)
-
-    ## listapply <- get.lapply(parallel, cores)
-
-
-    ## Progress bar code
-    ## -------------------------------------------------------------------------
-    progress.env <- new.env()
-    thefifo <- ProgressMonitor(progress.env)
-    assign("progress", 0.0, envir=progress.env)
-    prog.env <- progress.env
-    n.jobs <- length(u.chroms) * length(samples)
-    ## -------------------------------------------------------------------------
-
-    ## -------------------------------------------------------------------------
-    writeBin(0, thefifo)  # update the progress bar info
-    if (!parallel) {  # if running in serial mode
-        prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
-    }  # else the forked process handles this
-    ## -------------------------------------------------------------------------
-    ## Progress bar code
-
-
-    ret.val <- lapply(u.chroms, function(chrom) {
-        ret.val.2  <- listapply(samples, function(sample) {
-            ret.val.3 <- t(rpgs[chroms==chrom, colnames(rpgs)==sample, ])
-            ## ## emissions will be useless for parents, but that is fine
-            ## ret.val.3 <- reads.emm.probs(ad[chroms==chrom,
-            ##                                 colnames(ad)==sample], p1.is.ref[chroms==chrom])
-
-            ## Progress bar code
-            ## -----------------------------------------------------------------
-            writeBin(1/n.jobs, thefifo)  # update the progress bar info
-            if (!parallel) {  # if running in serial mode
-                prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
-            }  # else the forked process handles this
-            ## -----------------------------------------------------------------
-            ## Progress bar code
-
-
-            ret.val.3
-        })
-        names(ret.val.2) <- samples
-        ret.val.2
-    })
-
-
-    ## Progress bar code
-    ## -------------------------------------------------------------------------
-    close(thefifo)
-    ## -------------------------------------------------------------------------
-    ## Progress bar code
-
-
-    names(ret.val) <- u.chroms
-    ret.val  # implicitly returned
+    rpgs  # implicit return
 }
 
 
@@ -637,6 +534,8 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
             parental.results$parental.models[[chrom]]$path
         )
 
+        emm <- t(emm.structures[chrom==chroms, sample, ])
+
         ## p1.ref <- p1.is.ref[chroms==chrom]
 
         res <- list()
@@ -654,9 +553,7 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
                                        rep(1/4, n.sites),
                                        rep(1/4, n.sites))
             } else {
-                emm <- emm.structures[[chrom]][[sample]]
                 trans <- trans.structures[[chrom]]
-
                 posterior.mat <- fwd.bkwd(emm, trans)
             }
 
@@ -700,7 +597,6 @@ impute <- function(vcf, parents, emm.structures, trans.structures, parental.resu
             } else if (sample == parents[2]) {
                 best.path <- parent.paths[[2]]
             } else {
-                emm <- emm.structures[[chrom]][[sample]]
                 trans <- trans.structures[[chrom]]
 
                 path.and.prob <- viterbi(emm, trans)
