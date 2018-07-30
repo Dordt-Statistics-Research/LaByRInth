@@ -124,14 +124,13 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## parental imputation and recombination rate estimates
     timer <- new.timer()
     display(0, "Imputing parents and estimating recombination rates")
-
-    parental.results <- determine.parents.and.recombs(vcf,
-                                                      parents,
-                                                      read.err,
-                                                      generation,
-                                                      parallel,
-                                                      cores)
-    ## load("testing/small_test_1_mask_1_parental_results.RData")
+    ## parental.results <- determine.parents.and.recombs(vcf,
+    ##                                                   parents,
+    ##                                                   read.err,
+    ##                                                   generation,
+    ##                                                   parallel,
+    ##                                                   cores)
+    load("testing/small_test_1_mask_1_parental_results.RData")
     save(parental.results, file="testing/small_test_1_mask_1_parental_results.RData")
     display(1, "Completed in ", timer(), "\n")
 
@@ -369,39 +368,6 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 
     list(path=path, prob=max(probs))
 }
-
-
-## viterbi <- function(emm, trans) {
-##     n.states <- nrow(emm)
-##     n.sites <- ncol(emm)
-
-##     path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
-
-##     start.probs <- log(rep(1/n.states, n.states))
-##     probs <- start.probs + log(emm[, 1])
-
-##     for (site in 2:n.sites) {
-##         t.index <- site - 1  # transition structure index
-##         prev.site <- site - 1
-##         new.probs <- probs
-##         for (to in 1:n.states) {
-##             x <- probs + log(trans[ , to, t.index])
-##             new.probs[to] <- max(x) + log(emm[to, site])
-##             path.tracker[to, site] <- which.max(x)
-##         }
-##         probs <- new.probs
-##     }
-
-##     ## reconstruct the path
-##     path <- rep(NA, n.sites)
-##     best.state <- which.max(probs)
-##     for (site in n.sites:1) {
-##         path[site] <- best.state
-##         best.state <- path.tracker[best.state, site]
-##     }
-
-##     list(path=path, prob=max(probs))
-## }
 
 
 ## returns the emission probabilities for a given variant and chromosome. Note
