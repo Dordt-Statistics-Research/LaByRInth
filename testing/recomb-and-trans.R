@@ -825,7 +825,7 @@ get.ad.array.w.p1.ref <- function(vcf, parents) {
     p1.is.ref <- sapply(str.ad, function(str) {
         ## split the string and check if reference read is nonzero
         ad.to.num(str)[1] != 0
-    )}
+    })
 
     str.ad <- getAD(vcf)[ , parents[2]]
     p2.is.ref <- sapply(str.ad, function(str) {
@@ -1076,4 +1076,22 @@ get.liklihood.ratio <- function(depth.a, depth.b, rerr) {
     } else {
         ph / (pa + pb)
     }
+}
+
+
+log.lik.path <- function(states, em, tr) {
+    if (length(states) != ncol(em))
+        stop("length of states must match number of cols of em")
+    if (length(states) != dim(tr)[3] + 1)
+        stop("length of states must match number of cols of tr + 1")
+
+    em.log.liks <- sum(sapply(seq_len(ncol(em)), function(i) {
+        em[states[i], i]
+    }))
+
+    tr.log.liks <- sum(sapply(seq_len(dim(tr)[3]), function(i) {
+        tr[states[i], states[i+1], i]
+    }))
+
+    log(1/nrow(em)) + em.log.liks + tr.log.liks
 }
