@@ -44,6 +44,21 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
         display(0, "These probabilities will be included in the output file\n")
     }
 
+    if (cores == 1 && parallel) {
+        display(0, "Cores cannot be 1 if parallel is true\n")
+        stop()
+    }
+
+    if (cores > 1 && !parallel) {
+        display(0, "Cores cannot be greater than 1 if parallel is false\n")
+        stop()
+    }
+
+    if (cores < 1) {
+        display(0, "Cores cannot be less than 1\n")
+        stop()
+    }
+
     ## vcf load code
     if (! inherits(vcf, "vcfR")) {
         timer <- new.timer()
@@ -70,24 +85,25 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
             display(1, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
-    if (length(non.hom.poly) != 0) {
-        display(0, "The parents are not homozygous within and ",
-                "polymorphic between at the following sites:")
-        chroms <- getCHROM(vcf)[non.hom.poly]
-        positions <- getPOS(vcf)[non.hom.poly]
-        ad <- getAD(vcf)[non.hom.poly, parents]
-        for (i in seq_along(chroms)) {
-            display(1, "\tCHR:", chroms[i],
-                    "\tPOS:", positions[i],
-                    paste0("\t", parents[1], ":"), ad[i, 1],
-                    paste0("\t", parents[2], ":"), ad[i, 2])
-        }
-    }
+    ## non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
+    ## if (length(non.hom.poly) != 0) {
+    ##     display(0, "The parents are not homozygous within and ",
+    ##             "polymorphic between at the following sites:")
+    ##     chroms <- getCHROM(vcf)[non.hom.poly]
+    ##     positions <- getPOS(vcf)[non.hom.poly]
+    ##     ad <- getAD(vcf)[non.hom.poly, parents]
+    ##     for (i in seq_along(chroms)) {
+    ##         display(1, "\tCHR:", chroms[i],
+    ##                 "\tPOS:", positions[i],
+    ##                 paste0("\t", parents[1], ":"), ad[i, 1],
+    ##                 paste0("\t", parents[2], ":"), ad[i, 2])
+    ##     }
+    ## }
 
-    if (length(non.biallelic) != 0 ||
-        length(non.hom.poly) != 0)
-        stop("The vcf must be filtered before imputing; please run LabyrinthFilter first")
+    if (length(non.biallelic) != 0) {
+        display(1, "The vcf must be filtered before imputing; please run LabyrinthFilter first\n")
+        stop()
+    }
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -112,10 +128,10 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## emission probability code
     timer <- new.timer()
     display(0, "Generating emission probabilities")
-    emission.structures <- get.emission.structures(ad,
-                                                   sample.names,
-                                                   marker.names,
-                                                   read.err)
+    emission.structure <- get.emission.structures(ad,
+                                                  sample.names,
+                                                  marker.names,
+                                                  read.err)
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -124,14 +140,15 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## parental imputation and recombination rate estimates
     timer <- new.timer()
     display(0, "Imputing parents and estimating recombination rates")
-    ## parental.results <- determine.parents.and.recombs(vcf,
-    ##                                                   parents,
-    ##                                                   read.err,
-    ##                                                   generation,
-    ##                                                   parallel,
-    ##                                                   cores)
-    load("testing/small_test_1_mask_1_parental_results.RData")
-    save(parental.results, file="testing/small_test_1_mask_1_parental_results.RData")
+    parental.results <- determine.parents.and.recombs(emission.structure,
+                                                      parents,
+                                                      snp.chroms,
+                                                      marker.names,
+                                                      sample.names,
+                                                      parallel,
+                                                      cores)
+    ## load("testing/temp_storage_5.RData")
+    save(parental.results, file="testing/temp_storage_5.RData")
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -154,7 +171,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     timer <- new.timer()
     display(0, "Imputing missing sites")
     imp.res <- impute(parents,
-                      emission.structures,
+                      emission.structure,
                       transition.structures,
                       parental.results,
                       sample.names,
@@ -199,22 +216,22 @@ LabyrinthFilter <- function(vcf, parents, out.file) {
             display(0, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    display(0, "Checking for sites where parents are not homozygous within and polymorphic between")
-    non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
-    if (length(non.hom.poly) != 0) {
-        display(0, "The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
-        chroms <- getCHROM(vcf)[which(non.hom.poly)]
-        positions <- getPOS(vcf)[which(non.hom.poly)]
-        ad <- getAD(vcf)[which(non.hom.poly), parents]
-        for (i in seq_along(chroms)) {
-            display(0, "\tCHR:", chroms[i],
-                    "\tPOS:", positions[i],
-                    paste0("\t", parents[1], ":"), ad[i, 1],
-                    paste0("\t", parents[2], ":"), ad[i, 2])
-        }
-    }
+    ## display(0, "Checking for sites where parents are not homozygous within and polymorphic between")
+    ## non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
+    ## if (length(non.hom.poly) != 0) {
+    ##     display(0, "The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
+    ##     chroms <- getCHROM(vcf)[which(non.hom.poly)]
+    ##     positions <- getPOS(vcf)[which(non.hom.poly)]
+    ##     ad <- getAD(vcf)[which(non.hom.poly), parents]
+    ##     for (i in seq_along(chroms)) {
+    ##         display(0, "\tCHR:", chroms[i],
+    ##                 "\tPOS:", positions[i],
+    ##                 paste0("\t", parents[1], ":"), ad[i, 1],
+    ##                 paste0("\t", parents[2], ":"), ad[i, 2])
+    ##     }
+    ## }
 
-    mask <- !non.biallelic & !non.hom.poly
+    mask <- !non.biallelic## & !non.hom.poly
     vcf@fix <- vcf@fix[mask, ]
     vcf@gt <- vcf@gt[mask, ]
     write.vcf(vcf, paste0(out.file, ".vcf.gz"), mask=TRUE)
@@ -331,7 +348,7 @@ fwd.bkwd <- function(emm, trans) {
 
 ## If emm.log is TRUE, then the data passed in emm should already be
 ## log-scaled. Similarly with trans.log
-viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
+viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE, temp) {
     if (!emm.log)
         emm <- log(emm)
     if (!trans.log)
@@ -366,6 +383,15 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
         best.state <- path.tracker[best.state, site]
     }
 
+    ## if (temp) {
+    ##     browser()
+    ##     print("going to quit 1")
+    ##     print("going to quit 2")
+    ##     print("going to quit 3")
+    ##     print("going to quit 4")
+    ##     print("going to quit 5")
+    ## }
+
     list(path=path, prob=max(probs))
 }
 
@@ -383,11 +409,13 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 ## different models, and each model could utilize the same emission
 ## probabilities, so it was faster to compute all of the emission probabilities
 ## only once.
-get.emission.structures <- function(ad, sample.names, marker.names, read.err) {
+get.emission.structures <- function(ad, sample.names, marker.names, read.err, geno.err) {
 
-    hom.ref.read.emm <- (1-read.err)^ad[ , , 1] * (read.err)^ad[ , , 2]
-    hom.alt.read.emm <- (1-read.err)^ad[ , , 2] * (read.err)^ad[ , , 1]
-    het.read.emm     <-        (0.5)^ad[ , , 1] *      (0.5)^ad[ , , 2]
+    k <- choose(ad[ , , 1] + ad[ , , 2], ad[ , , 1])  # n choose k
+
+    hom.ref.read.emm <- k * (1-read.err)^ad[ , , 1] * (read.err)^ad[ , , 2]
+    hom.alt.read.emm <- k * (1-read.err)^ad[ , , 2] * (read.err)^ad[ , , 1]
+    het.read.emm     <- k *        (0.5)^ad[ , , 1] *      (0.5)^ad[ , , 2]
 
     ## read probs given states
     ## first dimension is the markers/loci/SNPs
@@ -412,7 +440,6 @@ get.emission.structures <- function(ad, sample.names, marker.names, read.err) {
 
 get.transition.structures <- function(snp.chroms, marker.names,
                                       parental.results, parallel, cores) {
-
     u.chroms <- unique(snp.chroms)
     listapply <- get.lapply(parallel, cores)
 
@@ -427,7 +454,9 @@ get.transition.structures <- function(snp.chroms, marker.names,
             ## parental states at both sites. This "matrix" is actually a
             ## function of the recombination probability which can be called
             ## with recombs[i] to get a 4x4 matrix
-            site.pair.transition.probs[[parental.model[i]]][[parental.model[i+1]]](recombs[i])
+            mat <- site.pair.transition.probs[[parental.model[i]]][[parental.model[i+1]]](recombs[i])
+            ## normalize so that every rowSum is 0 since these are probabilities
+            mat / rep(rowSums(mat), 4)
         })
 
         result <- do.call(abind3, trans.matrices)
@@ -551,13 +580,15 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
             res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
 
             if (use.fwd.bkwd) {
-                if (sample == parents[1])
+                if (sample == parents[1]) {
                     res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[1]]]
-                if (sample == parents[2])
+                } else if (sample == parents[2]) {
                     res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[2]]]
-                res$gt <- apply(posteriors, 2, function(states) {
-                    c("0/0","0/1","1/1")[which.max(states)]
-                })
+                } else {
+                    res$gt <- apply(posteriors, 2, function(states) {
+                        c("0/0","0/1","1/1")[which.max(states)]
+                    })
+                }
             }
         }
 
@@ -567,7 +598,7 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
             } else if (sample == parents[2]) {
                 best.path <- parent.paths[[2]]
             } else {
-                path.and.prob <- viterbi(emm, trans)
+                path.and.prob <- viterbi(emm, trans, temp=sample=="U6202-217")
                 best.path <- path.and.prob$path
             }
 
@@ -1022,84 +1053,16 @@ get.ad.array <- function(vcf) {
 }
 
 
-determine.parents.and.recombs <- function(vcf, parents, rerr,
-                                          generation, parallel=F, cores=1) {
-    chroms <- getCHROM(vcf)
-    u.chroms <- unique(chroms)
-    all.ad <- get.ad.array(vcf)  # 3D array with 2 reads as the third dimension
-    parent.indices <- which(colnames(all.ad) %in% parents)  # find parents
+determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
+                                          marker.names, sample.names, parallel,
+                                          cores) {
 
     listapply <- get.lapply(parallel, cores)
 
-
-    hom.ref.read.emm <- (1-rerr)^all.ad[ , , 1] * (rerr)^all.ad[ , , 2]
-    hom.alt.read.emm <- (1-rerr)^all.ad[ , , 2] * (rerr)^all.ad[ , , 1]
-    het.read.emm     <-    (0.5)^all.ad[ , , 1] *  (0.5)^all.ad[ , , 2]
-
-    rpgs <- abind(  # read probs given states
-        hom.ref.read.emm,
-        het.read.emm,
-        het.read.emm,
-        hom.alt.read.emm,
-
-        along=3
-    )
-
-    rm(hom.ref.read.emm, hom.alt.read.emm, het.read.emm)
-
-    parental.rpgs <- rpgs[ , parent.indices, ]
-    rpgs <- rpgs[ , -parent.indices, ]
-
-    get.trans.probs <- function(i) {
-        j <- i+1
-
-        ## snp.i will be constant along the third dimension and snp.j will be
-        ## constant along the second dimension. By binding additional copies in
-        ## this way we can replicate mathematical matrix multiplication with
-        ## element-by-element multiplication allowing us to do all SNPs at once
-        ## without needing an apply function which can be slower
-        snp.i <- abind(rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], along=3)
-        snp.j <- abind(rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], along=3)
-        snp.j <- aperm(snp.j, c(1,3,2))
-
-        rpgsp <- snp.i * snp.j  # read probs given state pair
-        rm(snp.i, snp.j)
-
-        get.objective.fun <- function(f) {
-            function(r) {
-                per.snp <- apply(rpgsp, 1, function(layer) {
-                    sum(layer * f(r))
-                })
-                sum(log(per.snp))
-            }
-        }
-
-        ## message("Starting double loop for ", i)
-        log.liklihood.mat <- matrix(-Inf, nrow=16, ncol=16)
-        recomb.val.mat <- matrix(0, nrow=16, ncol=16)
-        for (x in 2:15) {      # 1 and 16 are not biallelic parental states and there
-            for (y in 2:15) {  # is not optimal recombination probability
-                site.pair.probs.fun <- site.pair.transition.probs[[x]][[y]]
-                obj.fun <- get.objective.fun(site.pair.probs.fun)
-                ## browser()
-
-                init <- 0.1
-                result <- optim(par=init,
-                                obj.fun,
-                                method="Brent",
-                                lower=0,
-                                upper=0.5,
-                                control=list(ndeps=1e-2,  # step size
-                                             fnscale=-1))
-                recomb.val.mat[x,y] <- result$par
-                log.liklihood.mat[x,y] <- result$value
-                ## message(x, ",", y)
-            }
-        }
-
-        list(logliklihoods = log.liklihood.mat,
-             recombs = recomb.val.mat)
-    }
+    u.chroms <- unique(snp.chroms)
+    which.parents <- sample.names %in% parents
+    parental.rpgs <- emm.structure[ , which.parents, ]  # read probs given states
+    rpgs <- emm.structure[ , !which.parents, ]
 
 
     ## Progress bar code
@@ -1108,7 +1071,7 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
     thefifo <- ProgressMonitor(progress.env)
     assign("progress", 0.0, envir=progress.env)
     prog.env <- progress.env
-    n.jobs <- (length(chroms) - length(u.chroms))*14^2
+    n.jobs <- (length(snp.chroms) - length(u.chroms))*14^2
     ## -------------------------------------------------------------------------
 
     ## -------------------------------------------------------------------------
@@ -1122,7 +1085,7 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
 
 
     transitions <- lapply(u.chroms, function(chrom) {
-        indices <- which(chroms == chrom)  # which indices correspond with this chrom
+        indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
         indices <- indices[-length(indices)]  # remove the last element
 
         ret.val.2  <- listapply(indices, function(i) {
@@ -1141,25 +1104,36 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
             snp.j <- aperm(snp.j, c(1,3,2))
 
             rpgsp <- snp.i * snp.j  # read probs given state pair
+            essential.layers <- rowSums(rpgs[i, , ]) != 4 & rowSums(rpgs[j, , ]) != 4
+
+            dimnames(rpgsp) <- list(sample.names[ !which.parents ],
+                                    c("hom.ref", "het.I", "het.II", "hom.alt"),
+                                    c("hom.ref", "het.I", "het.II", "hom.alt"))
+
+
             rm(snp.i, snp.j)
 
             get.objective.fun <- function(f) {
+                const.per.snp <- apply(rpgsp[!essential.layers,,], 1, function(layer) {
+                    sum(layer * f(0))
+                })
+                k <- sum(log(const.per.snp))
+
                 function(r) {
-                    per.snp <- apply(rpgsp, 1, function(layer) {
-                        sum(layer * f(r))
+                    f.of.r <- f(r)
+                    per.snp <- apply(rpgsp[essential.layers,,], 1, function(layer) {
+                        sum(layer * f.of.r)
                     })
-                    sum(log(per.snp))
-                }
+                    sum(log(per.snp)) + k  # implicit return from objective.fun
+                }  # get.objective.fun returns this function
             }
 
-            ## message("Starting double loop for ", i)
             log.liklihood.mat <- matrix(-Inf, nrow=16, ncol=16)
             recomb.val.mat <- matrix(0, nrow=16, ncol=16)
             for (x in 2:15) {      # 1 and 16 are not biallelic parental states and there
                 for (y in 2:15) {  # is not optimal recombination probability
                     site.pair.probs.fun <- site.pair.transition.probs[[x]][[y]]
                     obj.fun <- get.objective.fun(site.pair.probs.fun)
-                    ## browser()
 
                     init <- 0.1
                     result <- optim(par=init,
@@ -1183,6 +1157,10 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
                     ## Progress bar code
                 }
             }
+
+            mymat <- log(exp(log.liklihood.mat) / rep(rowSums(exp(log.liklihood.mat)), 16))
+            mymat[is.nan(mymat)] <- -Inf
+            log.liklihood.mat <- mymat
 
             list(logliklihoods = log.liklihood.mat,
                  recombs = recomb.val.mat)
@@ -1246,7 +1224,7 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
     ## transitions <- readRDS("testing/transitions_1.rds")
 
     parental.models <- listapply(u.chroms, function(chrom) {
-        viterbi(emissions[, chroms == chrom],
+        viterbi(emissions[, snp.chroms == chrom],
                 do.call(abind3, lapply(transitions[[chrom]], function(elem) {elem$logliklihoods})),
                 emm.log = TRUE,
                 trans.log = TRUE)
@@ -1270,34 +1248,6 @@ determine.parents.and.recombs <- function(vcf, parents, rerr,
 }
 
 
-log.lik.path <- function(states, em, tr) {
-    if (length(states) != ncol(em))
-        stop("length of states must match number of cols of em")
-    if (length(states) != dim(tr)[3] + 1)
-        stop("length of states must match number of cols of tr + 1")
-
-    em.log.liks <- sum(sapply(seq_len(ncol(em)), function(i) {
-        em[states[i], i]
-    }))
-
-    tr.log.liks <- sum(sapply(seq_len(dim(tr)[3]), function(i) {
-        tr[states[i], states[i+1], i]
-    }))
-
-    log(1/16) + em.log.liks + tr.log.liks
-    ## em[states[1],1] +
-    ##     em[states[2],2] +
-    ##     em[states[3],3] +
-    ##     em[states[4],4] +
-    ##     em[states[5],5] +
-    ##     tr[states[1], states[2], 1] +
-    ##     tr[states[2], states[3], 2] +
-    ##     tr[states[3], states[4], 3] +
-    ##     tr[states[4], states[5], 4]
-}
-
-
-
 ## parental.model is a vector of values in range 1-16 inclusive. This indicates
 ## the state of the two parents for each site. The value is 4 times the value of
 ## the state of parent 1 plus the state of parent 2. This function returns a
@@ -1316,3 +1266,33 @@ parental.model.to.parents <- function(parental.model) {
         parents[2, ]
     )
 }
+
+
+LabyrinthAnalyze <- function(orig, masked, imputed) {
+    ## timer <- new.timer()
+    ## display(0, "Reading original file")
+    ## display(0, "Reading masked file")
+    ## display(0, "Reading filtered file")
+    gt.o <- getGT(orig)
+    gt.m <- getGT(masked)
+    gt.i <- getGT(imputed)
+
+    ## vector.indices
+    masked.sites <-
+        (gt.o != "./." & gt.o != ".|.") &
+        (gt.m == "./." || gt.m == ".|.") &
+
+    same <-
+        ((gt.o == "0/0" || gt.o == "0|0") & (gt.i == "0/0" || gt.i == "0|0")) ||
+        ((gt.o == "0/1" || gt.o == "0|1" || gt.o == "1/0" || gt.o == "1|0") &
+         (gt.i == "0/1" || gt.i == "0|1" || gt.i == "1/0" || gt.i == "1|0")) ||
+        ((gt.o == "1/1" || gt.o == "1|1") & (gt.i == "1/1" || gt.i == "1|1"))
+
+    n.same <- sum(masked & same)
+    n.masked <- sum(masked)
+    accuracy <-  n.same / n.masked
+    display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
+}
+
+
+
