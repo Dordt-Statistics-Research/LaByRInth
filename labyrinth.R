@@ -1185,11 +1185,11 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 
 
     ## ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
-    ## p <- 0.99  # probability of a site in parents being heterozygous
-    ## log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
-    ##                      p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
-    ##                      p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
-    ##                      p^2, p*(1-p), p*(1-p), p^2))
+    p <- 0.99  # probability of a site in parents being heterozygous
+    log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
+                         p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
+                         p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
+                         p^2, p*(1-p), p*(1-p), p^2))
 
     emissions <- apply(parental.rpgs, 1, function(snp.depths) {
         result <- sapply(1:16, function(i) {
@@ -1197,8 +1197,8 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
             p1 <- floor(i / 4)  # bit shift i right twice to get two most sig bits
             p2 <- i - p1*4      # two least significant bits
             log(snp.depths[1, (p1+1)]) +
-                log(snp.depths[2, (p2+1)])##  +
-                ## log.penalty[i+1]
+                log(snp.depths[2, (p2+1)]) +
+                log.penalty[i+1]
         })
         names(result) <- NULL
         result  # implicit return
