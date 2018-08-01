@@ -1279,19 +1279,21 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
     ## vector.indices
     masked.sites <-
         (gt.o != "./." & gt.o != ".|.") &
-        (gt.m == "./." || gt.m == ".|.") &
+        (gt.m == "./." | gt.m == ".|.")
 
     same <-
-        ((gt.o == "0/0" || gt.o == "0|0") & (gt.i == "0/0" || gt.i == "0|0")) ||
-        ((gt.o == "0/1" || gt.o == "0|1" || gt.o == "1/0" || gt.o == "1|0") &
-         (gt.i == "0/1" || gt.i == "0|1" || gt.i == "1/0" || gt.i == "1|0")) ||
-        ((gt.o == "1/1" || gt.o == "1|1") & (gt.i == "1/1" || gt.i == "1|1"))
+        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
+        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
+         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
+        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
 
-    n.same <- sum(masked & same)
-    n.masked <- sum(masked)
+    n.same <- sum(masked.sites & same)
+    n.masked <- sum(masked.sites)
     accuracy <-  n.same / n.masked
+
+    w <- which(masked.sites & !same, arr.ind = TRUE)
+    ad <- getAD(orig)
+
+    browser()
     display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
 }
-
-
-
