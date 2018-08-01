@@ -185,7 +185,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     ## new vcf creation code
     timer <- new.timer()
     display(0, "Creating new vcf with imputed data")
-    vcf <- update.vcf(vcf, imp.res)
+    vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
     display(1, "Completed in ", timer(), "\n")
 
     write.vcf(vcf, paste0(out.file, ".vcf.gz"))
@@ -719,7 +719,7 @@ is.parent.ref <- function(vcf, parent) {
 
 
 ## modify the vcf in place to add imputed calls in gt
-update.vcf <- function(vcf, impute.res) {
+update.vcf <- function(vcf, gt, posteriors=NULL) {
     ## phred.scaled.res <- apply(impute.res, 1:3, function(x) {
     ##     ## 1-x is the probability the call is wrong
     ##     ## use min to prevent infinity from getting throughk
@@ -734,8 +734,7 @@ update.vcf <- function(vcf, impute.res) {
     ##     c("0/0","0/1","1/1")[which.max(states)]
     ## })
 
-    gt <- impute.res$gt
-    gp <- impute.res$posteriors
+    gp <- posteriors
     ad <- getAD(vcf)
 
     n.rows <- nrow(ad)
