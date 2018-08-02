@@ -18,10 +18,9 @@ require(vcfR, quietly=T)
 require(abind, quietly=T)
 
 
-LabyrinthImpute <- function (vcf, parents, generation, out.file,
+LabyrinthImpute <- function (vcf, parents, generation, out.file, parental.imputation,
                              use.fwd.bkwd=FALSE, use.viterbi=TRUE,
-                             calc.posteriors=TRUE,
-                             read.err=0.05, geno.err=0.05,
+                             calc.posteriors=TRUE, geno.err=0.05,
                              parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
@@ -114,15 +113,25 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(0, "Loading data specific to F", generation)
     ## site.pair.transition.probs variable will be loaded
     source(paste0("./new-transition-probs/F", generation, ".R"))
+    display(1, "Completed in ", timer(), "\n")
 
+
+    timer <- new.timer()
+    display(0, "Storing markers, samples, and read depths", generation)
     snp.chroms <- getCHROM(vcf)
     u.chroms <- unique(snp.chroms)
     ad <- get.ad.array(vcf)
     sample.names <- getSAMPLES(vcf)
     marker.names <- getID(vcf)
+    parental.results <- readRDS(parental.imputation)
     display(1, "Completed in ", timer(), "\n")
 
 
+    timer <- new.timer()
+    display(0, "Estimating erroneous read rate from heterozygosity")
+    read.err <- estimate.read.err(ad, generation)
+    display(1, "Error rate estimated to be ", round(read.err*100, 2), "%")
+    display(1, "Completed in ", timer(), "\n")
 
 
     ## emission probability code
@@ -137,19 +146,20 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
 
 
 
-    ## parental imputation and recombination rate estimates
-    timer <- new.timer()
-    display(0, "Imputing parents and estimating recombination rates")
-    parental.results <- determine.parents.and.recombs(emission.structure,
-                                                      parents,
-                                                      snp.chroms,
-                                                      marker.names,
-                                                      sample.names,
-                                                      parallel,
-                                                      cores)
-    ## load("testing/temp_storage_5.RData")
-    save(parental.results, file="testing/temp_storage_5.RData")
-    display(1, "Completed in ", timer(), "\n")
+    ## ## parental imputation and recombination rate estimates
+    ## timer <- new.timer()
+    ## display(0, "Imputing parents and estimating recombination rates")
+    ## ## parental.results <- determine.parents.and.recombs(emission.structure,
+    ## ##                                                   parents,
+    ## ##                                                   snp.chroms,
+    ## ##                                                   marker.names,
+    ## ##                                                   sample.names,
+    ## ##                                                   parallel,
+    ## ##                                                   cores)
+    ## ## load("testing/temp_storage_6.RData")
+    ## parental.results <- readRDS("parental-results-est-careful.rds")
+    ## saveRDS(parental.results, "parental-results-est-careful.rds")
+    ## display(1, "Completed in ", timer(), "\n")
 
 
 
@@ -186,18 +196,18 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     timer <- new.timer()
     display(0, "Creating new vcf with imputed data")
     vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
+    write.vcf(vcf, paste0(out.file, ".vcf.gz"))
     display(1, "Completed in ", timer(), "\n")
 
-    write.vcf(vcf, paste0(out.file, ".vcf.gz"))
-    display(0, "LaByRInth imputation completed in ", total.timer())
 
+    display(0, "LaByRInth imputation completed in ", total.timer())
     invisible(vcf) ## implicit return
 }
 
 
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
-LabyrinthFilter <- function(vcf, parents, out.file) {
+LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
     display(0, "Checking if vcf is an object or file")
     if (! inherits(vcf, "vcfR")) {
         display(0, "Loading vcf")
@@ -348,7 +358,7 @@ fwd.bkwd <- function(emm, trans) {
 
 ## If emm.log is TRUE, then the data passed in emm should already be
 ## log-scaled. Similarly with trans.log
-viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE, temp) {
+viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
     if (!emm.log)
         emm <- log(emm)
     if (!trans.log)
@@ -382,15 +392,6 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE, temp) {
         path[site] <- best.state
         best.state <- path.tracker[best.state, site]
     }
-
-    ## if (temp) {
-    ##     browser()
-    ##     print("going to quit 1")
-    ##     print("going to quit 2")
-    ##     print("going to quit 3")
-    ##     print("going to quit 4")
-    ##     print("going to quit 5")
-    ## }
 
     list(path=path, prob=max(probs))
 }
@@ -544,6 +545,11 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
     listapply <- get.lapply(parallel, cores)
     u.chroms <- unique(snp.chroms)
 
+    ## Given two probabilites of odd recombinations (r1 between sites x and y;
+    ## r2 between sites y and z) what is the probability of an odd number of
+    ## recombinations between sites x and z
+    combine.recombs <- function(r1, r2) {r1*(1-r2) + r2*(1-r1)}
+
     impute.sample.chrom <- function(sample, chrom) {
 
         n.sites <- sum(snp.chroms==chrom)  # boolean addition
@@ -559,10 +565,10 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
 
         if (use.fwd.bkwd || calc.posteriors) {
             if (sample %in% parents) {
-                posterior.mat <- rbind("hom.ref" = rep(1/4, n.sites),
-                                       "het.I"   = rep(1/4, n.sites),
-                                       "het.II"  = rep(1/4, n.sites),
-                                       "hom.alt" = rep(1/4, n.sites))
+                posterior.mat <- rbind("hom.ref" = rep(1/3, n.sites),
+                                       "het.I"   = rep(1/6, n.sites),
+                                       "het.II"  = rep(1/6, n.sites),
+                                       "hom.alt" = rep(1/3, n.sites))
             } else {
                 posterior.mat <- fwd.bkwd(emm, trans)
             }
@@ -598,11 +604,36 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
             } else if (sample == parents[2]) {
                 best.path <- parent.paths[[2]]
             } else {
-                path.and.prob <- viterbi(emm, trans, temp=sample=="U6202-217")
-                best.path <- path.and.prob$path
+                relevant <- ! apply(emm, 2, function(state.probs) {
+                    all(state.probs == state.probs[1])
+                })
+
+                which.relevant <- which(relevant)
+                names(which.relevant) <- NULL
+
+                if (length(which.relevant) < 2) {
+                    best.path <- rep(5, length(relevant))
+                } else {
+
+                    path.and.prob <- viterbi(emm, trans)
+                    best.path <- path.and.prob$path
+
+                    inter.relevant.probs <- sapply.pairs(which.relevant, function(a, b) {exp(log.lik.path(best.path, emm, trans, a, b))})
+                    names(inter.relevant.probs) <- NULL
+
+                    THRESHOLD <- 1e-5
+                    for (unlikely.index in which(inter.relevant.probs < THRESHOLD)) {
+                        start <- which.relevant[unlikely.index] + 1
+                        end <- which.relevant[unlikely.index + 1] - 1
+
+                        best.path[start:end] <- 5
+                    }
+
+                    best.path
+                }
             }
 
-            res$gt <- c("0|0", "0|1", "1|0", "1|1")[best.path]
+            res$gt <- c("0|0", "0|1", "1|0", "1|1", "./.")[best.path]
         }
 
         res  # implicit return
@@ -756,6 +787,9 @@ update.vcf <- function(vcf, gt, posteriors=NULL) {
 }
 
 
+
+
+
 getAD <- function(vcf) {
     ad <- extract.gt(vcf, "AD")
     ad[is.na(ad)] <- "0,0"  # replace NA entries
@@ -787,6 +821,11 @@ gt.to.num <- function(str) {
     str <- gsub("\\|", "/", str)  # replace '|' with '/'
     suppressWarnings(as.numeric(str.split(str, "/")))
 
+}
+
+
+ad.to.gt <- function(str.mat) {
+    
 }
 
 
@@ -925,14 +964,32 @@ print.labyrinth.header <- function() {
     writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
     writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
     writeLines("|                                                                     |")
-    writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
-    writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
-    writeLines("| Licensed under the Apache License, Version 2.0                      |")
-    writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
-    writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
-    writeLines("| Funding received from the National Science Foundation (IOS-1238187) |")
+    writeLines("|     ======  L O W - C O V E R A G E   B I A L L E L I C  ======     |")
+    writeLines("|     =======   R - P A C K A G E   I M P U T A T I O N   =======     |")
+    ## writeLines("|                                                                     |")
+    ## writeLines("|         Copyright 2017 Jason Vander Woude and Nathan Ryder          |")
+    ## writeLines("|           Licensed under the Apache License, Version 2.0            |")
     writeLines("|_____________________________________________________________________|")
     writeLines("")
+
+    ## ## the image looks funny because '\' in the displayed image must be '\\' in the code
+    ## writeLines("")
+    ## writeLines(" _____________________________________________________________________")
+    ## writeLines("|          __          ____        ____  _____                        |")
+    ## writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
+    ## writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
+    ## writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
+    ## writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
+    ## writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
+    ## writeLines("|                                                                     |")
+    ## writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
+    ## writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
+    ## writeLines("| Licensed under the Apache License, Version 2.0                      |")
+    ## writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
+    ## writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
+    ## writeLines("| Funding received from the National Science Foundation (IOS-1238187) |")
+    ## writeLines("|_____________________________________________________________________|")
+    ## writeLines("")
 
 }
 
@@ -1296,4 +1353,71 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
 
     browser()
     display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
+}
+
+
+estimate.read.err <- function(ad, n.gen) {
+    depths <- ad[ , , 1] + ad[ , , 2]
+    relevant <- depths > 1  # depth of 0 or 1 gives no info on heterozygosity
+    ref <- ad[ , , 1][relevant]
+    alt <- ad[ , , 2][relevant]
+
+    h <- 0.5^(n.gen - 1)  # expected proportion of sites that are heterozygous
+
+    ## objective function of r, the probability of an erroneous read at the
+    ## haplotype level
+    obj.fun <- function(r) {
+        sum(log((1-h)/2 * (r^ref * (1-r)^alt + r^alt * (1-r)^ref) + h*0.5^(ref + alt)))
+            ## mapply(
+            ##     function(n.ref, n.alt) {
+            ##        (1-h)/2 * (r^n.ref * (1-r)^n.alt + r^n.alt * (1-r)^n.ref) +
+            ##             h*0.5^(n.ref + n.alt)
+            ##     }
+            ## , refs, alts)
+        ## ))
+    }
+
+    init <- 0.01
+    result <- optim(par=init,
+                    obj.fun,
+                    method="Brent",
+                    lower=0,
+                    upper=0.5,
+                    control=list(ndeps=1e-3,  # step size
+                                 fnscale=-1))
+
+    result$par
+}
+
+
+sapply.pairs <- function(vec, fun) {
+    if (length(vec) < 2) {
+        stop("first argument must have length >= 2")
+    }
+    v1 <- vec[-length(vec)]  # remove last entry
+    v2 <- vec[-1]  # remove first entry
+
+    mapply(fun, v1, v2)
+}
+
+
+log.lik.path <- function(states, em, tr, index1, index2) {
+    if (length(states) != ncol(em))
+        stop("length of states must match number of cols of em")
+    if (length(states) != dim(tr)[3] + 1)
+        stop("length of states must match number of cols of tr + 1")
+
+    em <- log(em[ , index1:index2, drop=FALSE])
+    tr <- log(tr[ , , index1:(index2 - 1), drop=FALSE])
+    states <- states[index1:index2]
+
+    em.log.liks <- sum(sapply(seq_len(ncol(em)), function(i) {
+        em[states[i], i]
+    }))
+
+    tr.log.liks <- sum(sapply(seq_len(dim(tr)[3]), function(i) {
+        tr[states[i], states[i+1], i]
+    }))
+
+    em.log.liks + tr.log.liks
 }
