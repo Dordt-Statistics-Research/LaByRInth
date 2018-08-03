@@ -11,6 +11,17 @@
 ## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
+##
+##           __          ____        ____  _____
+##          / /         / __ \      / __ \/_  _/
+##         / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __
+##        / /   / _  \/ _  _/\ \/ / _  _/ / / /  | / /_  __/ /_/ /
+##       / /___/ /_/ / /_\ \  \  / / \ \_/ /_/ /||/ / / / / __  /
+##      /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/
+##
+##              L O W - C O V E R A G E   B I A L L E L I C
+##                R - P A C K A G E   I M P U T A T I O N
+##
 
 
 ## library for working with VCF files
@@ -18,15 +29,14 @@ require(vcfR, quietly=T)
 require(abind, quietly=T)
 
 
-LabyrinthImpute <- function (vcf, parents, generation, out.file, parental.imputation,
+LabyrinthImpute <- function (vcf, parents, generation, out.file,
                              use.fwd.bkwd=FALSE, use.viterbi=TRUE,
-                             calc.posteriors=TRUE, geno.err=0.05,
+                             calc.posteriors=TRUE, geno.err=0.01,
                              parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
+    print("UPDATED 3")
     print.labyrinth.header()
-
-
 
 
     ## parameter verification
@@ -123,7 +133,6 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file, parental.imputa
     ad <- get.ad.array(vcf)
     sample.names <- getSAMPLES(vcf)
     marker.names <- getID(vcf)
-    parental.results <- readRDS(parental.imputation)
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -140,26 +149,29 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file, parental.imputa
     emission.structure <- get.emission.structures(ad,
                                                   sample.names,
                                                   marker.names,
-                                                  read.err)
+                                                  generation,
+                                                  read.err,
+                                                  geno.err)
     display(1, "Completed in ", timer(), "\n")
 
 
 
 
-    ## ## parental imputation and recombination rate estimates
-    ## timer <- new.timer()
-    ## display(0, "Imputing parents and estimating recombination rates")
-    ## ## parental.results <- determine.parents.and.recombs(emission.structure,
-    ## ##                                                   parents,
-    ## ##                                                   snp.chroms,
-    ## ##                                                   marker.names,
-    ## ##                                                   sample.names,
-    ## ##                                                   parallel,
-    ## ##                                                   cores)
-    ## ## load("testing/temp_storage_6.RData")
+    ## parental imputation and recombination rate estimates
+    timer <- new.timer()
+    display(0, "Imputing parents and estimating recombination rates")
+    parental.results <- determine.parents.and.recombs(emission.structure,
+                                                      parents,
+                                                      snp.chroms,
+                                                      marker.names,
+                                                      sample.names,
+                                                      parallel,
+                                                      cores)
+    ## load("testing/temp_storage_6.RData"); read.err <- 0.001
+    ## parental.results <- readRDS(parental.imputation)
     ## parental.results <- readRDS("parental-results-est-careful.rds")
-    ## saveRDS(parental.results, "parental-results-est-careful.rds")
-    ## display(1, "Completed in ", timer(), "\n")
+    saveRDS(parental.results, "parental-results.rds")
+    display(1, "Completed in ", timer(), "\n")
 
 
 
@@ -226,27 +238,38 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
             display(0, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    ## display(0, "Checking for sites where parents are not homozygous within and polymorphic between")
-    ## non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
-    ## if (length(non.hom.poly) != 0) {
-    ##     display(0, "The parents are not homozygous within and polymorphic between at the following sites which will be removed:")
-    ##     chroms <- getCHROM(vcf)[which(non.hom.poly)]
-    ##     positions <- getPOS(vcf)[which(non.hom.poly)]
-    ##     ad <- getAD(vcf)[which(non.hom.poly), parents]
-    ##     for (i in seq_along(chroms)) {
-    ##         display(0, "\tCHR:", chroms[i],
-    ##                 "\tPOS:", positions[i],
-    ##                 paste0("\t", parents[1], ":"), ad[i, 1],
-    ##                 paste0("\t", parents[2], ":"), ad[i, 2])
-    ##     }
-    ## }
+    mask <- !non.biallelic
 
-    mask <- !non.biallelic## & !non.hom.poly
-    vcf@fix <- vcf@fix[mask, ]
-    vcf@gt <- vcf@gt[mask, ]
-    write.vcf(vcf, paste0(out.file, ".vcf.gz"), mask=TRUE)
-    display(0, paste("\nFiltering is complete;", sum(!mask), "of", length(mask), "sites removed"))
-    invisible(vcf)  # implicit return
+    if (hom.poly) {
+        display(0, "Checking for sites where parents are not ",
+                   "homozygous within and polymorphic between")
+        non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
+        if (length(non.hom.poly) != 0) {
+            display(0, "The parents are not homozygous within and polymorphic ",
+                       "between at the following sites which will be removed:")
+            chroms <- getCHROM(vcf)[which(non.hom.poly)]
+            positions <- getPOS(vcf)[which(non.hom.poly)]
+            ad <- getAD(vcf)[which(non.hom.poly), parents]
+            for (i in seq_along(chroms)) {
+                display(0, "\tCHR:", chroms[i],
+                        "\tPOS:", positions[i],
+                        paste0("\t", parents[1], ":"), ad[i, 1],
+                        paste0("\t", parents[2], ":"), ad[i, 2])
+            }
+        }
+        mask <- mask & non.hom.poly
+    }
+
+    if (all(mask)) {
+        TRUE  # implicit return
+    } else {
+        vcf@fix <- vcf@fix[mask, ]
+        vcf@gt <- vcf@gt[mask, ]
+        write.vcf(vcf, paste0(out.file, ".vcf.gz"), mask=TRUE)
+        display(0, paste("\nFiltering is complete;", sum(!mask),
+                         "of", length(mask), "sites removed"))
+        FALSE  # implicit return
+    }
 }
 
 
@@ -356,6 +379,9 @@ fwd.bkwd <- function(emm, trans) {
 }
 
 
+## TODO(Jason): the initial probabilities are not correct here or in the
+## fwd.bkwd
+
 ## If emm.log is TRUE, then the data passed in emm should already be
 ## log-scaled. Similarly with trans.log
 viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
@@ -410,7 +436,11 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 ## different models, and each model could utilize the same emission
 ## probabilities, so it was faster to compute all of the emission probabilities
 ## only once.
-get.emission.structures <- function(ad, sample.names, marker.names, read.err, geno.err) {
+get.emission.structures <- function(ad, sample.names, marker.names,
+                                    generation, read.err, geno.err) {
+
+    perc.het <- 0.5^(generation - 1)
+    perc.hom.ref <- perc.hom.alt <- (1 - perc.het) / 2
 
     k <- choose(ad[ , , 1] + ad[ , , 2], ad[ , , 1])  # n choose k
 
@@ -418,15 +448,27 @@ get.emission.structures <- function(ad, sample.names, marker.names, read.err, ge
     hom.alt.read.emm <- k * (1-read.err)^ad[ , , 2] * (read.err)^ad[ , , 1]
     het.read.emm     <- k *        (0.5)^ad[ , , 1] *      (0.5)^ad[ , , 2]
 
+
+    ## by accounting for the probability that a given site was erroneously
+    ## assembled we are in essence more heavily weighting the heterozygous
+    ## emisson probabilities
+    err.emm <- perc.hom.ref * hom.ref.read.emm +
+               perc.hom.alt * hom.alt.read.emm +
+               perc.het * het.read.emm
+
+    err.hom.ref.read.emm <- (1 - geno.err) * hom.ref.read.emm + (geno.err) * err.emm
+    err.hom.alt.read.emm <- (1 - geno.err) * hom.alt.read.emm + (geno.err) * err.emm
+    err.het.read.emm     <- (1 - geno.err) * het.read.emm     + (geno.err) * err.emm
+
     ## read probs given states
     ## first dimension is the markers/loci/SNPs
     ## second dimension is the members of the population
     ## third dimension is the state (hom ref, het type I, het type II, hom alt)
     rpgs <- abind(
-        hom.ref.read.emm,
-        het.read.emm,
-        het.read.emm,
-        hom.alt.read.emm,
+        err.hom.ref.read.emm,
+        err.het.read.emm,
+        err.het.read.emm,
+        err.hom.alt.read.emm,
 
         along=3
     )
@@ -621,7 +663,7 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
                     inter.relevant.probs <- sapply.pairs(which.relevant, function(a, b) {exp(log.lik.path(best.path, emm, trans, a, b))})
                     names(inter.relevant.probs) <- NULL
 
-                    THRESHOLD <- 1e-5
+                    THRESHOLD <- 1e-3
                     for (unlikely.index in which(inter.relevant.probs < THRESHOLD)) {
                         start <- which.relevant[unlikely.index] + 1
                         end <- which.relevant[unlikely.index + 1] - 1
@@ -954,23 +996,23 @@ display <- function(indent, ...) {
 
 print.labyrinth.header <- function() {
 
-    ## the image looks funny because '\' in the displayed image must be '\\' in the code
-    writeLines("")
-    writeLines(" _____________________________________________________________________")
-    writeLines("|          __          ____        ____  _____                        |")
-    writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
-    writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
-    writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
-    writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
-    writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
-    writeLines("|                                                                     |")
-    writeLines("|     ======  L O W - C O V E R A G E   B I A L L E L I C  ======     |")
-    writeLines("|     =======   R - P A C K A G E   I M P U T A T I O N   =======     |")
+    ## ## the image looks funny because '\' in the displayed image must be '\\' in the code
+    ## writeLines("")
+    ## writeLines(" _____________________________________________________________________")
+    ## writeLines("|          __          ____        ____  _____                        |")
+    ## writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
+    ## writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
+    ## writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
+    ## writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
+    ## writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
     ## writeLines("|                                                                     |")
-    ## writeLines("|         Copyright 2017 Jason Vander Woude and Nathan Ryder          |")
-    ## writeLines("|           Licensed under the Apache License, Version 2.0            |")
-    writeLines("|_____________________________________________________________________|")
-    writeLines("")
+    ## writeLines("|     ======  L O W - C O V E R A G E   B I A L L E L I C  ======     |")
+    ## writeLines("|     =======   R - P A C K A G E   I M P U T A T I O N   =======     |")
+    ## ## writeLines("|                                                                     |")
+    ## ## writeLines("|         Copyright 2017 Jason Vander Woude and Nathan Ryder          |")
+    ## ## writeLines("|           Licensed under the Apache License, Version 2.0            |")
+    ## writeLines("|_____________________________________________________________________|")
+    ## writeLines("")
 
     ## ## the image looks funny because '\' in the displayed image must be '\\' in the code
     ## writeLines("")
@@ -990,6 +1032,26 @@ print.labyrinth.header <- function() {
     ## writeLines("| Funding received from the National Science Foundation (IOS-1238187) |")
     ## writeLines("|_____________________________________________________________________|")
     ## writeLines("")
+
+    writeLines("")
+    writeLines("")
+    writeLines("           __          ____        ____  _____")
+    writeLines("          / /         / __ \\      / __ \\/_  _/")
+    writeLines("         / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
+    writeLines("        / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
+    writeLines("       / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
+    writeLines("      /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
+    writeLines("")
+    writeLines("              L O W - C O V E R A G E   B I A L L E L I C")
+    writeLines("                R - P A C K A G E   I M P U T A T I O N")
+    writeLines("      __________________________________________________________")
+    writeLines("")
+    writeLines("          Copyright 2017 Jason Vander Woude and Nathan Ryder")
+    writeLines("            Licensed under the Apache License, Version 2.0")
+    writeLines("            github.com/Dordt-Statistics-Research/LaByRInth")
+    writeLines("           Based on LB-Impute and funded by NSF IOS-1238187")
+    writeLines("")
+    writeLines("")
 
 }
 
@@ -1138,7 +1200,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
-
+    browser()
 
     transitions <- lapply(u.chroms, function(chrom) {
         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
@@ -1351,7 +1413,6 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
     w <- which(masked.sites & !same, arr.ind = TRUE)
     ad <- getAD(orig)
 
-    browser()
     display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
 }
 
