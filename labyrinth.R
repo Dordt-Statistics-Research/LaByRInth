@@ -27,32 +27,145 @@
 ## library for working with VCF files
 require(vcfR, quietly=T)
 require(abind, quietly=T)
+require(digest, quietly=T)
 
 
-LabyrinthImpute <- function (vcf, parents, generation, out.file,
-                             use.fwd.bkwd=FALSE, use.viterbi=TRUE,
-                             calc.posteriors=TRUE, geno.err=0.01,
-                             parallel=TRUE, cores=4) {
+LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
+                                    calc.posteriors=TRUE, viterbi.threshold=1e-3,
+                                    fwd.bkwd.threshold=0.8, parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
-    print("UPDATED 3")
     print.labyrinth.header()
 
 
-    ## parameter verification
-    if (use.fwd.bkwd && use.viterbi) {
-        display(0, "Cannot use both fwd.bkwd and viterbi algorithms to impute\n")
-        stop()
-    } else if (!use.fwd.bkwd && !use.viterbi) {
-        display(0, "Must select either fwd.bkwd or viterbi algorithm to impute\n")
+    ## file verification
+    if (file.exists(out.file)) {
+        display(0, "Output file already exists; please choose another name\n")
         stop()
     }
 
+    if (! verify.file.extension(out.file, ".vcf.gz")) {
+        display(0, "Output file name must end with '.vcf.gz'\n")
+        stop()
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        display(0, "Directory of the outuput file does not exist; please create it\n")
+        stop()
+    }
+
+
+    ## parameter verification
     if (use.fwd.bkwd && !calc.posteriors) {
         display(0, "When using fwd.bkwd, posterior probabilities must be calculated")
         display(0, "These probabilities will be included in the output file\n")
     }
 
+    if (cores == 1 && parallel) {
+        display(0, "Cores cannot be 1 if parallel is true\n")
+        stop()
+    }
+
+    if (cores > 1 && !parallel) {
+        display(0, "Cores cannot be greater than 1 if parallel is false\n")
+        stop()
+    }
+
+    if (cores < 1) {
+        display(0, "Cores cannot be less than 1\n")
+        stop()
+    }
+
+
+
+    timer <- new.timer()
+    display(0, "Restoring variables from parental imputation result")
+    vcf <- parental$vcf
+    parents <- parental$parents
+    parent.models <- parental$parent.models
+    generation <- parental$generation
+    read.err <- parental$read.err
+    geno.err <- parental$geno.err
+    site.pair.transition.probs <- parental$site.pair.transition.probs
+    snp.chroms <- parental$snp.chroms
+    u.chroms <- parental$u.chroms
+    ad <- parental$ad
+    sample.names <- parental$sample.names
+    marker.names <- parental$marker.names
+    emission.structure <- parental$emission.structure
+    display(1, "Completed in ", timer(), "\n")
+
+
+
+    ## transition probability code
+    timer <- new.timer()
+    display(0, "Computing progeny transition probabilities")
+    transition.structures <- get.transition.structures(snp.chroms,
+                                                       marker.names,
+                                                       parent.models,
+                                                       site.pair.transition.probs,
+                                                       parallel,
+                                                       cores)
+    display(1, "Completed in ", timer(), "\n")
+
+
+
+
+    ## imputation code
+    timer <- new.timer()
+    display(0, "Imputing missing sites")
+    imp.res <- impute(parents,
+                      emission.structure,
+                      transition.structures,
+                      parent.models,
+                      sample.names,
+                      snp.chroms,
+                      parallel,
+                      cores,
+                      use.fwd.bkwd,
+                      calc.posteriors,
+                      viterbi.threshold,
+                      fwd.bkwd.threshold)
+    display(1, "Completed in ", timer(), "\n")
+
+    ## new vcf creation code
+    timer <- new.timer()
+    display(0, "Creating new vcf with imputed data")
+    vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
+    write.vcf(vcf, out.file)
+    display(1, "Completed in ", timer(), "\n")
+
+
+    display(0, "LaByRInth imputation completed in ", total.timer())
+    invisible(vcf) ## implicit return
+}
+
+
+LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
+                                    geno.err=0.01, parallel=TRUE, cores=4) {
+    ## begin timer
+    total.timer <- new.timer()
+    print.labyrinth.header()
+
+
+    ## file verification
+    if (file.exists(out.file)) {
+        display(0, "Output file already exists; please choose another name\n")
+        stop()
+    }
+
+    if (! verify.file.extension(out.file, ".rds")) {
+        display(0, "Output file name must end with '.rds'\n")
+        stop()
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        display(0, "Directory of the outuput file does not exist; please create it\n")
+        stop()
+    }
+
+
+    ## parameter verification
     if (cores == 1 && parallel) {
         display(0, "Cores cannot be 1 if parallel is true\n")
         stop()
@@ -94,27 +207,12 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
             display(1, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
     }
-    ## non.hom.poly <- which( ! parent.hom.and.poly(vcf, parents))
-    ## if (length(non.hom.poly) != 0) {
-    ##     display(0, "The parents are not homozygous within and ",
-    ##             "polymorphic between at the following sites:")
-    ##     chroms <- getCHROM(vcf)[non.hom.poly]
-    ##     positions <- getPOS(vcf)[non.hom.poly]
-    ##     ad <- getAD(vcf)[non.hom.poly, parents]
-    ##     for (i in seq_along(chroms)) {
-    ##         display(1, "\tCHR:", chroms[i],
-    ##                 "\tPOS:", positions[i],
-    ##                 paste0("\t", parents[1], ":"), ad[i, 1],
-    ##                 paste0("\t", parents[2], ":"), ad[i, 2])
-    ##     }
-    ## }
 
     if (length(non.biallelic) != 0) {
         display(1, "The vcf must be filtered before imputing; please run LabyrinthFilter first\n")
         stop()
     }
     display(1, "Completed in ", timer(), "\n")
-
 
 
 
@@ -126,20 +224,34 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
     display(1, "Completed in ", timer(), "\n")
 
 
+
     timer <- new.timer()
-    display(0, "Storing markers, samples, and read depths", generation)
-    snp.chroms <- getCHROM(vcf)
-    u.chroms <- unique(snp.chroms)
-    ad <- get.ad.array(vcf)
-    sample.names <- getSAMPLES(vcf)
-    marker.names <- getID(vcf)
+    display(0, "Generating and caching variables")
+    result <- list()
+
+    ## save parameters in result
+    result$vcf <- vcf
+    result$parents <- parents
+    result$generation <- generation
+    result$geno.err <- geno.err
+    result$site.pair.transition.probs <- site.pair.transition.probs
+
+    ## save additional information so that it doesn't have to be computed again
+    result$snp.chroms   <- snp.chroms   <- getCHROM(vcf)
+    result$u.chroms     <- u.chroms     <- unique(snp.chroms)
+    result$ad           <- ad           <- get.ad.array(vcf)
+    result$sample.names <- sample.names <- getSAMPLES(vcf)
+    result$marker.names <- marker.names <- getID(vcf)
+
     display(1, "Completed in ", timer(), "\n")
+
 
 
     timer <- new.timer()
     display(0, "Estimating erroneous read rate from heterozygosity")
     read.err <- estimate.read.err(ad, generation)
     display(1, "Error rate estimated to be ", round(read.err*100, 2), "%")
+    result$read.err <- read.err
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -152,6 +264,7 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                   generation,
                                                   read.err,
                                                   geno.err)
+    result$emission.structure <- emission.structure
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -167,59 +280,36 @@ LabyrinthImpute <- function (vcf, parents, generation, out.file,
                                                       sample.names,
                                                       parallel,
                                                       cores)
-    ## load("testing/temp_storage_6.RData"); read.err <- 0.001
-    ## parental.results <- readRDS(parental.imputation)
-    ## parental.results <- readRDS("parental-results-est-careful.rds")
-    saveRDS(parental.results, "parental-results.rds")
+    result$parent.models <- parental.results
+    saveRDS(result, out.file)
     display(1, "Completed in ", timer(), "\n")
 
-
-
-
-    ## transition probability code
-    timer <- new.timer()
-    display(0, "Generating transition probabilities")
-    transition.structures <- get.transition.structures(snp.chroms,
-                                                       marker.names,
-                                                       parental.results,
-                                                       parallel,
-                                                       cores)
-    display(1, "Completed in ", timer(), "\n")
-
-
-
-
-    ## imputation code
-    timer <- new.timer()
-    display(0, "Imputing missing sites")
-    imp.res <- impute(parents,
-                      emission.structure,
-                      transition.structures,
-                      parental.results,
-                      sample.names,
-                      snp.chroms,
-                      parallel,
-                      cores,
-                      use.fwd.bkwd,
-                      calc.posteriors)
-    display(1, "Completed in ", timer(), "\n")
-
-    ## new vcf creation code
-    timer <- new.timer()
-    display(0, "Creating new vcf with imputed data")
-    vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
-    write.vcf(vcf, paste0(out.file, ".vcf.gz"))
-    display(1, "Completed in ", timer(), "\n")
-
-
-    display(0, "LaByRInth imputation completed in ", total.timer())
-    invisible(vcf) ## implicit return
+    invisible(result)
 }
 
 
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
 LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
+
+    ## file verification
+    if (file.exists(out.file)) {
+        display(0, "Output file already exists; please choose another name\n")
+        stop()
+    }
+
+    if (! verify.file.extension(out.file, ".vcf.gz")) {
+        display(0, "Output file name must end with '.vcf.gz'\n")
+        stop()
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        display(0, "Directory of the outuput file does not exist; please create it\n")
+        stop()
+    }
+
+
+
     display(0, "Checking if vcf is an object or file")
     if (! inherits(vcf, "vcfR")) {
         display(0, "Loading vcf")
@@ -265,7 +355,7 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
     } else {
         vcf@fix <- vcf@fix[mask, ]
         vcf@gt <- vcf@gt[mask, ]
-        write.vcf(vcf, paste0(out.file, ".vcf.gz"), mask=TRUE)
+        write.vcf(vcf, out.file, mask=TRUE)
         display(0, paste("\nFiltering is complete;", sum(!mask),
                          "of", length(mask), "sites removed"))
         FALSE  # implicit return
@@ -482,13 +572,19 @@ get.emission.structures <- function(ad, sample.names, marker.names,
 
 
 get.transition.structures <- function(snp.chroms, marker.names,
-                                      parental.results, parallel, cores) {
+                                      parent.models,
+                                      site.pair.transition.probs,
+                                      parallel, cores) {
+
     u.chroms <- unique(snp.chroms)
     listapply <- get.lapply(parallel, cores)
 
     trans.probs <- function(chrom) {
-        parental.model <- parental.results$parental.models[[chrom]]$path
-        recombs <- parental.results$recombs[[chrom]]  # vector of functions
+
+        ## parental.model <- parental.results$parental.models[[chrom]]$path
+        ## recombs <- parental.results$recombs[[chrom]]  # vector of functions
+        model <- parent.models[[chrom]]$model
+        recombs <- parent.models[[chrom]]$recombs
 
         ## site.pair.transition.probs was loaded when a file in
         ## new-transition-probs was sourced
@@ -497,7 +593,7 @@ get.transition.structures <- function(snp.chroms, marker.names,
             ## parental states at both sites. This "matrix" is actually a
             ## function of the recombination probability which can be called
             ## with recombs[i] to get a 4x4 matrix
-            mat <- site.pair.transition.probs[[parental.model[i]]][[parental.model[i+1]]](recombs[i])
+            mat <- site.pair.transition.probs[[model[i]]][[model[i+1]]](recombs[i])
             ## normalize so that every rowSum is 0 since these are probabilities
             mat / rep(rowSums(mat), 4)
         })
@@ -580,9 +676,9 @@ get.transition.structures <- function(snp.chroms, marker.names,
 ##
 ## hom.ref     het     hom.alt
 ## 0/0         0/1     1/1
-impute <- function(parents, emm.structures, trans.structures, parental.results,
+impute <- function(parents, emm.structures, trans.structures, parent.models,
                    sample.names, snp.chroms, parallel, cores, use.fwd.bkwd,
-                   calc.posteriors) {
+                   calc.posteriors, viterbi.threshold, fwd.bkwd.threshold) {
 
     listapply <- get.lapply(parallel, cores)
     u.chroms <- unique(snp.chroms)
@@ -595,8 +691,8 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
     impute.sample.chrom <- function(sample, chrom) {
 
         n.sites <- sum(snp.chroms==chrom)  # boolean addition
-        parent.paths <- parental.model.to.parents(
-            parental.results$parental.models[[chrom]]$path
+        parent.paths <- extract.each.parent(
+            parent.models[[chrom]]$model
         )
 
         emm <- t(emm.structures[chrom==snp.chroms, sample, ])
@@ -605,6 +701,7 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
         res <- list()
         res$posteriors <- NULL
 
+        ## browser()
         if (use.fwd.bkwd || calc.posteriors) {
             if (sample %in% parents) {
                 posterior.mat <- rbind("hom.ref" = rep(1/3, n.sites),
@@ -619,11 +716,7 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
                                 "het"     = posterior.mat["het.I", ] + posterior.mat["het.II", ],
                                 "hom.alt" = posterior.mat["hom.alt", ])
 
-            phred.scaled <- apply(posteriors, 1:2, function(x) {
-                ## 1-x is the probability the call is wrong
-                ## use min to prevent infinity from getting through
-                min(-10*log((1-x), base=10), 100)
-            })
+            phred.scaled <- apply(posteriors, 1:2,  prob.to.phred)
 
             res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
 
@@ -637,6 +730,12 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
                         c("0/0","0/1","1/1")[which.max(states)]
                     })
                 }
+
+                which.remove <- apply(posteriors, 2, function(states) {
+                    max(states) < fwd.bkwd.threshold
+                })
+
+                res$gt[which.remove] <- "./."
             }
         }
 
@@ -663,8 +762,7 @@ impute <- function(parents, emm.structures, trans.structures, parental.results,
                     inter.relevant.probs <- sapply.pairs(which.relevant, function(a, b) {exp(log.lik.path(best.path, emm, trans, a, b))})
                     names(inter.relevant.probs) <- NULL
 
-                    THRESHOLD <- 1e-3
-                    for (unlikely.index in which(inter.relevant.probs < THRESHOLD)) {
+                    for (unlikely.index in which(inter.relevant.probs < viterbi.threshold)) {
                         start <- which.relevant[unlikely.index] + 1
                         end <- which.relevant[unlikely.index + 1] - 1
 
@@ -1035,21 +1133,23 @@ print.labyrinth.header <- function() {
 
     writeLines("")
     writeLines("")
-    writeLines("           __          ____        ____  _____")
-    writeLines("          / /         / __ \\      / __ \\/_  _/")
-    writeLines("         / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
-    writeLines("        / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
-    writeLines("       / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
-    writeLines("      /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
     writeLines("")
-    writeLines("              L O W - C O V E R A G E   B I A L L E L I C")
-    writeLines("                R - P A C K A G E   I M P U T A T I O N")
-    writeLines("      __________________________________________________________")
+    writeLines("            __          ____        ____  _____")
+    writeLines("           / /         / __ \\      / __ \\/_  _/")
+    writeLines("          / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
+    writeLines("         / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
+    writeLines("        / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
+    writeLines("       /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
     writeLines("")
-    writeLines("          Copyright 2017 Jason Vander Woude and Nathan Ryder")
-    writeLines("            Licensed under the Apache License, Version 2.0")
-    writeLines("            github.com/Dordt-Statistics-Research/LaByRInth")
-    writeLines("           Based on LB-Impute and funded by NSF IOS-1238187")
+    writeLines("               L O W - C O V E R A G E   B I A L L E L I C")
+    writeLines("                 R - P A C K A G E   I M P U T A T I O N")
+    writeLines("       __________________________________________________________")
+    writeLines("")
+    writeLines("           Copyright 2017 Jason Vander Woude and Nathan Ryder")
+    writeLines("             Licensed under the Apache License, Version 2.0")
+    writeLines("             github.com/Dordt-Statistics-Research/LaByRInth")
+    writeLines("            Based on LB-Impute and funded by NSF IOS-1238187")
+    writeLines("")
     writeLines("")
     writeLines("")
 
@@ -1200,8 +1300,6 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
-    browser()
-
     transitions <- lapply(u.chroms, function(chrom) {
         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
         indices <- indices[-length(indices)]  # remove the last element
@@ -1321,13 +1419,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
         })
         names(result) <- NULL
         result  # implicit return
-        ## browser()
-        ## print(round(result,2))
-        ## print(order(result, decreasing=TRUE))
     })
-    ## print(timer())
-    ## browser()
-    ## print(timer())
 
     ## TODO(Jason): verify that at least 2 sites are in the chromosome before
     ## runnin viterbi
@@ -1361,8 +1453,14 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     })
     names(recombs) <- u.chroms
 
-    list(parental.models = parental.models,
-         recombs = recombs)  # implicit return
+    result <- lapply(u.chroms, function(chrom) {
+        list(model   = parental.models[[chrom]]$path,
+             recombs = recombs[[chrom]])
+    })
+    names(result) <- u.chroms
+    result
+    ## list(parental.models = parental.models,
+    ##      recombs = recombs)  # implicit return
 }
 
 
@@ -1371,7 +1469,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 ## the state of parent 1 plus the state of parent 2. This function returns a
 ## list where the first element is the vector of states of parent 1 and the
 ## second is the vector of states of parent 2
-parental.model.to.parents <- function(parental.model) {
+extract.each.parent <- function(parental.model) {
     parents <- sapply(parental.model, function(call) {
         call <- call-1            # deal with base 1 indexing
         p1 <- floor(call / 4)  # bit shift i right twice to get two most sig bits
@@ -1481,4 +1579,118 @@ log.lik.path <- function(states, em, tr, index1, index2) {
     }))
 
     em.log.liks + tr.log.liks
+}
+
+
+verify.file.extension <- function(file, extension) {
+    ## split the extension by periods and remove the leading empty character
+    extension.parts <- str.split(extension, "\\.")[-1]
+    n.parts <- length(extension.parts)
+    file.parts <- str.split(file, "\\.")
+
+    check <- rev(extension.parts) == rev(file.parts)[1:n.parts]
+    !any(is.na(check)) && all(check)
+}
+
+
+verify.file.dir.exists <- function(file) {
+    parts <- str.split(file, "/")
+    dir.exists(paste0(parts[-length(parts)], collapse="/"))
+}
+
+
+LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
+
+    ## begin timer
+    total.timer <- new.timer()
+    print.labyrinth.header()
+
+    ## vcf load code
+    if (! inherits(vcf, "vcfR")) {
+        timer <- new.timer()
+        display(0, "Loading vcf")
+        vcf <- read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
+    }
+
+
+    timer <- new.timer()
+    display(0, "Masking sites with posterior probability below ", min.posterior)
+
+    listapply <- get.lapply(parallel, cores)
+    min.phred <- prob.to.phred(min.posterior)
+
+    formats <- imputed@gt[ , "FORMAT"]
+
+    new.data <- t(sapply(seq_along(formats), function(i) {
+        format.components <- str.split(formats[i], ":")
+        gp.index <- format.components == "GP"
+        gt.index <- format.components == "GT"
+
+        ## The '-1' is to ignore the 'FORMAT' column of the vcfR@gt
+        ## matrix. vcf.entry will be something such as "0/0:1,0:8.6,0.6,0.0"
+        ## which is GT:AD:GP.
+        sapply(vcf@gt[i, -1], function(vcf.entry) {
+
+            components <- str.split(vcf.entry, ":")
+            posteriors <- as.numeric(str.split(components[gp.index], ","))
+
+            if (max(posteriors) < min.phred)
+                components[gt.index] <- "./."
+
+            paste0(components, collapse=":")
+        })
+    }))
+
+    ## new.data <- do.call(rbind, listapply(seq_along(formats), function(i) {
+    ##     format.components <- str.split(formats[i], ":")
+    ##     gp.index <- format.components == "GP"
+    ##     gt.index <- format.components == "GT"
+
+    ##     ## The '-1' is to ignore the 'FORMAT' column of the vcfR@gt
+    ##     ## matrix. vcf.entry will be something such as "0/0:1,0:8.6,0.6,0.0"
+    ##     ## which is GT:AD:GP.
+    ##     sapply(vcf@gt[i, -1], function(vcf.entry) {
+
+    ##         components <- str.split(vcf.entry, ":")
+    ##         posteriors <- as.numeric(str.split(components[gp.index], ","))
+
+    ##         if (max(posteriors) < min.phred)
+    ##             components[gt.index] <- "./."
+
+    ##         paste0(components, collapse=":")
+    ##     })
+    ## }))
+
+    rownames <- rownames(vcf@gt)
+    colnames <- colnames(vcf@gt)
+
+    vcf@gt <- cbind(formats, new.data)
+    rownames(vcf@gt) <- rownames
+    colnames(vcf@gt) <- colnames
+
+    vcf
+}
+
+
+prob.to.phred <- function(x) {
+    ## 1-x is the probability the call is wrong
+    ## use min to prevent infinity from getting through
+    min(-10*log((1-x), base=10), 100)
+}
+
+
+phred.to.prob <- function(y) {
+    -(10^(y / -10) - 1)
+}
+
+
+
+## This function is intended to take a vcf file that results from LB-Impute
+## imputing the parents and remove any sites where the parents are not
+## homozygous within and polymorphic between while also keeping track of the
+## locations so that they can be reinserted after the LB-Impute
+LBFilter <- function(vcf) {
+    
+
 }
