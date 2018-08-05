@@ -142,7 +142,8 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
 
 
 LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
-                                    geno.err=0.01, parallel=TRUE, cores=4) {
+                                    geno.err=0.01, het.penalty, parallel=TRUE,
+                                    cores=4) {
     ## begin timer
     total.timer <- new.timer()
     print.labyrinth.header()
@@ -234,6 +235,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
     result$parents <- parents
     result$generation <- generation
     result$geno.err <- geno.err
+    result$het.penalty <- het.penalty
     result$site.pair.transition.probs <- site.pair.transition.probs
 
     ## save additional information so that it doesn't have to be computed again
@@ -278,6 +280,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
                                                       snp.chroms,
                                                       marker.names,
                                                       sample.names,
+                                                      het.penalty,
                                                       parallel,
                                                       cores)
     result$parent.models <- parental.results
@@ -1272,8 +1275,8 @@ get.ad.array <- function(vcf) {
 
 
 determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
-                                          marker.names, sample.names, parallel,
-                                          cores) {
+                                          marker.names, sample.names,
+                                          het.penalty, parallel, cores) {
 
     listapply <- get.lapply(parallel, cores)
 
@@ -1401,8 +1404,8 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 
 
 
-    ## ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
-    p <- 0.99  # probability of a site in parents being heterozygous
+    ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
+    p <- 1 - het.penalty  # probability of a site in parents being homozygous
     log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
