@@ -11,134 +11,36 @@
 ## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
+
+
+##               __          ____        ____  _____
+##              / /         / __ \      / __ \/_  _/
+##             / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __
+##            / /   / _  \/ _  _/\ \/ / _  _/ / / /  | / /_  __/ /_/ /
+##           / /___/ /_/ / /_\ \  \  / / \ \_/ /_/ /||/ / / / / __  /
+##          /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/
 ##
-##           __          ____        ____  _____
-##          / /         / __ \      / __ \/_  _/
-##         / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __
-##        / /   / _  \/ _  _/\ \/ / _  _/ / / /  | / /_  __/ /_/ /
-##       / /___/ /_/ / /_\ \  \  / / \ \_/ /_/ /||/ / / / / __  /
-##      /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/
-##
-##              L O W - C O V E R A G E   B I A L L E L I C
-##                R - P A C K A G E   I M P U T A T I O N
+##                  L O W - C O V E R A G E   B I A L L E L I C
+##                    R - P A C K A G E   I M P U T A T I O N
 ##
 
 
-## library for working with VCF files
+################################################################################
+############################# LIBRARY REQUIREMENTS #############################
+################################################################################
+
+
 require(vcfR, quietly=T)
 require(abind, quietly=T)
 require(digest, quietly=T)
 
 
-LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
-                                    calc.posteriors=TRUE, viterbi.threshold=1e-3,
-                                    fwd.bkwd.threshold=0.8, parallel=TRUE, cores=4) {
-    ## begin timer
-    total.timer <- new.timer()
-    print.labyrinth.header()
-
-
-    ## file verification
-    if (file.exists(out.file)) {
-        display(0, "Output file already exists; please choose another name\n")
-        stop()
-    }
-
-    if (! verify.file.extension(out.file, ".vcf.gz")) {
-        display(0, "Output file name must end with '.vcf.gz'\n")
-        stop()
-    }
-
-    if (! verify.file.dir.exists(out.file)) {
-        display(0, "Directory of the outuput file does not exist; please create it\n")
-        stop()
-    }
-
-
-    ## parameter verification
-    if (use.fwd.bkwd && !calc.posteriors) {
-        display(0, "When using fwd.bkwd, posterior probabilities must be calculated")
-        display(0, "These probabilities will be included in the output file\n")
-    }
-
-    if (cores == 1 && parallel) {
-        display(0, "Cores cannot be 1 if parallel is true\n")
-        stop()
-    }
-
-    if (cores > 1 && !parallel) {
-        display(0, "Cores cannot be greater than 1 if parallel is false\n")
-        stop()
-    }
-
-    if (cores < 1) {
-        display(0, "Cores cannot be less than 1\n")
-        stop()
-    }
 
 
 
-    timer <- new.timer()
-    display(0, "Restoring variables from parental imputation result")
-    vcf <- parental$vcf
-    parents <- parental$parents
-    parent.models <- parental$parent.models
-    generation <- parental$generation
-    read.err <- parental$read.err
-    geno.err <- parental$geno.err
-    site.pair.transition.probs <- parental$site.pair.transition.probs
-    snp.chroms <- parental$snp.chroms
-    u.chroms <- parental$u.chroms
-    ad <- parental$ad
-    sample.names <- parental$sample.names
-    marker.names <- parental$marker.names
-    emission.structure <- parental$emission.structure
-    display(1, "Completed in ", timer(), "\n")
-
-
-
-    ## transition probability code
-    timer <- new.timer()
-    display(0, "Computing progeny transition probabilities")
-    transition.structures <- get.transition.structures(snp.chroms,
-                                                       marker.names,
-                                                       parent.models,
-                                                       site.pair.transition.probs,
-                                                       parallel,
-                                                       cores)
-    display(1, "Completed in ", timer(), "\n")
-
-
-
-
-    ## imputation code
-    timer <- new.timer()
-    display(0, "Imputing missing sites")
-    imp.res <- impute(parents,
-                      emission.structure,
-                      transition.structures,
-                      parent.models,
-                      sample.names,
-                      snp.chroms,
-                      parallel,
-                      cores,
-                      use.fwd.bkwd,
-                      calc.posteriors,
-                      viterbi.threshold,
-                      fwd.bkwd.threshold)
-    display(1, "Completed in ", timer(), "\n")
-
-    ## new vcf creation code
-    timer <- new.timer()
-    display(0, "Creating new vcf with imputed data")
-    vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
-    write.vcf(vcf, out.file)
-    display(1, "Completed in ", timer(), "\n")
-
-
-    display(0, "LaByRInth imputation completed in ", total.timer())
-    invisible(vcf) ## implicit return
-}
+################################################################################
+###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
+################################################################################
 
 
 LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
@@ -291,6 +193,117 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
 }
 
 
+LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
+                                    calc.posteriors=TRUE, viterbi.threshold=1e-3,
+                                    fwd.bkwd.threshold=0.8, parallel=TRUE, cores=4) {
+    ## begin timer
+    total.timer <- new.timer()
+    print.labyrinth.header()
+
+
+    ## file verification
+    if (file.exists(out.file)) {
+        display(0, "Output file already exists; please choose another name\n")
+        stop()
+    }
+
+    if (! verify.file.extension(out.file, ".vcf.gz")) {
+        display(0, "Output file name must end with '.vcf.gz'\n")
+        stop()
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        display(0, "Directory of the outuput file does not exist; please create it\n")
+        stop()
+    }
+
+
+    ## parameter verification
+    if (use.fwd.bkwd && !calc.posteriors) {
+        display(0, "When using fwd.bkwd, posterior probabilities must be calculated")
+        display(0, "These probabilities will be included in the output file\n")
+    }
+
+    if (cores == 1 && parallel) {
+        display(0, "Cores cannot be 1 if parallel is true\n")
+        stop()
+    }
+
+    if (cores > 1 && !parallel) {
+        display(0, "Cores cannot be greater than 1 if parallel is false\n")
+        stop()
+    }
+
+    if (cores < 1) {
+        display(0, "Cores cannot be less than 1\n")
+        stop()
+    }
+
+
+
+    timer <- new.timer()
+    display(0, "Restoring variables from parental imputation result")
+    vcf <- parental$vcf
+    parents <- parental$parents
+    parent.models <- parental$parent.models
+    generation <- parental$generation
+    read.err <- parental$read.err
+    geno.err <- parental$geno.err
+    site.pair.transition.probs <- parental$site.pair.transition.probs
+    snp.chroms <- parental$snp.chroms
+    u.chroms <- parental$u.chroms
+    ad <- parental$ad
+    sample.names <- parental$sample.names
+    marker.names <- parental$marker.names
+    emission.structure <- parental$emission.structure
+    display(1, "Completed in ", timer(), "\n")
+
+
+
+    ## transition probability code
+    timer <- new.timer()
+    display(0, "Computing progeny transition probabilities")
+    transition.structures <- get.transition.structures(snp.chroms,
+                                                       marker.names,
+                                                       parent.models,
+                                                       site.pair.transition.probs,
+                                                       parallel,
+                                                       cores)
+    display(1, "Completed in ", timer(), "\n")
+
+
+
+
+    ## imputation code
+    timer <- new.timer()
+    display(0, "Imputing missing sites")
+    imp.res <- impute(parents,
+                      emission.structure,
+                      transition.structures,
+                      parent.models,
+                      sample.names,
+                      snp.chroms,
+                      parallel,
+                      cores,
+                      use.fwd.bkwd,
+                      calc.posteriors,
+                      viterbi.threshold,
+                      fwd.bkwd.threshold)
+    display(1, "Completed in ", timer(), "\n")
+
+    ## new vcf creation code
+    timer <- new.timer()
+    display(0, "Creating new vcf with imputed data")
+    vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
+    write.vcf(vcf, out.file)
+    display(1, "Completed in ", timer(), "\n")
+
+
+    display(0, "LaByRInth imputation completed in ", total.timer())
+    invisible(vcf) ## implicit return
+}
+
+
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
 LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
@@ -366,154 +379,103 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
 }
 
 
-## get a logical vector indicating at which sites the parents are homozygous
-## within and polymorphic between.
-parent.hom.and.poly <- function(vcf, parents) {
-    ## TODO(Jason): ask Jesse what should be done about ones that fail. Maybe we
-    ## can soften this in LaByRInth so that we use confidence that we have read
-    ## an allele from parent 1 or parent 2
+LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
 
-    ## count number of zeros in numeric vector
-    n.zeros <- function(numeric)
-        sum(numeric==0)
+    ## begin timer
+    total.timer <- new.timer()
+    print.labyrinth.header()
 
-    ## return logical vector indicating positions of nonzero values
-    nonzero <- function(numeric)
-        numeric!=0
-
-    if (length(parents) != 2) {
-        stop("Length of parents must be 2")
+    ## vcf load code
+    if (! inherits(vcf, "vcfR")) {
+        timer <- new.timer()
+        display(0, "Loading vcf")
+        vcf <- read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
     }
-    par.mat <- getAD(vcf)[ , parents]
-    apply(par.mat, 1, function(row) {
-        (n.zeros(ad.to.num(row[1])) > 0          # at least one allele not read in P1
-            && n.zeros(ad.to.num(row[2])) > 0    # at least one allele not read in P2
-            && ! any(nonzero(ad.to.num(row[1])) & nonzero(ad.to.num(row[2]))) # no common reads
-            && n.zeros(ad.to.num(row[1])) != 2    # TODO(Jason): remove condition and impute parents
-            && n.zeros(ad.to.num(row[2])) != 2    # TODO(Jason): remove condition and impute parents
-        )
-    })
+
+
+    timer <- new.timer()
+    display(0, "Masking sites with posterior probability below ", min.posterior)
+
+    listapply <- get.lapply(parallel, cores)
+    min.phred <- prob.to.phred(min.posterior)
+
+    formats <- imputed@gt[ , "FORMAT"]
+
+    new.data <- t(sapply(seq_along(formats), function(i) {
+        format.components <- str.split(formats[i], ":")
+        gp.index <- format.components == "GP"
+        gt.index <- format.components == "GT"
+
+        ## The '-1' is to ignore the 'FORMAT' column of the vcfR@gt
+        ## matrix. vcf.entry will be something such as "0/0:1,0:8.6,0.6,0.0"
+        ## which is GT:AD:GP.
+        sapply(vcf@gt[i, -1], function(vcf.entry) {
+
+            components <- str.split(vcf.entry, ":")
+            posteriors <- as.numeric(str.split(components[gp.index], ","))
+
+            if (max(posteriors) < min.phred)
+                components[gt.index] <- "./."
+
+            paste0(components, collapse=":")
+        })
+    }))
+
+    rownames <- rownames(vcf@gt)
+    colnames <- colnames(vcf@gt)
+
+    vcf@gt <- cbind(formats, new.data)
+    rownames(vcf@gt) <- rownames
+    colnames(vcf@gt) <- colnames
+
+    vcf
 }
 
 
-getSAMPLES <- function(vcf) {
-    ## column names are the samples except the first column which is "FORMAT"
-    colnames(vcf@gt)[-1]
+LabyrinthAnalyze <- function(orig, masked, imputed) {
+
+    gt.o <- getGT(orig)
+    gt.m <- getGT(masked)
+    gt.i <- getGT(imputed)
+
+    ## vector.indices
+    masked.sites <-
+        (gt.o != "./." & gt.o != ".|.") &
+        (gt.m == "./." | gt.m == ".|.")
+
+    same <-
+        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
+        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
+         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
+        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
+
+    n.same <- sum(masked.sites & same)
+    n.masked <- sum(masked.sites)
+    accuracy <-  n.same / n.masked
+
+    w <- which(masked.sites & !same, arr.ind = TRUE)
+    ad <- getAD(orig)
+
+    display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
 }
 
 
-## More convenient strsplit if length of vector is 1
-str.split <- function(str, sep) {
-    if (length(str) != 1) {
-        warning("Only splitting the first element of the vector")
-    }
-    strsplit(str, sep)[[1]]
+## This function is intended to take a vcf file that results from LB-Impute
+## imputing the parents and remove any sites where the parents are not
+## homozygous within and polymorphic between while also keeping track of the
+## locations so that they can be reinserted after the LB-Impute
+LBFilter <- function(vcf) {
+
 }
 
 
-## return the total probabilities of each state at each site. Adapted from
-## https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm
-## forward and backward probabilities are not technically correct because they
-## are frequently being normalized. This is done to decrease the numerical
-## instability that results when the probabilities become very low
-fwd.bkwd <- function(emm, trans) {
-    normalize <- function(mat, col) {
-        s <- sum(mat[, col])
-        if (s == 0){
-            mat[, col] <- 1 / nrow(mat)
-        } else {
-            mat[, col] <- mat[, col] / s
-        }
-        mat
-    }
-
-    state.names <- rownames(emm)
-    n.states <- nrow(emm)
-    n.sites <- ncol(emm)
-
-    f.probs <- b.probs <- matrix(data=0, nrow=n.states, ncol=n.sites)
-
-    ## forward probabilities
-    start.probs <- rep(1/n.states, n.states)
-    f.probs[, 1] <- start.probs * emm[, 1]
-    f.probs <- normalize(f.probs, 1)
-
-    for (site in 2:n.sites) {
-        t.index <- site - 1  # transition structure index
-        prev.site <- site - 1
-        for (to in 1:n.states) {
-            f.probs[to, site] <-
-                emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
-         }
-        f.probs <- normalize(f.probs, site)
-    }
-
-    ## backward probabilities
-    end.probs <- rep(1, n.states)
-    b.probs[, n.sites] <- end.probs
-    b.probs <- normalize(b.probs, n.sites)
-
-    for (site in (n.sites-1):1) {
-        t.index <- site
-        next.site <- site + 1
-        for (from in 1:n.states) {
-            b.probs[from, site] <-
-                sum(trans[from, , t.index] * b.probs[, next.site] * emm[ , next.site])
-        }
-        b.probs <- normalize(b.probs, site)
-    }
-
-    res <- f.probs * b.probs
-    for (site in 1:n.sites) {
-        res <- normalize(res, site)
-    }
-    rownames(res) <- state.names
-    res
-}
 
 
-## TODO(Jason): the initial probabilities are not correct here or in the
-## fwd.bkwd
 
-## If emm.log is TRUE, then the data passed in emm should already be
-## log-scaled. Similarly with trans.log
-viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
-    if (!emm.log)
-        emm <- log(emm)
-    if (!trans.log)
-        trans <- log(trans)
-
-    state.names <- rownames(emm)
-    n.states <- nrow(emm)
-    n.sites <- ncol(emm)
-
-    path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
-
-    start.probs <- log(rep(1/n.states, n.states))
-    probs <- start.probs + emm[, 1]
-
-    for (site in 2:n.sites) {
-        t.index <- site - 1  # transition structure index
-        prev.site <- site - 1
-        new.probs <- probs
-        for (to in 1:n.states) {
-            x <- probs + trans[ , to, t.index]
-            new.probs[to] <- max(x) + emm[to, site]
-            path.tracker[to, site] <- which.max(x)
-        }
-        probs <- new.probs
-    }
-
-    ## reconstruct the path
-    path <- rep(NA, n.sites)
-    best.state <- which.max(probs)
-    for (site in n.sites:1) {
-        path[site] <- best.state
-        best.state <- path.tracker[best.state, site]
-    }
-
-    list(path=path, prob=max(probs))
-}
+################################################################################
+######################## SECONDARY LABYRINTH FUNCTIONS #########################
+################################################################################
 
 
 ## returns the emission probabilities for a given variant and chromosome. Note
@@ -662,6 +624,111 @@ get.transition.structures <- function(snp.chroms, marker.names,
 }
 
 
+## return the total probabilities of each state at each site. Adapted from
+## https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm
+## forward and backward probabilities are not technically correct because they
+## are frequently being normalized. This is done to decrease the numerical
+## instability that results when the probabilities become very low
+fwd.bkwd <- function(emm, trans) {
+    normalize <- function(mat, col) {
+        s <- sum(mat[, col])
+        if (s == 0){
+            mat[, col] <- 1 / nrow(mat)
+        } else {
+            mat[, col] <- mat[, col] / s
+        }
+        mat
+    }
+
+    state.names <- rownames(emm)
+    n.states <- nrow(emm)
+    n.sites <- ncol(emm)
+
+    f.probs <- b.probs <- matrix(data=0, nrow=n.states, ncol=n.sites)
+
+    ## forward probabilities
+    start.probs <- rep(1/n.states, n.states)
+    f.probs[, 1] <- start.probs * emm[, 1]
+    f.probs <- normalize(f.probs, 1)
+
+    for (site in 2:n.sites) {
+        t.index <- site - 1  # transition structure index
+        prev.site <- site - 1
+        for (to in 1:n.states) {
+            f.probs[to, site] <-
+                emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
+         }
+        f.probs <- normalize(f.probs, site)
+    }
+
+    ## backward probabilities
+    end.probs <- rep(1, n.states)
+    b.probs[, n.sites] <- end.probs
+    b.probs <- normalize(b.probs, n.sites)
+
+    for (site in (n.sites-1):1) {
+        t.index <- site
+        next.site <- site + 1
+        for (from in 1:n.states) {
+            b.probs[from, site] <-
+                sum(trans[from, , t.index] * b.probs[, next.site] * emm[ , next.site])
+        }
+        b.probs <- normalize(b.probs, site)
+    }
+
+    res <- f.probs * b.probs
+    for (site in 1:n.sites) {
+        res <- normalize(res, site)
+    }
+    rownames(res) <- state.names
+    res
+}
+
+
+## TODO(Jason): the initial probabilities are not correct here or in the
+## fwd.bkwd
+
+## If emm.log is TRUE, then the data passed in emm should already be
+## log-scaled. Similarly with trans.log
+viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
+    if (!emm.log)
+        emm <- log(emm)
+    if (!trans.log)
+        trans <- log(trans)
+
+    state.names <- rownames(emm)
+    n.states <- nrow(emm)
+    n.sites <- ncol(emm)
+
+    path.tracker <- matrix(data=0, nrow=n.states, ncol=n.sites)
+
+    start.probs <- log(rep(1/n.states, n.states))
+    probs <- start.probs + emm[, 1]
+
+    for (site in 2:n.sites) {
+        t.index <- site - 1  # transition structure index
+        prev.site <- site - 1
+        new.probs <- probs
+        for (to in 1:n.states) {
+            x <- probs + trans[ , to, t.index]
+            new.probs[to] <- max(x) + emm[to, site]
+            path.tracker[to, site] <- which.max(x)
+        }
+        probs <- new.probs
+    }
+
+    ## reconstruct the path
+    path <- rep(NA, n.sites)
+    best.state <- which.max(probs)
+    for (site in n.sites:1) {
+        path[site] <- best.state
+        best.state <- path.tracker[best.state, site]
+    }
+
+    list(path=path, prob=max(probs))
+}
+
+
 ## The following labeling schemes are used. Both the Viterbi algorithm and the
 ## forward backward algorithm will keep track of the following four state types
 ## when determining the best path
@@ -704,7 +771,6 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
         res <- list()
         res$posteriors <- NULL
 
-        ## browser()
         if (use.fwd.bkwd || calc.posteriors) {
             if (sample %in% parents) {
                 posterior.mat <- rbind("hom.ref" = rep(1/3, n.sites),
@@ -855,9 +921,6 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
     ret.val$posteriors <- do.call(rbind, get.posteriors(imputed.chroms))
     ret.val$gt <- do.call(rbind, get.listed.gt(imputed.chroms))
 
-    ## combine columns of each imputed sample
-    ## ret.val <- do.call(abind1, imputed.chroms)
-
 
     ## Progress bar code
     ## -------------------------------------------------------------------------
@@ -867,410 +930,6 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
 
 
     ret.val  # implicit return
-}
-
-
-save.trans <- function(data, chrom, model) {
-    dir <- "./.saved_trans"
-    dir.create(dir, recursive=TRUE)
-    saveRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
-}
-
-
-## get.trans <- function(data, chrom, model) {
-##     dir <- "./.saved_trans"
-##     readRDS(data, paste0(dir, "/", paste0(model, collapse=""), ".rds"))
-## }
-
-
-is.parent.ref <- function(vcf, parent) {
-    str.ad <- getAD(vcf)[ , parent]
-    sapply(str.ad, function(str) {
-        ## split the string and check if reference read is nonzero
-        ad.to.num(str)[1] != 0
-    })
-}
-
-
-## modify the vcf in place to add imputed calls in gt
-update.vcf <- function(vcf, gt, posteriors=NULL) {
-    ## phred.scaled.res <- apply(impute.res, 1:3, function(x) {
-    ##     ## 1-x is the probability the call is wrong
-    ##     ## use min to prevent infinity from getting throughk
-    ##     min(-10*log((1-x), base=10), 100)
-    ## })
-
-    ## ## rounded.res <- apply(phred.scaled.res, 1:3, round)
-
-    ## gp <- apply(phred.scaled.res, 1:2, paste0, collapse=",")
-
-    ## gt <- apply(impute.res, 1:2, function(states) {
-    ##     c("0/0","0/1","1/1")[which.max(states)]
-    ## })
-
-    gp <- posteriors
-    ad <- getAD(vcf)
-
-    n.rows <- nrow(ad)
-    if (n.rows != nrow(gt))
-        stop("conflict in number of rows; should never happen")
-
-    if (is.null(gp)) {
-        concat <- matrix(paste0(gt, ":", ad), nrow=n.rows)
-        vcf@gt <- cbind("GT:AD", concat)
-    } else {
-        concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=n.rows)
-        vcf@gt <- cbind("GT:AD:GP", concat)
-    }
-
-    colnames(vcf@gt) <- c("FORMAT", colnames(ad))
-    rownames(vcf@gt) <- rownames(ad)
-
-    vcf  # implicit return
-}
-
-
-
-
-
-getAD <- function(vcf) {
-    ad <- extract.gt(vcf, "AD")
-    ad[is.na(ad)] <- "0,0"  # replace NA entries
-    ad
-}
-
-
-getGT <- function(vcf) {
-    gt <- extract.gt(vcf, "GT")
-    gt[is.na(gt)] <- "./."  # replace NA entries
-    gt
-}
-
-
-getGP <- function(vcf) {
-    extract.gt(vcf, "GP")
-}
-
-
-## convert string representation to numeric vector
-ad.to.num <- function(str) {
-    as.numeric(str.split(str, ","))
-
-}
-
-
-## convert string representation to numeric vector
-gt.to.num <- function(str) {
-    str <- gsub("\\|", "/", str)  # replace '|' with '/'
-    suppressWarnings(as.numeric(str.split(str, "/")))
-
-}
-
-
-ad.to.gt <- function(str.mat) {
-    
-}
-
-
-gp.to.num <- function(str) {
-    ad.to.num(str)
-}
-
-
-all.bool.vec <- function(n) {
-    if (n > 16)
-        stop("all.bool.vec function not supported for n > 16")
-
-    lapply(0:(2^n-1), function(config) {
-        as.logical(intToBits(config)[1:n])
-    })
-}
-
-
-## The abind{i} functions are useful for cleaning the code for do.call(abind,
-## some.list) calls because otherwise the 'along' argument has to be appended to
-## the 'some.list' argument
-abind1 <- function(...) {
-    abind(..., along=1)
-}
-
-
-abind2 <- function(...) {
-    abind(..., along=2)
-}
-
-
-abind3 <- function(...) {
-    abind(..., along=3)
-}
-
-
-## Progress monitor code from https://stackoverflow.com/questions/27726134/
-## how-to-track-progress-in-mclapply-in-r-in-parallel-package
-## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
-## in the progress.env environment
-ProgressMonitor <- function(env, parallel) {
-    local({
-        f <- fifo(tempfile(), open="w+b", blocking=T)
-        if (!parallel) {  # don't fork if running serially
-            return(f)
-        }
-        if (inherits(parallel:::mcfork(), "masterProcess")) {
-            progress <- 0.0
-            while (progress < 1 && !isIncomplete(f)) {
-                progress <- PrintProgress(f, progress)
-            }
-            parallel:::mcexit()
-        }
-        f  # implicit return
-    }, envir=env)
-}
-
-
-PrintProgress <- function(f, curr.prog) {
-    msg <- readBin(f, "double")
-    progress <- curr.prog + as.numeric(msg)
-    cat(sprintf(paste0("    * ",  "Progress: %.2f%%\r"), progress * 100))
-    progress  # implicit return
-}
-
-
-## TODO(Jason): Get this function to work; problem likely environments
-InitiateProgress <- function(prefs, n.jobs) {
-    ## progress.env <- new.env()
-    ## prefs$fifo <- ProgressMonitor(progress.env)
-    ## assign("progress", 0.0, envir=progress.env)
-    ## prefs$prog.env <- progress.env
-    ## prefs$n.jobs <- n.jobs
-    ## assign("prefs$n.jobs", n.jobs, envir=.GlobalEnv)
-}
-
-
-MakeProgress <- function(fifo, n.jobs, prog.env, parallel) {
-    writeBin(1/n.jobs, fifo)  # update the progress bar info
-    if (!parallel) {  # if running in serial mode
-        prog.env$progress <- PrintProgress(fifo, prog.env$progress)
-    }  # else the forked process handles this
-}
-
-
-get.lapply <- function(parallel, cores=1) {
-    serial.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
-        lapply(...)
-    }
-
-    ## parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
-    ##     mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
-    ## }
-
-    parallel.lapply <- function(...) {
-        mclapply(..., mc.preschedule=F, mc.cores=cores)
-    }
-
-    ## implicit return
-    if (parallel && cores != 1) {
-        require(parallel, quietly=T)
-        parallel.lapply
-    } else {
-        lapply
-    }
-}
-
-
-new.timer <- function() {
-    start <- Sys.time()
-    function() {
-        elapsed <- difftime(Sys.time(), start)
-        runtime <- as.numeric(elapsed)
-        units <- attr(elapsed, "units")
-        paste(round(runtime, 2), units)
-    }
-}
-
-
-display <- function(indent, ...) {
-    if (! is.numeric(indent))
-        stop("indent must be numeric")
-    message(rep("   ", indent), " * ", ...)
-}
-
-
-print.labyrinth.header <- function() {
-
-    ## ## the image looks funny because '\' in the displayed image must be '\\' in the code
-    ## writeLines("")
-    ## writeLines(" _____________________________________________________________________")
-    ## writeLines("|          __          ____        ____  _____                        |")
-    ## writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
-    ## writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
-    ## writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
-    ## writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
-    ## writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
-    ## writeLines("|                                                                     |")
-    ## writeLines("|     ======  L O W - C O V E R A G E   B I A L L E L I C  ======     |")
-    ## writeLines("|     =======   R - P A C K A G E   I M P U T A T I O N   =======     |")
-    ## ## writeLines("|                                                                     |")
-    ## ## writeLines("|         Copyright 2017 Jason Vander Woude and Nathan Ryder          |")
-    ## ## writeLines("|           Licensed under the Apache License, Version 2.0            |")
-    ## writeLines("|_____________________________________________________________________|")
-    ## writeLines("")
-
-    ## ## the image looks funny because '\' in the displayed image must be '\\' in the code
-    ## writeLines("")
-    ## writeLines(" _____________________________________________________________________")
-    ## writeLines("|          __          ____        ____  _____                        |")
-    ## writeLines("|         / /         / __ \\      / __ \\/_  _/                        |")
-    ## writeLines("|        / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __      |")
-    ## writeLines("|       / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /      |")
-    ## writeLines("|      / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /       |")
-    ## writeLines("|     /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/        |")
-    ## writeLines("|                                                                     |")
-    ## writeLines("| LaByRInth: Low-coverage Biallelic R Imputation                      |")
-    ## writeLines("| Copyright 2017 Jason Vander Woude and Nathan Ryder                  |")
-    ## writeLines("| Licensed under the Apache License, Version 2.0                      |")
-    ## writeLines("| Source code: github.com/Dordt-Statistics-Research/LaByRInth         |")
-    ## writeLines("| Based on LB-Impute: github.com/dellaporta-laboratory/LB-Impute      |")
-    ## writeLines("| Funding received from the National Science Foundation (IOS-1238187) |")
-    ## writeLines("|_____________________________________________________________________|")
-    ## writeLines("")
-
-    writeLines("")
-    writeLines("")
-    writeLines("")
-    writeLines("            __          ____        ____  _____")
-    writeLines("           / /         / __ \\      / __ \\/_  _/")
-    writeLines("          / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
-    writeLines("         / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
-    writeLines("        / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
-    writeLines("       /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
-    writeLines("")
-    writeLines("               L O W - C O V E R A G E   B I A L L E L I C")
-    writeLines("                 R - P A C K A G E   I M P U T A T I O N")
-    writeLines("       __________________________________________________________")
-    writeLines("")
-    writeLines("           Copyright 2017 Jason Vander Woude and Nathan Ryder")
-    writeLines("             Licensed under the Apache License, Version 2.0")
-    writeLines("             github.com/Dordt-Statistics-Research/LaByRInth")
-    writeLines("            Based on LB-Impute and funded by NSF IOS-1238187")
-    writeLines("")
-    writeLines("")
-    writeLines("")
-
-}
-
-
-analyze <- function(orig, mask, imp) {
-
-    load <- function(vcf) {
-        if (! inherits(vcf, "vcfR"))
-            read.vcfR(vcf, verbose=F)
-        else
-            vcf
-    }
-
-    check.correct <- function(orig.gt, imp.gt) {
-        gsub("\\|", "/", orig.gt)  # replace '|' with '/'
-        if (orig.gt == "1/0")
-            orig.gt <- "0/1"
-        orig.gt == imp.gt
-    }
-
-    check.masked <- function(orig.ad, mask.ad) {
-        orig.ad != mask.ad
-    }
-
-    get.gt <- function(vcf)
-        extract.gt(vcf, "GT")
-
-    orig <- load(orig)
-    mask <- load(mask)
-    imp <- load(imp)
-
-    depths <- sapply(getAD(orig), ad.to.num)
-
-    post.probs <- getGP(imp)
-
-    max.post.probs <- sapply(post.probs, function(gp) {
-        max(gp.to.num(gp))
-    })
-
-    data <- data.frame(
-        ref.depth  = depths[1, ],
-        alt.depth  = depths[2, ],
-        depth      = depths[1, ] + depths[2, ],
-        correct    = mapply(FUN=check.correct, getGT(orig), getGT(imp)),
-        masked     = mapply(FUN=check.masked, getAD(orig), getAD(mask)),
-        max.prob   = max.post.probs
-        ## post.probs = post.probs
-    )
-
-    data  # implicit return
-}
-
-
-quick.check <- function() {
-    ## an <- analyze("./analysis/filtered_lakin_fuller.vcf", "./analysis/masked_files_LF_from_sandesh/masked_01_filtered_lakin_fuller.vcf", "./thresh-90.vcf.gz")
-    ## an <- analyze("./analysis/first-25-orig.vcf.gz",
-    ##               "./analysis/first-25-masked.vcf.gz", "./analysis/first-25-imp-f3.vcf.gz")
-    ## interest <- an$correct[an$masked==T]; sum(interest) / length(interest)
-
-
-
-
-
-    ## an <- analyze("./analysis/filtered_lakin_fuller.vcf", "./analysis/masked_files_LF_from_sandesh/masked_01_filtered_lakin_fuller.vcf", "~/Desktop/imputed/imputed-mask-01-f5-1e8.vcf.gz")
-
-    for (qual in seq(from=0, to=100, by=5)) {
-        interest <- an$correct[an$masked & an$max.prob >= qual]
-        display(1, "thresh: ", qual, "\tn: ", length(interest), "\tquality: ", sum(interest) / length(interest))
-
-    }
-}
-
-
-LabyrinthQC <- function(vcf) {
-    ## vcf load code
-    if (! inherits(vcf, "vcfR")) {
-        timer <- new.timer()
-        display(0, "Loading vcf")
-        vcf <- read.vcfR(vcf, verbose=F)
-        display(1, "Completed in ", timer(), "\n")
-    }
-
-    gp <- getGP(vcf)
-    gt <- getGT(vcf)
-    ad <- getAD(vcf)
-
-    highest.posterior <- apply(gp, 1:2, function(gp) {
-        max(gp.to.num(gp))
-    })
-
-    ## y <- sapply(0:100, function(x) {sum(highest.posterior >= x) / length(highest.posterior)})
-    ## plot((0:100)/100, y, type="l", main="Imputation Posterior Probabilities",
-    ## xlab="Posterior Probabilities",
-    ## ylab="Proportion of Sites with Higher Posterior",
-    ## ylim=c(0,1), xlim=c(0,1))
-
-    thresh.mask <- apply(highest.posterior, 1:2, `>=`, 90)
-
-    gt <- ifelse(thresh.mask, gt, "./.")
-
-    concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=nrow(ad))
-
-    vcf@gt <- cbind("GT:AD:GP", concat)
-    colnames(vcf@gt) <- c("FORMAT", colnames(ad))
-    rownames(vcf@gt) <- rownames(ad)
-
-
-    write.vcf(vcf, "thresh-90.vcf.gz")
-
-    print("done")
-}
-
-
-get.ad.array <- function(vcf) {
-    ads <- apply(getAD(vcf), 1:2, ad.to.num)
-    abind(ads[1, , ], ads[2, , ], along=3)
 }
 
 
@@ -1364,7 +1023,6 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                                                  fnscale=-1))
                     recomb.val.mat[x,y] <- result$par
                     log.liklihood.mat[x,y] <- result$value
-                    ## message(x, ",", y)
 
                     ## Progress bar code
                     ## -----------------------------------------------------------------
@@ -1384,12 +1042,10 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
             list(logliklihoods = log.liklihood.mat,
                  recombs = recomb.val.mat)
 
-            ## ret.val.3
         })
 
         ret.val.2
 
-        ## do.call(abind3, ret.val.2)  # bind transmissions in 3rd dim and return
     })
 
 
@@ -1428,14 +1084,6 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## runnin viterbi
 
 
-
-
-
-
-
-    ## ###### REMOVE ######
-    ## transitions <- readRDS("testing/transitions_1.rds")
-
     parental.models <- listapply(u.chroms, function(chrom) {
         viterbi(emissions[, snp.chroms == chrom],
                 do.call(abind3, lapply(transitions[[chrom]], function(elem) {elem$logliklihoods})),
@@ -1462,8 +1110,92 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     })
     names(result) <- u.chroms
     result
-    ## list(parental.models = parental.models,
-    ##      recombs = recombs)  # implicit return
+
+}
+
+
+
+
+
+################################################################################
+######################### TERTIARY LABYRINTH FUNCTIONS #########################
+################################################################################
+
+
+## get a logical vector indicating at which sites the parents are homozygous
+## within and polymorphic between.
+parent.hom.and.poly <- function(vcf, parents) {
+    ## TODO(Jason): ask Jesse what should be done about ones that fail. Maybe we
+    ## can soften this in LaByRInth so that we use confidence that we have read
+    ## an allele from parent 1 or parent 2
+
+    ## count number of zeros in numeric vector
+    n.zeros <- function(numeric)
+        sum(numeric==0)
+
+    ## return logical vector indicating positions of nonzero values
+    nonzero <- function(numeric)
+        numeric!=0
+
+    if (length(parents) != 2) {
+        stop("Length of parents must be 2")
+    }
+    par.mat <- getAD(vcf)[ , parents]
+    apply(par.mat, 1, function(row) {
+        (n.zeros(ad.to.num(row[1])) > 0          # at least one allele not read in P1
+            && n.zeros(ad.to.num(row[2])) > 0    # at least one allele not read in P2
+            && ! any(nonzero(ad.to.num(row[1])) & nonzero(ad.to.num(row[2]))) # no common reads
+            && n.zeros(ad.to.num(row[1])) != 2    # TODO(Jason): remove condition and impute parents
+            && n.zeros(ad.to.num(row[2])) != 2    # TODO(Jason): remove condition and impute parents
+        )
+    })
+}
+
+
+## modify the vcf in place to add imputed calls in gt
+update.vcf <- function(vcf, gt, posteriors=NULL) {
+    gp <- posteriors
+    ad <- getAD(vcf)
+
+    n.rows <- nrow(ad)
+    if (n.rows != nrow(gt))
+        stop("conflict in number of rows; should never happen")
+
+    if (is.null(gp)) {
+        concat <- matrix(paste0(gt, ":", ad), nrow=n.rows)
+        vcf@gt <- cbind("GT:AD", concat)
+    } else {
+        concat <- matrix(paste0(gt, ":", ad, ":", gp), nrow=n.rows)
+        vcf@gt <- cbind("GT:AD:GP", concat)
+    }
+
+    colnames(vcf@gt) <- c("FORMAT", colnames(ad))
+    rownames(vcf@gt) <- rownames(ad)
+
+    vcf  # implicit return
+}
+
+
+get.lapply <- function(parallel, cores=1) {
+    serial.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
+        lapply(...)
+    }
+
+    ## parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
+    ##     mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
+    ## }
+
+    parallel.lapply <- function(...) {
+        mclapply(..., mc.preschedule=F, mc.cores=cores)
+    }
+
+    ## implicit return
+    if (parallel && cores != 1) {
+        require(parallel, quietly=T)
+        parallel.lapply
+    } else {
+        lapply
+    }
 }
 
 
@@ -1484,37 +1216,6 @@ extract.each.parent <- function(parental.model) {
         parents[1, ],
         parents[2, ]
     )
-}
-
-
-LabyrinthAnalyze <- function(orig, masked, imputed) {
-    ## timer <- new.timer()
-    ## display(0, "Reading original file")
-    ## display(0, "Reading masked file")
-    ## display(0, "Reading filtered file")
-    gt.o <- getGT(orig)
-    gt.m <- getGT(masked)
-    gt.i <- getGT(imputed)
-
-    ## vector.indices
-    masked.sites <-
-        (gt.o != "./." & gt.o != ".|.") &
-        (gt.m == "./." | gt.m == ".|.")
-
-    same <-
-        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
-        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
-         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
-        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
-
-    n.same <- sum(masked.sites & same)
-    n.masked <- sum(masked.sites)
-    accuracy <-  n.same / n.masked
-
-    w <- which(masked.sites & !same, arr.ind = TRUE)
-    ad <- getAD(orig)
-
-    display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
 }
 
 
@@ -1550,6 +1251,155 @@ estimate.read.err <- function(ad, n.gen) {
 
     result$par
 }
+
+
+print.labyrinth.header <- function() {
+
+    ## the image looks funny because '\' in the displayed image must be '\\' in the code
+    writeLines("")
+    writeLines("")
+    writeLines("")
+    writeLines("            __          ____        ____  _____")
+    writeLines("           / /         / __ \\      / __ \\/_  _/")
+    writeLines("          / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
+    writeLines("         / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
+    writeLines("        / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
+    writeLines("       /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
+    writeLines("")
+    writeLines("               L O W - C O V E R A G E   B I A L L E L I C")
+    writeLines("                 R - P A C K A G E   I M P U T A T I O N")
+    writeLines("       __________________________________________________________")
+    writeLines("")
+    writeLines("           Copyright 2017 Jason Vander Woude and Nathan Ryder")
+    writeLines("             Licensed under the Apache License, Version 2.0")
+    writeLines("             github.com/Dordt-Statistics-Research/LaByRInth")
+    writeLines("            Based on LB-Impute and funded by NSF IOS-1238187")
+    writeLines("")
+    writeLines("")
+    writeLines("")
+
+}
+
+
+
+
+
+################################################################################
+############################## VCF DATA ACCESS CODE ############################
+################################################################################
+
+
+getSAMPLES <- function(vcf) {
+    ## column names are the samples except the first column which is "FORMAT"
+    colnames(vcf@gt)[-1]
+}
+
+
+getAD <- function(vcf) {
+    ad <- extract.gt(vcf, "AD")
+    ad[is.na(ad)] <- "0,0"  # replace NA entries
+    ad
+}
+
+
+getGT <- function(vcf) {
+    gt <- extract.gt(vcf, "GT")
+    gt[is.na(gt)] <- "./."  # replace NA entries
+    gt
+}
+
+
+getGP <- function(vcf) {
+    extract.gt(vcf, "GP")
+}
+
+
+
+
+
+################################################################################
+############################# PHRED CONVERSION CODE ############################
+################################################################################
+
+
+prob.to.phred <- function(x) {
+    ## 1-x is the probability the call is wrong
+    ## use min to prevent infinity from getting through
+    min(-10*log((1-x), base=10), 100)
+}
+
+
+phred.to.prob <- function(y) {
+    -(10^(y / -10) - 1)
+}
+
+
+
+
+
+################################################################################
+############################# STRING TO NUMERIC CODE ###########################
+################################################################################
+
+
+## convert string representation to numeric vector
+ad.to.num <- function(str) {
+    as.numeric(str.split(str, ","))
+
+}
+
+
+## convert string representation to numeric vector
+gt.to.num <- function(str) {
+    str <- gsub("\\|", "/", str)  # replace '|' with '/'
+    suppressWarnings(as.numeric(str.split(str, "/")))
+
+}
+
+
+gp.to.num <- function(str) {
+    ad.to.num(str)
+}
+
+
+get.ad.array <- function(vcf) {
+    ads <- apply(getAD(vcf), 1:2, ad.to.num)
+    abind(ads[1, , ], ads[2, , ], along=3)
+}
+
+
+
+
+
+################################################################################
+########################## ABIND HELPER FUNCTIONS CODE #########################
+################################################################################
+
+
+## The abind{i} functions are useful for cleaning the code for do.call(abind,
+## some.list) calls because otherwise the 'along' argument has to be appended to
+## the 'some.list' argument
+abind1 <- function(...) {
+    abind(..., along=1)
+}
+
+
+abind2 <- function(...) {
+    abind(..., along=2)
+}
+
+
+abind3 <- function(...) {
+    abind(..., along=3)
+}
+
+
+
+
+
+################################################################################
+########################### GENERAL UTILITY FUNCTIONS ##########################
+################################################################################
 
 
 sapply.pairs <- function(vec, fun) {
@@ -1602,98 +1452,85 @@ verify.file.dir.exists <- function(file) {
 }
 
 
-LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
-
-    ## begin timer
-    total.timer <- new.timer()
-    print.labyrinth.header()
-
-    ## vcf load code
-    if (! inherits(vcf, "vcfR")) {
-        timer <- new.timer()
-        display(0, "Loading vcf")
-        vcf <- read.vcfR(vcf, verbose=F)
-        display(1, "Completed in ", timer(), "\n")
+## More convenient strsplit if length of vector is 1
+str.split <- function(str, sep) {
+    if (length(str) != 1) {
+        warning("Only splitting the first element of the vector")
     }
-
-
-    timer <- new.timer()
-    display(0, "Masking sites with posterior probability below ", min.posterior)
-
-    listapply <- get.lapply(parallel, cores)
-    min.phred <- prob.to.phred(min.posterior)
-
-    formats <- imputed@gt[ , "FORMAT"]
-
-    new.data <- t(sapply(seq_along(formats), function(i) {
-        format.components <- str.split(formats[i], ":")
-        gp.index <- format.components == "GP"
-        gt.index <- format.components == "GT"
-
-        ## The '-1' is to ignore the 'FORMAT' column of the vcfR@gt
-        ## matrix. vcf.entry will be something such as "0/0:1,0:8.6,0.6,0.0"
-        ## which is GT:AD:GP.
-        sapply(vcf@gt[i, -1], function(vcf.entry) {
-
-            components <- str.split(vcf.entry, ":")
-            posteriors <- as.numeric(str.split(components[gp.index], ","))
-
-            if (max(posteriors) < min.phred)
-                components[gt.index] <- "./."
-
-            paste0(components, collapse=":")
-        })
-    }))
-
-    ## new.data <- do.call(rbind, listapply(seq_along(formats), function(i) {
-    ##     format.components <- str.split(formats[i], ":")
-    ##     gp.index <- format.components == "GP"
-    ##     gt.index <- format.components == "GT"
-
-    ##     ## The '-1' is to ignore the 'FORMAT' column of the vcfR@gt
-    ##     ## matrix. vcf.entry will be something such as "0/0:1,0:8.6,0.6,0.0"
-    ##     ## which is GT:AD:GP.
-    ##     sapply(vcf@gt[i, -1], function(vcf.entry) {
-
-    ##         components <- str.split(vcf.entry, ":")
-    ##         posteriors <- as.numeric(str.split(components[gp.index], ","))
-
-    ##         if (max(posteriors) < min.phred)
-    ##             components[gt.index] <- "./."
-
-    ##         paste0(components, collapse=":")
-    ##     })
-    ## }))
-
-    rownames <- rownames(vcf@gt)
-    colnames <- colnames(vcf@gt)
-
-    vcf@gt <- cbind(formats, new.data)
-    rownames(vcf@gt) <- rownames
-    colnames(vcf@gt) <- colnames
-
-    vcf
-}
-
-
-prob.to.phred <- function(x) {
-    ## 1-x is the probability the call is wrong
-    ## use min to prevent infinity from getting through
-    min(-10*log((1-x), base=10), 100)
-}
-
-
-phred.to.prob <- function(y) {
-    -(10^(y / -10) - 1)
+    strsplit(str, sep)[[1]]
 }
 
 
 
-## This function is intended to take a vcf file that results from LB-Impute
-## imputing the parents and remove any sites where the parents are not
-## homozygous within and polymorphic between while also keeping track of the
-## locations so that they can be reinserted after the LB-Impute
-LBFilter <- function(vcf) {
-    
 
+
+################################################################################
+############################# PROGRESS MONITOR CODE ############################
+################################################################################
+
+
+## Progress monitor code from https://stackoverflow.com/questions/27726134/
+## how-to-track-progress-in-mclapply-in-r-in-parallel-package
+## TODO(Jason): don't use prefs$fifo, but instead try to use a fifo variable
+## in the progress.env environment
+ProgressMonitor <- function(env, parallel) {
+    local({
+        f <- fifo(tempfile(), open="w+b", blocking=T)
+        if (!parallel) {  # don't fork if running serially
+            return(f)
+        }
+        if (inherits(parallel:::mcfork(), "masterProcess")) {
+            progress <- 0.0
+            while (progress < 1 && !isIncomplete(f)) {
+                progress <- PrintProgress(f, progress)
+            }
+            parallel:::mcexit()
+        }
+        f  # implicit return
+    }, envir=env)
+}
+
+
+PrintProgress <- function(f, curr.prog) {
+    msg <- readBin(f, "double")
+    progress <- curr.prog + as.numeric(msg)
+    cat(sprintf(paste0("    * ",  "Progress: %.2f%%\r"), progress * 100))
+    progress  # implicit return
+}
+
+
+## TODO(Jason): Get this function to work; problem likely environments
+InitiateProgress <- function(prefs, n.jobs) {
+    ## progress.env <- new.env()
+    ## prefs$fifo <- ProgressMonitor(progress.env)
+    ## assign("progress", 0.0, envir=progress.env)
+    ## prefs$prog.env <- progress.env
+    ## prefs$n.jobs <- n.jobs
+    ## assign("prefs$n.jobs", n.jobs, envir=.GlobalEnv)
+}
+
+
+MakeProgress <- function(fifo, n.jobs, prog.env, parallel) {
+    writeBin(1/n.jobs, fifo)  # update the progress bar info
+    if (!parallel) {  # if running in serial mode
+        prog.env$progress <- PrintProgress(fifo, prog.env$progress)
+    }  # else the forked process handles this
+}
+
+
+new.timer <- function() {
+    start <- Sys.time()
+    function() {
+        elapsed <- difftime(Sys.time(), start)
+        runtime <- as.numeric(elapsed)
+        units <- attr(elapsed, "units")
+        paste(round(runtime, 2), units)
+    }
+}
+
+
+display <- function(indent, ...) {
+    if (! is.numeric(indent))
+        stop("indent must be numeric")
+    message(rep("   ", indent), " * ", ...)
 }
