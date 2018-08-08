@@ -12,11 +12,11 @@ See description for './data/original_files/HincII_FilteredVariants_Cleaned2.vcf.
 
 ### ./data/original_files/RsaI_FilteredVariants_Cleaned2.vcf.gz
 
-Downloaded from https://github.com/dellaporta-laboratory/LB-Impute/raw/master/example_data/GBS_data/F2/RsaI_FilteredVariants_Cleaned2.vcf.gz on 7-5-2018. The program TASSEL 5 (version 20170406) was not able to display the file due to a misordering. The 'Sort Genotype File' plugin in the 'Data' menu of TASSEl 5 was used to order the file which was saved as './data/original_files/Rsal_ordered.vcf.gz'. This is an F2 population.
+Downloaded from https://github.com/dellaporta-laboratory/LB-Impute/raw/master/example_data/GBS_data/F2/RsaI_FilteredVariants_Cleaned2.vcf.gz on 7-5-2018. The program TASSEL 5 (version 20170406) was not able to display the file due to a misordering. The 'Sort Genotype File' plugin in the 'Data' menu of TASSEl 5 was used to order the file which was saved as './data/original_files/RsaI_ordered.vcf.gz'. This is an F2 population.
 
-### ./data/original_files/Rsal_ordered.vcf.gz
+### ./data/original_files/RsaI_ordered.vcf.gz
 
-See description for './data/original_files/Rsal_FilteredVariants_Cleaned2.vcf.gz'
+See description for './data/original_files/RsaI_FilteredVariants_Cleaned2.vcf.gz'
 
 ### ./data/original_files/IBM_RIL_FinalScaffoldRemoved.vcf.gz
 
