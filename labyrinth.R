@@ -350,16 +350,14 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
         mask <- mask & non.hom.poly
     }
 
-    if (all(mask)) {
-        TRUE  # implicit return
-    } else {
-        vcf@fix <- vcf@fix[mask, ]
-        vcf@gt <- vcf@gt[mask, ]
-        write.vcf(vcf, out.file, mask=TRUE)
-        display(0, paste("\nFiltering is complete;", sum(!mask),
-                         "of", length(mask), "sites removed"))
-        FALSE  # implicit return
-    }
+    vcf@fix <- vcf@fix[mask, ]
+    vcf@gt <- vcf@gt[mask, ]
+    write.vcf(vcf, out.file, mask=TRUE)
+    display(0, paste("Filtering is complete;", sum(!mask),
+                     "of", length(mask), "sites removed\n"))
+
+    all(mask)  # implicit return indicating if any sites were removed
+
 }
 
 
