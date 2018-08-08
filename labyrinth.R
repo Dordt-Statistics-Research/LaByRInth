@@ -53,35 +53,29 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
 
     ## file verification
     if (file.exists(out.file)) {
-        display(0, "Output file already exists; please choose another name\n")
-        stop()
+        stop("Output file already exists; please choose another name\n")
     }
 
     if (! verify.file.extension(out.file, ".rds")) {
-        display(0, "Output file name must end with '.rds'\n")
-        stop()
+        stop("Output file name must end with '.rds'\n")
     }
 
     if (! verify.file.dir.exists(out.file)) {
-        display(0, "Directory of the outuput file does not exist; please create it\n")
-        stop()
+        stop("Directory of the outuput file does not exist; please create it\n")
     }
 
 
     ## parameter verification
     if (cores == 1 && parallel) {
-        display(0, "Cores cannot be 1 if parallel is true\n")
-        stop()
+        stop("Cores cannot be 1 if parallel is true\n")
     }
 
     if (cores > 1 && !parallel) {
-        display(0, "Cores cannot be greater than 1 if parallel is false\n")
-        stop()
+        stop("Cores cannot be greater than 1 if parallel is false\n")
     }
 
     if (cores < 1) {
-        display(0, "Cores cannot be less than 1\n")
-        stop()
+        stop("Cores cannot be less than 1\n")
     }
 
     ## vcf load code
@@ -112,8 +106,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
     }
 
     if (length(non.biallelic) != 0) {
-        display(1, "The vcf must be filtered before imputing; please run LabyrinthFilter first\n")
-        stop()
+        stop("The vcf must be filtered before imputing; please run LabyrinthFilter first\n")
     }
     display(1, "Completed in ", timer(), "\n")
 
@@ -203,18 +196,15 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
 
     ## file verification
     if (file.exists(out.file)) {
-        display(0, "Output file already exists; please choose another name\n")
-        stop()
+        stop("Output file already exists; please choose another name\n")
     }
 
     if (! verify.file.extension(out.file, ".vcf.gz")) {
-        display(0, "Output file name must end with '.vcf.gz'\n")
-        stop()
+        stop("Output file name must end with '.vcf.gz'\n")
     }
 
     if (! verify.file.dir.exists(out.file)) {
-        display(0, "Directory of the outuput file does not exist; please create it\n")
-        stop()
+        stop("Directory of the outuput file does not exist; please create it\n")
     }
 
 
@@ -225,18 +215,15 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
     }
 
     if (cores == 1 && parallel) {
-        display(0, "Cores cannot be 1 if parallel is true\n")
-        stop()
+        stop("Cores cannot be 1 if parallel is true\n")
     }
 
     if (cores > 1 && !parallel) {
-        display(0, "Cores cannot be greater than 1 if parallel is false\n")
-        stop()
+        stop("Cores cannot be greater than 1 if parallel is false\n")
     }
 
     if (cores < 1) {
-        display(0, "Cores cannot be less than 1\n")
-        stop()
+        stop("Cores cannot be less than 1\n")
     }
 
 
@@ -310,18 +297,15 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
 
     ## file verification
     if (file.exists(out.file)) {
-        display(0, "Output file already exists; please choose another name\n")
-        stop()
+        stop("Output file already exists; please choose another name\n")
     }
 
     if (! verify.file.extension(out.file, ".vcf.gz")) {
-        display(0, "Output file name must end with '.vcf.gz'\n")
-        stop()
+        stop("Output file name must end with '.vcf.gz'\n")
     }
 
     if (! verify.file.dir.exists(out.file)) {
-        display(0, "Directory of the outuput file does not exist; please create it\n")
-        stop()
+        stop("Directory of the outuput file does not exist; please create it\n")
     }
 
 
