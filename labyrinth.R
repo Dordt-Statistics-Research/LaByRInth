@@ -44,7 +44,7 @@ require(digest, quietly=T)
 
 
 LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
-                                    geno.err=0.01, het.penalty, parallel=TRUE,
+                                    geno.err=0.01, parent.het, parallel=TRUE,
                                     cores=4) {
     ## begin timer
     total.timer <- new.timer()
@@ -130,7 +130,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
     result$parents <- parents
     result$generation <- generation
     result$geno.err <- geno.err
-    result$het.penalty <- het.penalty
+    result$parent.het <- parent.het
     result$site.pair.transition.probs <- site.pair.transition.probs
 
     ## save additional information so that it doesn't have to be computed again
@@ -175,7 +175,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
                                                       snp.chroms,
                                                       marker.names,
                                                       sample.names,
-                                                      het.penalty,
+                                                      parent.het,
                                                       parallel,
                                                       cores)
     result$parent.models <- parental.results
@@ -186,12 +186,20 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
 }
 
 
-LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
+LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
                                     calc.posteriors=TRUE, viterbi.threshold=1e-3,
-                                    fwd.bkwd.threshold=0.8, parallel=TRUE, cores=4) {
+                                    parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
     print.labyrinth.header()
+
+
+    ## Without more thorough validation, users should be prevented from using Viterbi
+    if (! use.fwd.bkwd) {
+        stop(paste("Not using the forward-backward algorithm is heavily",
+                   "discouraged; To use the Viterbi instead, you will have to",
+                   "remove this line of the source code."))
+    }
 
 
     ## file verification
@@ -230,6 +238,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=FALSE,
 
     timer <- new.timer()
     display(0, "Restoring variables from parental imputation result")
+    fwd.bkwd.threshold <- 0  # use LabyrinthUncall for other thresholds
     vcf <- parental$vcf
     parents <- parental$parents
     parent.models <- parental$parent.models
@@ -917,7 +926,7 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
 
 determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                                           marker.names, sample.names,
-                                          het.penalty, parallel, cores) {
+                                          parent.het, parallel, cores) {
 
     listapply <- get.lapply(parallel, cores)
 
@@ -1043,7 +1052,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 
 
     ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
-    p <- 1 - het.penalty  # probability of a site in parents being homozygous
+    p <- 1 - parent.het  # probability of a site in parents being homozygous
     log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),

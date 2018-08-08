@@ -38,7 +38,20 @@ require(digest, quietly=T)
 
 
 
-LabyrinthMask <- function(vcf, parents, depth=0, lik.ratio=100, rerr=0.01) {
+LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0.01) {
+
+    ## file verification
+    if (file.exists(out.file)) {
+        stop("Output file already exists; please choose another name\n")
+    }
+
+    if (! verify.file.extension(out.file, ".vcf.gz")) {
+        stop("Output file name must end with '.vcf.gz'\n")
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        stop("Directory of the outuput file does not exist; please create it\n")
+    }
 
     get.liklihood.ratio <- function(depth.a, depth.b, rerr) {
         if (length(depth.a) > 1)
@@ -62,6 +75,10 @@ LabyrinthMask <- function(vcf, parents, depth=0, lik.ratio=100, rerr=0.01) {
         }
     }
 
+    ## vcf load code
+    if (! inherits(vcf, "vcfR")) {
+        vcf <- read.vcfR(vcf, verbose=F)
+    }
 
     ad.arr <- get.ad.array(vcf)
     depths <- apply(ad.arr, 1:2, sum)  # sum individual allelic reads
@@ -75,7 +92,17 @@ LabyrinthMask <- function(vcf, parents, depth=0, lik.ratio=100, rerr=0.01) {
     sufficient.depth <- depths >= depth
     sufficient.ratio <- liklihood.ratios >= lik.ratio
     mask <- sufficient.depth & sufficient.ratio & !parental
-    print(paste0("Masking ", sum(mask), " sites"))
+
+    n.total <- prod(dim(depths))
+    n.called <- sum(depths != 0)
+    n.masked <- sum(mask)
+
+    message("Sites are considered progeny/marker pairs")
+    message(sum(mask), " sites will be masked of ", n.total, " total sites (",
+            round(n.masked / n.total, 3)*100, "%)")
+    message(sum(mask), " sites will be masked of ", n.called, " called sites (",
+            round(n.masked / n.called, 3)*100, "%)")
+
 
     new.ad <- getAD(vcf)
     new.ad[mask] <- "0,0"
@@ -93,7 +120,8 @@ LabyrinthMask <- function(vcf, parents, depth=0, lik.ratio=100, rerr=0.01) {
     colnames(vcf@gt) <- c("FORMAT", colnames(new.ad))
     rownames(vcf@gt) <- rownames(new.ad)
 
-    vcf  # implicit return
+    write.vcf(vcf, out.file)
+    invisible(vcf)  # implicit return
 }
 
 
@@ -104,13 +132,11 @@ LabyrinthMimic <- function(parental, full.out, sample.out, parallel=TRUE, cores=
 
 
     if (! verify.file.extension(full.out, ".vcf.gz")) {
-        display(0, "Output file (full.out) name must end with '.vcf.gz'\n")
-        stop()
+        stop("Output file (full.out) name must end with '.vcf.gz'\n")
     }
 
     if (! verify.file.extension(sample.out, ".vcf.gz")) {
-        display(0, "Output file (sample.out) name must end with '.vcf.gz'\n")
-        stop()
+        stop("Output file (sample.out) name must end with '.vcf.gz'\n")
     }
 
 
