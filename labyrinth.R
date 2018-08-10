@@ -551,7 +551,8 @@ get.transition.structures <- function(snp.chroms, marker.names,
             ## with recombs[i] to get a 4x4 matrix
             mat <- site.pair.transition.probs[[model[i]]][[model[i+1]]](recombs[i])
             ## normalize so that every rowSum is 0 since these are probabilities
-            mat / rep(rowSums(mat), 4)
+            mat <- mat / rep(rowSums(mat), 4)
+            mat[is.nan(mat)] <- 0.25
         })
 
         result <- do.call(abind3, trans.matrices)
@@ -620,7 +621,10 @@ get.transition.structures <- function(snp.chroms, marker.names,
 ## forward and backward probabilities are not technically correct because they
 ## are frequently being normalized. This is done to decrease the numerical
 ## instability that results when the probabilities become very low
-fwd.bkwd <- function(emm, trans) {
+fwd.bkwd <- function(emm, trans, temp) {
+    ## if (temp) {
+    ##     browser()
+    ## }
     normalize <- function(mat, col) {
         s <- sum(mat[, col])
         if (s == 0){
@@ -648,7 +652,8 @@ fwd.bkwd <- function(emm, trans) {
         for (to in 1:n.states) {
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
-         }
+        }
+        ## browser(expr=temp)
         f.probs <- normalize(f.probs, site)
     }
 
@@ -750,6 +755,7 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
     combine.recombs <- function(r1, r2) {r1*(1-r2) + r2*(1-r1)}
 
     impute.sample.chrom <- function(sample, chrom) {
+        ## browser(expr = sample=="HincII_F2-01" && as.character(chrom)=="2")
 
         n.sites <- sum(snp.chroms==chrom)  # boolean addition
         parent.paths <- extract.each.parent(
@@ -769,7 +775,7 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
                                        "het.II"  = rep(1/6, n.sites),
                                        "hom.alt" = rep(1/3, n.sites))
             } else {
-                posterior.mat <- fwd.bkwd(emm, trans)
+                posterior.mat <- fwd.bkwd(emm, trans, sample=="HincII_F2-01" && as.character(chrom)=="2")
             }
 
             posteriors <- rbind("hom.ref" = posterior.mat["hom.ref", ],

@@ -48,26 +48,29 @@ parallel        <- TRUE
 cores           <- 25
 
 for (i in seq_along(geno.errs)) {
-    parental.file   <- parental.file(dataset, config=i)
+    message("Beginning full imputation of the dataset ", dataset,
+            " with genotype error ", geno.errs[i])
+
+    par.file        <- parental.file(dataset, config=i)
     out.file        <- imputed.file(dataset, parental.config=i, progeny.config=1)
 
     geno.err        <- geno.errs[i]
 
-    if (! file.exists(parental.file)) {
+    if (! file.exists(par.file)) {
         LabyrinthImputeParents(vcf               = in.file,
                                parents           = parents,
                                generation        = generation,
-                               out.file          = parental.file,
+                               out.file          = par.file,
                                geno.err          = geno.err,
                                parent.het        = parent.het,
                                parallel          = parallel,
                                cores             = cores)
     } else {
-        message("Parental file ", parental.file, " already exists and will be used")
+        message("Parental file ", par.file, " already exists and will be used")
     }
 
     if (! file.exists(out.file)) {
-        LabyrinthImputeProgeny(parental          = readRDS(parental.file),
+        LabyrinthImputeProgeny(parental          = readRDS(par.file),
                                out.file          = out.file,
                                use.fwd.bkwd      = use.fwd.bkwd,
                                calc.posteriors   = use.fwd.bkwd,
@@ -75,7 +78,7 @@ for (i in seq_along(geno.errs)) {
                                parallel          = parallel,
                                cores             = cores)
     } else {
-        message("Imputed file ", parental.file, " already exists and will be used")
+        message("Imputed file ", out.file, " already exists and will be used")
     }
 }
 
