@@ -1,0 +1,76 @@
+Esuring existence of the Lakin-Fuller directory
+
+Esuring existence of the HincII directory
+
+Esuring existence of the RsaI directory
+
+Esuring existence of the IBM-RIL directory
+
+Filtering the Lakin-Fuller dataset
+ * Checking if vcf is an object or file
+ * Loading vcf
+ * Checking if parents are in the vcf
+ * Checking for sites that are not biallelic
+ * The following sites are not biallelic and will be removed:
+ * 	CHR:1A	POS:267367471
+ * 	CHR:1B	POS:558850175
+ * 	CHR:6A	POS:416179127
+ * 	CHR:7A	POS:585875031
+ * Filtering is complete; 4 of 9833 sites removed
+
+Filtering the HincII dataset
+ * Checking if vcf is an object or file
+ * Loading vcf
+ * Checking if parents are in the vcf
+ * Checking for sites that are not biallelic
+ * The following sites are not biallelic and will be removed:
+ * Filtering is complete; 0 of 11205 sites removed
+
+Filtering the RsaI dataset
+ * Checking if vcf is an object or file
+ * Loading vcf
+ * Checking if parents are in the vcf
+ * Checking for sites that are not biallelic
+ * The following sites are not biallelic and will be removed:
+ * Filtering is complete; 0 of 127056 sites removed
+
+Filtering the IBM-RIL dataset
+ * Checking if vcf is an object or file
+ * Loading vcf
+ * Checking if parents are in the vcf
+ * Checking for sites that are not biallelic
+ * The following sites are not biallelic and will be removed:
+ * 	CHR:1	POS:91513940
+ * 	CHR:2	POS:4172949
+ * 	CHR:2	POS:56523805
+ * 	CHR:3	POS:2108586
+ * 	CHR:3	POS:159862180
+ * 	CHR:4	POS:70022354
+ * 	CHR:4	POS:142828335
+ * 	CHR:4	POS:157146609
+ * 	CHR:4	POS:170841801
+ * 	CHR:5	POS:193877067
+ * 	CHR:8	POS:166117514
+ * 	CHR:9	POS:83759969
+ * Filtering is complete; 12 of 13912 sites removed
+
+Masking the Lakin-Fuller dataset
+ * Sites are considered progeny/marker pairs
+ * 12972 sites will be masked of 3086306 total sites (0.4%)
+ * 12972 sites will be masked of 1384461 called sites (0.9%)
+
+Masking the HincII dataset
+ * Sites are considered progeny/marker pairs
+ * 10273 sites will be masked of 1030860 total sites (1%)
+ * 10273 sites will be masked of 912344 called sites (1.1%)
+
+Masking the RsaI dataset
+ * Sites are considered progeny/marker pairs
+ * 79023 sites will be masked of 11562096 total sites (0.7%)
+ * 79023 sites will be masked of 6954185 called sites (1.1%)
+
+Masking the IBM-RIL dataset
+ * Sites are considered progeny/marker pairs
+ * 8004 sites will be masked of 3864200 total sites (0.2%)
+ * 8004 sites will be masked of 1032622 called sites (0.8%)
+
