@@ -18,7 +18,7 @@ source("./data_definitions.R")
 for (dataset in datasets) {
     dir <- dataset.dir(dataset)
 
-    message("Esuring existence of the ", dataset, " directory")
+    message("Esuring existence of the ", dataset, " directory\n")
 
     if (! dir.exists(dir)) {
         dir.create(dir)
@@ -52,15 +52,22 @@ for (dataset in datasets) {
 ################################################################################
 
 for (dataset in datasets) {
-    dataset <- "IBM-RIL"
+    m.file <- masked.file(dataset)
+
     message("Masking the ", dataset, " dataset")
-    set.seed(0)  # for repeatability
-    LabyrinthMask(vcf       = filtered.file(dataset),
-                  parents   = all.parents[[dataset]],
-                  out.file  = masked.file(dataset),
-                  depth     = min.mask.depths[dataset],
-                  lik.ratio = 100,
-                  rerr      = 0.05)
+
+    if (file.exists(m.file)) {
+        message(m.file, " already exists, so ", dataset,
+                " will not be masked again.\n")
+    } else {
+        set.seed(0)  # for repeatability
+        LabyrinthMask(vcf       = filtered.file(dataset),
+                      parents   = all.parents[[dataset]],
+                      out.file  = m.file,
+                      depth     = min.mask.depths[dataset],
+                      lik.ratio = 100,
+                      rerr      = 0.05)
+    }
 }
 
 

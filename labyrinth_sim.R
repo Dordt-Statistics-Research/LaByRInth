@@ -97,11 +97,12 @@ LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0
     n.called <- sum(depths != 0)
     n.masked <- sum(mask)
 
-    message("Sites are considered progeny/marker pairs")
-    message(sum(mask), " sites will be masked of ", n.total, " total sites (",
+    message(" * Sites are considered progeny/marker pairs")
+    message(" * ", sum(mask), " sites will be masked of ", n.total, " total sites (",
             round(n.masked / n.total, 3)*100, "%)")
-    message(sum(mask), " sites will be masked of ", n.called, " called sites (",
+    message(" * ", sum(mask), " sites will be masked of ", n.called, " called sites (",
             round(n.masked / n.called, 3)*100, "%)")
+    message("")
 
 
     new.ad <- getAD(vcf)

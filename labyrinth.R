@@ -959,6 +959,9 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
+    ## browser()
+    ## u.chroms <- "2"  ##################################### REMOVE 
+
     transitions <- lapply(u.chroms, function(chrom) {
         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
         indices <- indices[-length(indices)]  # remove the last element
@@ -1021,6 +1024,12 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                     recomb.val.mat[x,y] <- result$par
                     log.liklihood.mat[x,y] <- result$value
 
+                    ## if (i == 2880) {
+                    ##     print(result$value)
+                    ##     print(result$par)
+                    ##     print(log.liklihood.mat)
+                    ## }
+
                     ## Progress bar code
                     ## -----------------------------------------------------------------
                     writeBin(1/n.jobs, thefifo)  # update the progress bar info
@@ -1032,9 +1041,31 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                 }
             }
 
+            ## browser()
+
             mymat <- log(exp(log.liklihood.mat) / rep(rowSums(exp(log.liklihood.mat)), 16))
+            ## if (i == 2880) {print(mymat)}
             mymat[is.nan(mymat)] <- -Inf
+            ## if (i == 2880) {print(mymat)}
             log.liklihood.mat <- mymat
+
+            if (all(log.liklihood.mat == -Inf)) {
+                ## TODO(Jason): This is a temporary fix due to numerical
+                ## instabilities. If the probabilities get too small, taking the
+                ## exponent above returns 0 and then taking the log again
+                ## returns negative infinity, and if all the probabilities are
+                ## negative infinity, then all paths will have -Inf log
+                ## probability and the wrong one will likely be returned. There
+                ## should really be a check added so that if the probability of
+                ## the path is -Inf, it is computed again another way
+                log.liklihood.mat[2:15, 2:15] <- 0
+                ## print(i)
+                ## browser()
+                ## print(i)
+            }
+
+            ## print("last one")
+            ## print(log.liklihood.mat)
 
             list(logliklihoods = log.liklihood.mat,
                  recombs = recomb.val.mat)
