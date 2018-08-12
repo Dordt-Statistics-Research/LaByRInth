@@ -553,6 +553,7 @@ get.transition.structures <- function(snp.chroms, marker.names,
             ## normalize so that every rowSum is 0 since these are probabilities
             mat <- mat / rep(rowSums(mat), 4)
             mat[is.nan(mat)] <- 0.25
+            mat
         })
 
         result <- do.call(abind3, trans.matrices)
