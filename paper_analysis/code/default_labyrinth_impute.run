@@ -33,7 +33,7 @@ source("../../labyrinth.R")
 args            <- commandArgs(trailingOnly=TRUE)
 dataset         <- args[1]
 
-in.file         <- filtered.file(dataset)
+in.file         <- masked.file(dataset)
 
 parents         <- all.parents[[dataset]]
 generation      <- generations[dataset]
