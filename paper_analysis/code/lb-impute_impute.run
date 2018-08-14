@@ -1,0 +1,138 @@
+#!/usr/bin/env Rscript
+
+## Copyright 2017 Jason Vander Woude and Nathan Ryder
+##
+## Licensed under the Apache License, Version 2.0 (the "License");
+## you may not use this file except in compliance with the License.
+## You may obtain a copy of the License at
+##
+##     http://www.apache.org/licenses/LICENSE-2.0
+##
+## Unless required by applicable law or agreed to in writing, software
+## distributed under the License is distributed on an "AS IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+## See the License for the specific language governing permissions and
+## limitations under the License.
+
+
+source("./data_definitions.R")
+
+
+args    <- commandArgs(trailingOnly=TRUE)
+dataset <- args[1]
+job.id  <- as.numeric(args[2])
+
+configs <- expand.grid(read.err    = c(1e-3, 1e-2, 1e-1),
+                       geno.err    = c(1e-3, 1e-2, 1e-1),
+                       recomb.dist = c(1e5, 1e6, 1e7, 1e8))
+
+out.dir     <- paste0(dataset.dir(dataset), "/LB-Impute/")   # from data_definitions.R
+if (! dir.exists(out.dir)) {
+    dir.create(out.dir)
+}
+
+parent1 <- all.parents[[dataset]][1]
+parent2 <- all.parents[[dataset]][2]
+
+generation  <- generations[dataset]  # from data_definitions.R
+
+read.err    <- format(configs[job.id, "read.err"], scientific=FALSE)
+geno.err    <- format(configs[job.id, "geno.err"], scientific=FALSE)
+recomb.dist <- format(configs[job.id, "recomb.dist"], scientific=FALSE)
+dr          <- ifelse(generation==2, "", "-dr")  # use double recombination or not
+window.size <- 7
+
+mask        <- uncompressed.masked.file(dataset)  # will end in .gz
+if (! file.exists(mask)) {
+    compressed <- masked.file(dataset)
+    message("Uncompressed mask not found; uncompressing ", compressed)
+    system(paste("gunzip -c", compressed, ">", mask))
+}
+
+parental.file <- paste0(out.dir, "/parental_imputation_result",
+                        "_rerr", read.err,
+                        "_gerr", geno.err,
+                        "_recomb", recomb.dist,
+                        ".vcf")
+
+offspring.file <- paste0(out.dir, "/imputed",
+                         "_rerr", read.err,
+                         "_gerr", geno.err,
+                         "_recomb", recomb.dist,
+                         ".vcf")
+
+## summary.file  <- paste0(out.dir, "/lb-impute_summary",
+##                         "_rerr", read.err,
+##                         "_gerr", geno.err,
+##                         "_recomb", recomb.dist,
+##                         ".rds")
+
+parental.impute.cmd <- paste(
+    "java -jar LB-Impute.jar",
+    "-method impute",
+    "-f",            mask,
+    "-readerr ",     read.err,
+    "-genotypeerr",  geno.err,
+    "-recombdist",   recomb.dist,
+    "-window",       window.size,
+    "-parentimpute",
+    "-parents",      paste0(parent1, ",", parent2),
+    dr,
+    "-o",            parental.file
+)
+
+offspring.impute.cmd <- paste(
+    "java -jar LB-Impute.jar",
+    "-method impute",
+    "-f",            parental.file,
+    "-readerr ",     read.err,
+    "-genotypeerr",  geno.err,
+    "-recombdist",   recomb.dist,
+    "-window",       window.size,
+    "-offspringimpute",
+    "-parents",      paste0(parent1, ",", parent2),
+    dr,
+    "-o",            offspring.file
+)
+
+
+message("Parental file:  ", parental.file)
+message("Offspring file: ", offspring.file)
+message("")
+
+## parental imputation
+if (! file.exists(parental.file)) {
+    message("Running command:\n\t", parental.impute.cmd, "\n")
+    system(parental.impute.cmd)
+} else {
+    message("Found parental file ", parental.file, "; skipping parental imputation\n")
+}
+
+
+## ## additional filtering
+## ## TODO: filter the sites again
+
+
+## ## offspring imputation
+## if (! file.exists(offspring.file)) {
+##     message("Running command:\n", offspring.impute.cmd, "\n")
+##     system(offspring.impute.cmd)
+## } else {
+##     message("Found offspring file ", offspring.file, "; skipping parental imputation\n")
+## }
+
+
+## ## save summary data
+## source("labyrinth_analysis.R")
+## unmasked <- read.vcfR(unmask)
+## masked   <- read.vcfR(mask)
+## imputed  <- read.vcfR(offspring.file)
+
+## LBImputeAnalyze(orig = unmasked,
+##                 masked = masked,
+##                 imputed = imputed,
+##                 out.file = summary.file,
+##                 read.err = read.err,
+##                 geno.err = geno.err,
+##                 recomb.dist = recomb.dist)
+
