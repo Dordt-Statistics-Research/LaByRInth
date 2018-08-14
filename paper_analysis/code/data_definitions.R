@@ -60,6 +60,10 @@ masked.file <- function(dataset.name, mask.ID = 1) {
     paste0(dataset.dir(dataset.name), "/masked_", mask.ID, ".vcf.gz")
 }
 
+uncompressed.masked.file <- function(dataset.name, mask.ID = 1) {
+    paste0(dataset.dir(dataset.name), "/masked_", mask.ID, ".vcf")
+}
+
 parental.file <- function(dataset.name, config = 1) {
     paste0(dataset.dir(dataset.name), "/parental_imputation_result_", config, ".rds")
 }
