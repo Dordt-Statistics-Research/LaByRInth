@@ -39,7 +39,7 @@ parents         <- all.parents[[dataset]]
 generation      <- generations[dataset]
 
 geno.errs       <- c(0.001, 0.01, 0.1)
-parent.het      <- 0.99
+parent.het      <- 0.01
 
 use.fwd.bkwd    <- TRUE
 calc.posteriors <- TRUE
@@ -81,7 +81,3 @@ for (i in seq_along(geno.errs)) {
         message("Imputed file ", out.file, " already exists and will be used")
     }
 }
-
-
-
-
