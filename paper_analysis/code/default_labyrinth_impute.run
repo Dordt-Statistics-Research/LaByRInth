@@ -47,6 +47,10 @@ calc.posteriors <- TRUE
 parallel        <- TRUE
 cores           <- 25
 
+if (! dir.exists(imputed.dir(dataset))) {
+    dir.create(imputed.dir(dataset), recursive=TRUE)
+}
+
 for (i in seq_along(geno.errs)) {
     message("Beginning full imputation of the dataset ", dataset,
             " with genotype error ", geno.errs[i])

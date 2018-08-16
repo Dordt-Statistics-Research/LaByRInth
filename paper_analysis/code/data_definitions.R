@@ -33,7 +33,7 @@ all.parents <- list("Lakin-Fuller"  = c("LAKIN",      "FULLER"),
                     "IBM-RIL"       = c("B73",        "M17"))
 names(all.parents) <- datasets
 
-## I don't actually know what generation IBM-RIL is, so I'm just saying 10
+## I don't actually know what generation IBM-RIL is, so I'm just saying 7
 generations <- c(5, 2, 2, 7); names(generations) <- datasets
 
 ## minimum call depths found with trial and error to get ~1% called sites masked
@@ -52,6 +52,10 @@ dataset.dir <- function(dataset.name) {
     paste0("../data/", dataset.name, "/")
 }
 
+imputed.dir <- function(dataset.name) {
+    paste0(dataset.dir(dataset.name), "/LaByRInth/")
+}
+
 filtered.file <- function(dataset.name) {
     paste0(dataset.dir(dataset.name), "/filtered.vcf.gz")
 }
@@ -65,11 +69,11 @@ uncompressed.masked.file <- function(dataset.name, mask.ID = 1) {
 }
 
 parental.file <- function(dataset.name, config = 1) {
-    paste0(dataset.dir(dataset.name), "/parental_imputation_result_", config, ".rds")
+    paste0(imputed.dir(dataset.name), "/parental_imputation_result_", config, ".rds")
 }
 
 imputed.file <- function(dataset.name, parental.config = 1, progeny.config = 1) {
-    paste0(dataset.dir(dataset.name), "/imputed_", parental.config, "_", progeny.config, ".vcf.gz")
+    paste0(imputed.dir(dataset.name), "/imputed_", parental.config, "_", progeny.config, ".vcf.gz")
 }
 
 mimicked.file <- function(dataset.name, mimic.ID = 1) {
