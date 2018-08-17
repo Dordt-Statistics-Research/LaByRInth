@@ -76,6 +76,10 @@ imputed.file <- function(dataset.name, parental.config = 1, progeny.config = 1) 
     paste0(imputed.dir(dataset.name), "/imputed_", parental.config, "_", progeny.config, ".vcf.gz")
 }
 
+analysis.file <- function(dataset.name, progeny.config = 1) {
+    paste0(imputed.dir(dataset.name), "/analysis_summary_", progeny.config, ".csv")
+}
+
 mimicked.file <- function(dataset.name, mimic.ID = 1) {
     paste0(dataset.dir(dataset.name), "/mimicked_", mimic.ID, ".vcf.gz")
 }

@@ -16,6 +16,8 @@
 
 
 source("./data_definitions.R")
+source("../../labyrinth_analysis.R")
+source("../../labyrinth.R")
 
 
 args    <- commandArgs(trailingOnly=TRUE)
@@ -55,17 +57,19 @@ parental.file <- paste0(out.dir, "/parental_imputation_result",
                         "_recomb", recomb.dist,
                         ".vcf")
 
+filtered.parental.file <- paste0(out.dir, "/filtered_parental_imputation_result",
+                                 "_rerr", read.err,
+                                 "_gerr", geno.err,
+                                 "_recomb", recomb.dist,
+                                 ".vcf")
+
+compressed.filtered.parental.file <- paste0(filtered.parental.file, ".gz")
+
 offspring.file <- paste0(out.dir, "/imputed",
                          "_rerr", read.err,
                          "_gerr", geno.err,
                          "_recomb", recomb.dist,
                          ".vcf")
-
-## summary.file  <- paste0(out.dir, "/lb-impute_summary",
-##                         "_rerr", read.err,
-##                         "_gerr", geno.err,
-##                         "_recomb", recomb.dist,
-##                         ".rds")
 
 parental.impute.cmd <- paste(
     "java -jar LB-Impute.jar",
@@ -84,7 +88,7 @@ parental.impute.cmd <- paste(
 offspring.impute.cmd <- paste(
     "java -jar LB-Impute.jar",
     "-method impute",
-    "-f",            parental.file,
+    "-f",            filtered.parental.file,
     "-readerr ",     read.err,
     "-genotypeerr",  geno.err,
     "-recombdist",   recomb.dist,
@@ -109,17 +113,29 @@ if (! file.exists(parental.file)) {
 }
 
 
-## ## additional filtering
-## ## TODO: filter the sites again
+## parental filtering
+if (! file.exists(filtered.parental.file)) {
+    if (! file.exists(compressed.filtered.parental.file)) {
+        message("Filtering out non-homozygous and non-polymorphic sites")
+        LabyrinthFilter(vcf = parental.file,
+                        parents = c(parent1, parent2),
+                        out.file = compressed.filtered.parental.file,
+                        hom.poly = TRUE)
+    }
+
+    system(paste("gunzip -c", compressed.filtered.parental.file, ">", filtered.parental.file))
+} else {
+    message("Found filtered parental file ", filtered.parental.file)
+}
 
 
-## ## offspring imputation
-## if (! file.exists(offspring.file)) {
-##     message("Running command:\n", offspring.impute.cmd, "\n")
-##     system(offspring.impute.cmd)
-## } else {
-##     message("Found offspring file ", offspring.file, "; skipping parental imputation\n")
-## }
+## offspring imputation
+if (! file.exists(offspring.file)) {
+    message("Running command:\n", offspring.impute.cmd, "\n")
+    system(offspring.impute.cmd)
+} else {
+    message("Found offspring file ", offspring.file, "; skipping parental imputation\n")
+}
 
 
 ## ## save summary data

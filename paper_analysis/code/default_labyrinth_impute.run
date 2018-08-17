@@ -28,6 +28,7 @@
 
 
 source("./data_definitions.R")
+source("./labyrinth_analysis.R")
 source("../../labyrinth.R")
 
 args            <- commandArgs(trailingOnly=TRUE)
@@ -84,4 +85,34 @@ for (i in seq_along(geno.errs)) {
     } else {
         message("Imputed file ", out.file, " already exists and will be used")
     }
+
 }
+
+original <- read.vcfR(filtered.file(dataset))
+masked <- read.vcfR(in.file)
+
+analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
+    parental.result <- readRDS(parental.file(dataset))
+    imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
+    good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
+
+    rbind(
+        LBImputeAnalyze(original,
+                        masked,
+                        imputed,
+                        parental.result$read.err,
+                        parental.result$geno.err,
+                        NA,
+                        "full"),
+
+        LBImputeAnalyze(original,
+                        masked,
+                        good.imputed,
+                        parental.result$read.err,
+                        parental.result$geno.err,
+                        NA,
+                        ">90%")
+    )
+}))
+
+write.csv(analysis.df, analysis.file(dataset), row.names = FALSE)
