@@ -424,43 +424,6 @@ LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
 }
 
 
-LabyrinthAnalyze <- function(orig, masked, imputed) {
-
-    gt.o <- getGT(orig)
-    gt.m <- getGT(masked)
-    gt.i <- getGT(imputed)
-
-    ## vector.indices
-    masked.sites <-
-        (gt.o != "./." & gt.o != ".|.") &
-        (gt.m == "./." | gt.m == ".|.")
-
-    same <-
-        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
-        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
-         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
-        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
-
-    n.same <- sum(masked.sites & same)
-    n.masked <- sum(masked.sites)
-    accuracy <-  n.same / n.masked
-
-    w <- which(masked.sites & !same, arr.ind = TRUE)
-    ad <- getAD(orig)
-
-    display(0, "Accuracy: ", n.same, "/", n.masked, " = ", accuracy)
-}
-
-
-## This function is intended to take a vcf file that results from LB-Impute
-## imputing the parents and remove any sites where the parents are not
-## homozygous within and polymorphic between while also keeping track of the
-## locations so that they can be reinserted after the LB-Impute
-LBFilter <- function(vcf) {
-
-}
-
-
 
 
 

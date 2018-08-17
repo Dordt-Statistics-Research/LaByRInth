@@ -58,6 +58,38 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
     skipped <-
         (gt.i == "./.")
 
+    data.frame(
+        n.sites   = prod(dim(gt.o)),
+        n.masked  = n.masked <- sum(masked.sites),
+        n.same    = n.same <- sum(masked.sites & same),
+        n.skipped = n.skipped <- sum(masked.sites & skipped),
+        n.wrong   = n.masked - n.same - n.skipped,
+        accuracy  = n.same / (n.masked - n.skipped),
+        quality   = n.same / n.masked
+    )
+}
+
+
+LabyrinthAnalyzePerSNP <- function(orig, masked, imputed) {
+
+    gt.o <- getGT(orig)
+    gt.m <- getGT(masked)
+    gt.i <- getGT(imputed)
+
+    ## vector.indices
+    masked.sites <-
+        (gt.o != "./." & gt.o != ".|.") &
+        (gt.m == "./." | gt.m == ".|.")
+
+    same <-
+        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
+        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
+         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
+        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
+
+    skipped <-
+        (gt.i == "./.")
+
     snp.ids <- getID(orig)
     marker.chroms <- getCHROM(orig)
     per.snp.df <- do.call(rbind, lapply(seq_along(snp.ids), function(i) {
@@ -150,6 +182,60 @@ LabyrinthAnalyzePosteriors <- function(orig, masked, imputed, resolution=10) {
                      min.posterior = regions[-length(regions)],
                      prop.correct  = res[2, ],
                      max.posterior = regions[-1])
+
+    rownames(df) <- NULL
+
+    df  # implicit return
+}
+
+
+LabyrinthPlotPosteriors <- function(orig, masked, imputed, resolution=10) {
+
+    gt.o <- getGT(orig)
+    gt.m <- getGT(masked)
+    gt.i <- getGT(imputed)
+    gp   <- getGP(imputed)
+
+    ## vector.indices
+    masked.sites <-
+        (gt.o != "./." & gt.o != ".|.") &
+        (gt.m == "./." | gt.m == ".|.")
+
+    same <-
+        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
+        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
+         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
+        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
+
+    skipped <-
+        (gt.i == "./.")
+
+    wrong <- !same & !skipped
+
+
+    temp <- gp[masked.sites]
+    temp <- sapply(temp, function(gp.string) {
+        phred.to.prob(max(as.numeric(str.split(gp.string, ","))))
+    })
+    posteriors <- rep(0, length(masked.sites))
+    posteriors[masked.sites] <- temp
+
+
+    regions <- seq(0, 1, length.out = resolution+1)
+    res <- sapply.pairs(regions, function(low, high) {
+        which.sites <- masked.sites & posteriors > low & posteriors <= high & !skipped
+        c(n.sites   = n.sites   <- sum(which.sites),
+          ## n.correct = n.correct <- sum(which.sites & same),
+          ## n.wrong   = sum(which.sites & wrong),
+          prop.correct = sum(which.sites & same) / n.sites)
+    })
+    colnames(res) <- sapply.pairs(regions, function(low, high) {paste0(low, "-", high)})
+
+    df <- data.frame(n.sites       = as.integer(res[1, ]),
+                     min.posterior = regions[-length(regions)],
+                     prop.correct  = res[2, ],
+                     max.posterior = regions[-1],
+                     call.coverage = 1 - cumsum(as.integer(res[1, ])) / sum(masked.sites))
 
     rownames(df) <- NULL
 
