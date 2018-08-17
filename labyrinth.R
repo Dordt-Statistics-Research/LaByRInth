@@ -343,25 +343,25 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
         display(0, "Checking for sites where parents are not ",
                    "homozygous within and polymorphic between")
         non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
-        if (length(non.hom.poly) != 0) {
+        if (sum(non.hom.poly) != 0) {
             display(0, "The parents are not homozygous within and polymorphic ",
                        "between at the following sites which will be removed:")
-            chroms <- getCHROM(vcf)[which(non.hom.poly)]
-            positions <- getPOS(vcf)[which(non.hom.poly)]
-            ad <- getAD(vcf)[which(non.hom.poly), parents]
+            chroms <- getCHROM(vcf)[non.hom.poly]
+            positions <- getPOS(vcf)[non.hom.poly]
+            gt <- getGT(vcf)[non.hom.poly, parents]
             for (i in seq_along(chroms)) {
                 display(0, "\tCHR:", chroms[i],
                         "\tPOS:", positions[i],
-                        paste0("\t", parents[1], ":"), ad[i, 1],
-                        paste0("\t", parents[2], ":"), ad[i, 2])
+                        paste0("\t", parents[1], ":"), gt[i, 1],
+                        paste0("\t", parents[2], ":"), gt[i, 2])
             }
         }
-        mask <- mask & non.hom.poly
+        mask <- mask & !non.hom.poly
     }
 
     vcf@fix <- vcf@fix[mask, ]
     vcf@gt <- vcf@gt[mask, ]
-    write.vcf(vcf, out.file, mask=TRUE)
+    write.vcf(vcf, out.file)
     display(0, paste("Filtering is complete;", sum(!mask),
                      "of", length(mask), "sites removed\n"))
 
@@ -391,7 +391,7 @@ LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
     listapply <- get.lapply(parallel, cores)
     min.phred <- prob.to.phred(min.posterior)
 
-    formats <- imputed@gt[ , "FORMAT"]
+    formats <- vcf@gt[ , "FORMAT"]
 
     new.data <- t(sapply(seq_along(formats), function(i) {
         format.components <- str.split(formats[i], ":")
@@ -1169,14 +1169,10 @@ parent.hom.and.poly <- function(vcf, parents) {
     if (length(parents) != 2) {
         stop("Length of parents must be 2")
     }
-    par.mat <- getAD(vcf)[ , parents]
+    par.mat <- getGT(vcf)[ , parents]
     apply(par.mat, 1, function(row) {
-        (n.zeros(ad.to.num(row[1])) > 0          # at least one allele not read in P1
-            && n.zeros(ad.to.num(row[2])) > 0    # at least one allele not read in P2
-            && ! any(nonzero(ad.to.num(row[1])) & nonzero(ad.to.num(row[2]))) # no common reads
-            && n.zeros(ad.to.num(row[1])) != 2    # TODO(Jason): remove condition and impute parents
-            && n.zeros(ad.to.num(row[2])) != 2    # TODO(Jason): remove condition and impute parents
-        )
+        (all(row==c("0/0", "1/1")) ||
+         all(row==c("1/1", "0/0")))
     })
 }
 
