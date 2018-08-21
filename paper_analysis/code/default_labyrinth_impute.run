@@ -92,7 +92,7 @@ original <- read.vcfR(filtered.file(dataset))
 masked <- read.vcfR(in.file)
 
 analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
-    parental.result <- readRDS(parental.file(dataset))
+    parental.result <- readRDS(parental.file(dataset, config=i))
     imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
     good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
 
