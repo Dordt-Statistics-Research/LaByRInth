@@ -329,7 +329,7 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
         stop("Some or all parents are not in the vcf")
     display(0, "Checking for sites that are not biallelic")
     non.biallelic <- ! is.biallelic(vcf)
-    if (length(non.biallelic) != 0) {
+    if (sum(non.biallelic) != 0) {
         display(0, "The following sites are not biallelic and will be removed:")
         chroms <- getCHROM(vcf)[which(non.biallelic)]
         positions <- getPOS(vcf)[which(non.biallelic)]
@@ -348,7 +348,7 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
                        "between at the following sites which will be removed:")
             chroms <- getCHROM(vcf)[non.hom.poly]
             positions <- getPOS(vcf)[non.hom.poly]
-            gt <- getGT(vcf)[non.hom.poly, parents]
+            gt <- getGT(vcf)[non.hom.poly, parents, drop=FALSE]
             for (i in seq_along(chroms)) {
                 display(0, "\tCHR:", chroms[i],
                         "\tPOS:", positions[i],
