@@ -95,6 +95,7 @@ analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
     parental.result <- readRDS(parental.file(dataset, config=i))
     imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
     good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
+    really.good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.99)
 
     rbind(
         LBImputeAnalyze(original,
@@ -103,7 +104,7 @@ analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
                         parental.result$read.err,
                         parental.result$geno.err,
                         NA,
-                        "full"),
+                        "everything"),
 
         LBImputeAnalyze(original,
                         masked,
@@ -111,7 +112,15 @@ analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
                         parental.result$read.err,
                         parental.result$geno.err,
                         NA,
-                        ">90%")
+                        "> 90% posterior"),
+
+        LBImputeAnalyze(original,
+                        masked,
+                        really.good.imputed,
+                        parental.result$read.err,
+                        parental.result$geno.err,
+                        NA,
+                        "> 99% posterior")
     )
 }))
 
