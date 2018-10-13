@@ -179,6 +179,7 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
                                                       parallel,
                                                       cores)
     result$parent.models <- parental.results
+    class(result) <- c("parental.imputation", class(result))
     saveRDS(result, out.file)
     display(1, "Completed in ", timer(), "\n")
 
@@ -194,11 +195,37 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     ## print.labyrinth.header()
 
 
+    ## verify type of parental
+    if (! inherits(parental, "parental.imputation")) {
+        if (inherits(parental, "character")) {
+            if (! file.exists(parental)) {
+                stop(paste("file", parental, "does not exist"))
+            }
+
+            timer <- new.timer()
+            display(0, "Loading parental imputation file")
+
+            tryCatch({
+                parental <- readRDS(parental)
+            }, error = function(e) {
+                stop(paste("parental must be of class parental.imputation or",
+                           "the name of a valid .rds file; Please use the",
+                           "result of the function LabyrinthImputeProgeny"))
+            })
+            display(1, "Completed in ", timer(), "\n")
+        } else {
+            stop(paste("parental must be of class parental.imputation or",
+                       "the name of a valid .rds file; Please use the",
+                       "result of the function LabyrinthImputeProgeny"))
+        }
+    }
+
+
     ## Without more thorough validation, users should be prevented from using Viterbi
     if (! use.fwd.bkwd) {
         stop(paste("Not using the forward-backward algorithm is heavily",
                    "discouraged; To use the Viterbi instead, you will have to",
-                   "remove this line of the source code."))
+                   "remove this line of the source code"))
     }
 
 
@@ -370,7 +397,7 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
 }
 
 
-LabyrinthUncall <- function(vcf, min.posterior, out.file, parallel=TRUE, cores=4) {
+LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
 
     ## begin timer
     total.timer <- new.timer()
