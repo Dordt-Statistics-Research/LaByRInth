@@ -43,43 +43,54 @@ require(digest, quietly=T)
 ################################################################################
 
 
-LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
-                                    geno.err=0.01, parent.het, parallel=TRUE,
-                                    cores=4) {
+LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
+                                    geno.err=0.01, parent.het=0.01,
+                                    parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
-    ## print.labyrinth.header()
+
+
+    ## check classes of arguments
+    if (class(vcf) != "character" && class(vcf) != "vcfR")
+        stop("vcf must be of class chracter or vcfR\n")
+    if (class(parents) != "character")
+        stop("parents must be of class character\n")
+    if (class(generation) != "numeric")
+        stop("generation must be of class numeric\n")
+    if (class(out.file) != "character")
+        stop("out.file must be of class character\n")
+    if (class(geno.err) != "numeric")
+        stop("geno.err must be of class numeric\n")
+    if (class(parent.het) != "numeric")
+        stop("parent.het must be of class numeric\n")
+    if (class(parallel) != "logical")
+        stop("parallel must be of class logical\n")
+    if (class(cores) != "numeric")
+        stop("cores must be of class numeric\n")
 
 
     ## file verification
-    if (file.exists(out.file)) {
+    if (file.exists(out.file))
         stop("Output file already exists; please choose another name\n")
-    }
-
-    if (! verify.file.extension(out.file, ".rds")) {
+    if (! verify.file.extension(out.file, ".rds"))
         stop("Output file name must end with '.rds'\n")
-    }
-
-    if (! verify.file.dir.exists(out.file)) {
+    if (! verify.file.dir.exists(out.file))
         stop("Directory of the outuput file does not exist; please create it\n")
-    }
 
 
     ## parameter verification
-    if (cores == 1 && parallel) {
+    if (cores == 1 && parallel)
         stop("Cores cannot be 1 if parallel is true\n")
-    }
-
-    if (cores > 1 && !parallel) {
+    if (cores > 1 && !parallel)
         stop("Cores cannot be greater than 1 if parallel is false\n")
-    }
-
-    if (cores < 1) {
+    if (cores < 1)
         stop("Cores cannot be less than 1\n")
-    }
+    if (length(parents) != 2)
+        stop("parents must have length 2\n")
 
-    ## vcf load code
-    if (! inherits(vcf, "vcfR")) {
+
+    ## load vcf if needed
+    if (inherits(vcf, "character")) {
         timer <- new.timer()
         display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
@@ -88,12 +99,15 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
 
 
 
-
     ## vcf requirement verification code
     timer <- new.timer()
     display(0, "Verifying requirements of vcf")
-    if (! all(parents %in% getSAMPLES(vcf)))
-        stop("Some or all parents are not in the vcf")
+    if (! all(parents %in% getSAMPLES(vcf))) {
+        text <- "Some or all parents are not in the vcf"
+        if (all(toupper(parents) %in% toupper(getSAMPLES(vcf))))
+            text <- paste0(text, "; try checking the capitalization of the names")
+        stop(text)
+    }
 
     non.biallelic <- which(! is.biallelic(vcf))
     if (length(non.biallelic) != 0) {
@@ -166,7 +180,6 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
 
 
 
-
     ## parental imputation and recombination rate estimates
     timer <- new.timer()
     display(0, "Imputing parents and estimating recombination rates")
@@ -183,6 +196,8 @@ LabyrinthImputeParents <- function (vcf, parents, generation, out.file,
     saveRDS(result, out.file)
     display(1, "Completed in ", timer(), "\n")
 
+
+    display(0, "LaByRInth parental imputation completed in ", total.timer(), "\n")
     invisible(result)
 }
 
@@ -192,32 +207,42 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
                                     parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
-    ## print.labyrinth.header()
 
 
-    ## verify type of parental
-    if (! inherits(parental, "parental.imputation")) {
-        if (inherits(parental, "character")) {
-            if (! file.exists(parental)) {
-                stop(paste("file", parental, "does not exist"))
-            }
+    ## check classes of arguments
+    if (class(parental) != "character" && class(parental) != "parental.imputation")
+        stop("vcf must be of class chracter or parental.imputation\n")
+    if (class(out.file) != "character")
+        stop("out.file must be of class character\n")
+    if (class(use.fwd.bkwd) != "logical")
+        stop("use.fwd.bkwd must be of class logical\n")
+    if (class(calc.posteriors) != "logical")
+        stop("calc.posteriors must be of class logical\n")
+    if (class(viterbi.threshold) != "numeric")
+        stop("viterbi.threshold must be of class numeric\n")
+    if (class(parallel) != "logical")
+        stop("parallel must be of class logical\n")
+    if (class(cores) != "numeric")
+        stop("cores must be of class numeric\n")
 
-            timer <- new.timer()
-            display(0, "Loading parental imputation file")
 
-            tryCatch({
-                parental <- readRDS(parental)
-            }, error = function(e) {
-                stop(paste("parental must be of class parental.imputation or",
-                           "the name of a valid .rds file; Please use the",
-                           "result of the function LabyrinthImputeProgeny"))
-            })
-            display(1, "Completed in ", timer(), "\n")
-        } else {
-            stop(paste("parental must be of class parental.imputation or",
-                       "the name of a valid .rds file; Please use the",
-                       "result of the function LabyrinthImputeProgeny"))
+    ## load parental file if needed
+    if (inherits(parental, "character")) {
+        if (! file.exists(parental)) {
+            stop(paste("file", parental, "does not exist"))
         }
+
+        timer <- new.timer()
+        display(0, "Loading parental imputation file")
+
+        tryCatch({
+            parental <- readRDS(parental)
+        }, error = function(e) {
+            stop(paste("If specifying a parental file, the file must be",
+                       "a file generated by the function",
+                       "LabyrinthImputeProgeny"))
+        })
+        display(1, "Completed in ", timer(), "\n")
     }
 
 
@@ -230,37 +255,24 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 
 
     ## file verification
-    if (file.exists(out.file)) {
+    if (file.exists(out.file))
         stop("Output file already exists; please choose another name\n")
-    }
-
-    if (! verify.file.extension(out.file, ".vcf.gz")) {
+    if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
-    }
-
-    if (! verify.file.dir.exists(out.file)) {
+    if (! verify.file.dir.exists(out.file))
         stop("Directory of the outuput file does not exist; please create it\n")
-    }
-
 
     ## parameter verification
     if (use.fwd.bkwd && !calc.posteriors) {
-        display(0, "When using fwd.bkwd, posterior probabilities must be calculated")
+        display(0, "When using fwd.bkwd, posterior probabilities must be calculated anyway")
         display(0, "These probabilities will be included in the output file\n")
     }
-
-    if (cores == 1 && parallel) {
+    if (cores == 1 && parallel)
         stop("Cores cannot be 1 if parallel is true\n")
-    }
-
-    if (cores > 1 && !parallel) {
+    if (cores > 1 && !parallel)
         stop("Cores cannot be greater than 1 if parallel is false\n")
-    }
-
-    if (cores < 1) {
+    if (cores < 1)
         stop("Cores cannot be less than 1\n")
-    }
-
 
 
     timer <- new.timer()
@@ -296,7 +308,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 
 
 
-
     ## imputation code
     timer <- new.timer()
     display(0, "Imputing missing sites")
@@ -322,102 +333,149 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     display(1, "Completed in ", timer(), "\n")
 
 
-    display(0, "LaByRInth imputation completed in ", total.timer())
+    display(0, "LaByRInth progeny imputation completed in ", total.timer(), "\n")
     invisible(vcf) ## implicit return
 }
 
 
 ## remove all sites that are not homozygous within and polymorphic between for
 ## the parents and remove all sites that are not biallelic
-LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
+LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
+
+    ## begin timer
+    total.timer <- new.timer()
+
+
+    ## check classes of arguments
+    if (class(vcf) != "character" && class(vcf) != "vcfR")
+        stop("vcf must be of class chracter or vcfR\n")
+    if (class(parents) != "character")
+        stop("parents must be of class character\n")
+    if (class(out.file) != "character")
+        stop("out.file must be of class character\n")
+    if (class(require.hom.poly) != "logical")
+        stop("require.hom.poly must be of class logical\n")
+
 
     ## file verification
-    if (file.exists(out.file)) {
+    if (file.exists(out.file))
         stop("Output file already exists; please choose another name\n")
-    }
-
-    if (! verify.file.extension(out.file, ".vcf.gz")) {
+    if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
-    }
-
-    if (! verify.file.dir.exists(out.file)) {
+    if (! verify.file.dir.exists(out.file))
         stop("Directory of the outuput file does not exist; please create it\n")
-    }
 
 
 
-    display(0, "Checking if vcf is an object or file")
-    if (! inherits(vcf, "vcfR")) {
+    ## load vcf if needed
+    if (inherits(vcf, "character")) {
+        timer <- new.timer()
         display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
     }
-    display(0, "Checking if parents are in the vcf")
-    if (! all(parents %in% getSAMPLES(vcf)))
-        stop("Some or all parents are not in the vcf")
+
+
+    display(0, "Checking if parents are in the vcf\n")
+    if (! all(parents %in% getSAMPLES(vcf))) {
+        text <- "Some or all parents are not in the vcf"
+        if (all(toupper(parents) %in% toupper(getSAMPLES(vcf))))
+            text <- paste0(text, "; try checking the capitalization of the names")
+        stop(text)
+    }
     display(0, "Checking for sites that are not biallelic")
-    non.biallelic <- ! is.biallelic(vcf)
-    if (sum(non.biallelic) != 0) {
-        display(0, "The following sites are not biallelic and will be removed:")
-        chroms <- getCHROM(vcf)[which(non.biallelic)]
-        positions <- getPOS(vcf)[which(non.biallelic)]
+    biallelic <- is.biallelic(vcf)
+    if (any(!biallelic)) {
+        display(1, "The following sites are not biallelic and will be removed:")
+        chroms <- getCHROM(vcf)[which(! biallelic)]
+        positions <- getPOS(vcf)[which(! biallelic)]
+        refs <- vcf@fix[! biallelic, "REF"]
+        alts <- vcf@fix[! biallelic, "ALT"]
         for (i in seq_along(chroms)) {
-            display(0, "\tCHR:", chroms[i], "\tPOS:", positions[i])
+            display(2, "CHR:", chroms[i],
+                    "\tPOS:", positions[i],
+                    "\tREF:", refs[i],
+                    "\tALT:", alts[i])
         }
     }
-    mask <- !non.biallelic
+    message("")
+    mask <- biallelic
 
-    if (hom.poly) {
+    if (require.hom.poly) {
         display(0, "Checking for sites where parents are not ",
                    "homozygous within and polymorphic between")
-        non.hom.poly <- ! parent.hom.and.poly(vcf, parents)
-        if (sum(non.hom.poly) != 0) {
-            display(0, "The parents are not homozygous within and polymorphic ",
+        hom.poly <- parent.hom.and.poly(vcf, parents)
+        if (any(! hom.poly)) {
+            display(1, "The parents are not homozygous within and polymorphic ",
                        "between at the following sites which will be removed:")
-            chroms <- getCHROM(vcf)[non.hom.poly]
-            positions <- getPOS(vcf)[non.hom.poly]
-            gt <- getGT(vcf)[non.hom.poly, parents, drop=FALSE]
+            chroms <- getCHROM(vcf)[! hom.poly]
+            positions <- getPOS(vcf)[! hom.poly]
+            gt <- getGT(vcf)[! hom.poly, parents, drop=FALSE]
             for (i in seq_along(chroms)) {
-                display(0, "\tCHR:", chroms[i],
+                display(2, "CHR:", chroms[i],
                         "\tPOS:", positions[i],
                         paste0("\t", parents[1], ":"), gt[i, 1],
                         paste0("\t", parents[2], ":"), gt[i, 2])
             }
         }
-        mask <- mask & !non.hom.poly
+        message("")
+        mask <- mask & hom.poly
     }
 
-    vcf@fix <- vcf@fix[mask, ]
-    vcf@gt <- vcf@gt[mask, ]
-    write.vcf(vcf, out.file)
-    display(0, paste("Filtering is complete;", sum(!mask),
+    any.removed <- any(mask==FALSE)
+
+    if (any.removed) {
+        display(0, "Removing sites and saving vcf\n")
+        vcf@fix <- vcf@fix[mask, ]
+        vcf@gt <- vcf@gt[mask, ]
+        write.vcf(vcf, out.file)
+    } else {
+        display(0, "All sites okay; copying original vcf file\n")
+        write.vcf(vcf, out.file)
+    }
+
+
+    display(0, paste("Summary:", sum(!mask),
                      "of", length(mask), "sites removed\n"))
 
-    all(mask)  # implicit return indicating if any sites were removed
 
+    display(0, "LaByRInth filtering completed in ", total.timer(), "\n")
+    invisible(any.removed)  # implicit return indicating if any sites were removed
 }
 
 
-LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
-
+LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
+                                      parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
-    ## print.labyrinth.header()
+
+
+    ## check classes of arguments
+    if (class(vcf) != "character" && class(vcf) != "vcfR")
+        stop("vcf must be of class chracter or vcfR\n")
+    if (class(out.file) != "character")
+        stop("out.file must be of class character\n")
+    if (class(parallel) != "logical")
+        stop("parallel must be of class logical\n")
+    if (class(cores) != "numeric")
+        stop("cores must be of class numeric\n")
+    if (class(min.posterior) != "numeric")
+        stop("min.posterior must be of class numeric\n")
+    if (class(vcf) != "character" && class(vcf) != "vcfR")
+        stop("vcf must be of class chracter or vcfR\n")
+
 
     ## file verification
-    if (file.exists(out.file)) {
+    if (file.exists(out.file))
         stop("Output file already exists; please choose another name\n")
-    }
-
-    if (! verify.file.extension(out.file, ".vcf.gz")) {
+    if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
-    }
-
-    if (! verify.file.dir.exists(out.file)) {
+    if (! verify.file.dir.exists(out.file))
         stop("Directory of the outuput file does not exist; please create it\n")
-    }
 
-    ## vcf load code
-    if (! inherits(vcf, "vcfR")) {
+
+    ## load vcf if needed
+    if (inherits(vcf, "character")) {
         timer <- new.timer()
         display(0, "Loading vcf")
         vcf <- read.vcfR(vcf, verbose=F)
@@ -460,7 +518,11 @@ LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
     rownames(vcf@gt) <- rownames
     colnames(vcf@gt) <- colnames
 
-    vcf
+    write.vcf(vcf, out.file)
+    display(1, "Completed in ", timer(), "\n")
+
+    display(0, "LaByRInth quality assurance completed in ", total.timer(), "\n")
+    invisible(vcf) ## implicit return
 }
 
 
@@ -1475,9 +1537,7 @@ verify.file.extension <- function(file, extension) {
 
 
 verify.file.dir.exists <- function(file) {
-    file <- paste0("./", file)  # in case current dir was implicit
-    parts <- str.split(file, "/")
-    dir.exists(paste0(parts[-length(parts)], collapse="/"))
+    dir.exists(dirname(file))
 }
 
 
