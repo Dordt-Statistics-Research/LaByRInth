@@ -43,6 +43,24 @@ require(digest, quietly=T)
 ################################################################################
 
 
+##' Parental imputation
+##'
+##' Imputes both of the parents by maximizing liklihood of data across
+##' all progeny at each site.
+##'
+##' @param vcf File path or vcfR object to impute.
+##' @param out.file File path of output file.
+##' @param parents Character vector with names of the two parents.
+##' @param generation Numeric representing generation (e.g. 5 for F5 population).
+##' @param geno.err Estimate of proportion of calls genotyped incorrectly.
+##' @param parent.het Estimate of proportion of sites in each parent that are
+##'        truly heterozygous.
+##' @param parallel Logical indicating if imputation should be run in parallel
+##'        or serial.
+##' @param cores Numeric indicating how many subprocesses should be spawned if
+##'        running in parallel.
+##' @return A vcfR object with parental data replaced by imputation results.
+##' @author Jason Vander Woude
 LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
                                     geno.err=0.01, parent.het=0.01,
                                     parallel=TRUE, cores=4) {
@@ -202,6 +220,35 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 }
 
 
+##' Offspring imputation
+##'
+##' Imputes all of the progeny (offspring).
+##'
+##' @param parental An object of class parental.imputation (a result of the
+##'        LabyrinthParentalImputation function) which will contain information
+##'        about the population including the parental imputation information.
+##' @param out.file File path of output file.
+##' @param use.fwd.bkwd Logical indicating if the forward-backward algorithm or
+##'        the Viterbi algorithm should be used to find the optimal solution to
+##'        the hidden Markov model (HMM); use of the Viterbi algorithm is highly
+##'        discouraged because theory suggests the forward-backward algorithm
+##'        should outperform it, and testing of the Viterbi implementation was
+##'        only cursory.
+##' @param calc.posteriors Logical indicating if marginal posterior
+##'        probabilities should be calculated for every imputation call made. If
+##'        the forward-backward algorithm is used, these probabilities must be
+##'        computed, so this parameter is only meaningful if the Viterbi
+##'        algorithm is used in which case the forward-backward algorithm is run
+##'        in the background with the sole purpose of computing these posterior
+##'        probabilities.
+##' @param viterbi.threshold Numeric indicating at what threshold probability
+##'        sites should be left uncalled instead of imputed.
+##' @param parallel Logical indicating if imputation should be run in parallel
+##'        or serial.
+##' @param cores Numeric indicating how many subprocesses should be spawned if
+##'        running in parallel.
+##' @return A vcfR object with both parents and progeny imputed.
+##' @author Jason Vander Woude
 LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
                                     calc.posteriors=TRUE, viterbi.threshold=1e-3,
                                     parallel=TRUE, cores=4) {
@@ -338,8 +385,24 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 }
 
 
-## remove all sites that are not homozygous within and polymorphic between for
-## the parents and remove all sites that are not biallelic
+##' Remove bad data prior to imputing
+##'
+##' Remove all sites that are not biallelic and possibly sites which are not
+##' homozygous within and polymorphic between.
+##'
+##' @param vcf File path or vcfR object to impute.
+##' @param out.file File path of output file.
+##' @param parents Character vector with names of the two parents.
+##' @param require.hom.poly Logical indicating if the sites that are kept are
+##'        required to by homozygous within and polymorphic between (i.e. should
+##'        the parents be homozygous for different alleles at every kept site
+##'        according to the genotype (gt) field in the vcf). The implementation
+##'        of LB-Impute that LaByRInth is based on required this, but this
+##'        version of LaByRInth does not. This functionality is mostly included
+##'        for legacy purposes and should generally be set to false.
+##' @return A vcfR object with both all sites removed that don't meet the
+##'         specified criteria.
+##' @author Jason Vander Woude
 LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 
     ## begin timer
@@ -440,10 +503,27 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 
 
     display(0, "LaByRInth filtering completed in ", total.timer(), "\n")
-    invisible(any.removed)  # implicit return indicating if any sites were removed
+    invisible(vcf)
 }
 
 
+##' Ensure quality of imputed calls
+##'
+##' LaByRInth will impute every site for every member of the population and
+##' include a marginal posterior, so any calls with too low of a posterior
+##' probability will be removed (i.e. a site for a population member that was
+##' called with low probability of correctness will be "uncalled").
+##'
+##' @param vcf File path or vcfR object to impute.
+##' @param out.file File path of output file.
+##' @param min.posterior Numeric specifying the minimum probability for any call
+##'        that is kept.
+##' @param parallel Logical indicating if imputation should be run in
+##'        parallel or serial.
+##' @param cores Numeric indicating how many subprocesses should be
+##'        spawned if running in parallel.
+##' @return A vcfR object with all low probability sites removed.
+##' @author Jason Vander Woude
 LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
                                       parallel=TRUE, cores=4) {
     ## begin timer
