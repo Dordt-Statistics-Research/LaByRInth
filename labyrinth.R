@@ -370,11 +370,24 @@ LabyrinthFilter <- function(vcf, parents, out.file, hom.poly=FALSE) {
 }
 
 
-LabyrinthUncall <- function(vcf, min.posterior, parallel=TRUE, cores=4) {
+LabyrinthUncall <- function(vcf, min.posterior, out.file, parallel=TRUE, cores=4) {
 
     ## begin timer
     total.timer <- new.timer()
     ## print.labyrinth.header()
+
+    ## file verification
+    if (file.exists(out.file)) {
+        stop("Output file already exists; please choose another name\n")
+    }
+
+    if (! verify.file.extension(out.file, ".vcf.gz")) {
+        stop("Output file name must end with '.vcf.gz'\n")
+    }
+
+    if (! verify.file.dir.exists(out.file)) {
+        stop("Directory of the outuput file does not exist; please create it\n")
+    }
 
     ## vcf load code
     if (! inherits(vcf, "vcfR")) {
@@ -1435,6 +1448,7 @@ verify.file.extension <- function(file, extension) {
 
 
 verify.file.dir.exists <- function(file) {
+    file <- paste0("./", file)  # in case current dir was implicit
     parts <- str.split(file, "/")
     dir.exists(paste0(parts[-length(parts)], collapse="/"))
 }
