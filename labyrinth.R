@@ -799,7 +799,6 @@ fwd.bkwd <- function(emm, trans, temp) {
             f.probs[to, site] <-
                 emm[to, site] * sum(trans[ , to, t.index] * f.probs[, prev.site])
         }
-        ## browser(expr=temp)
         f.probs <- normalize(f.probs, site)
     }
 
@@ -901,7 +900,6 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
     combine.recombs <- function(r1, r2) {r1*(1-r2) + r2*(1-r1)}
 
     impute.sample.chrom <- function(sample, chrom) {
-        ## browser(expr = sample=="HincII_F2-01" && as.character(chrom)=="2")
 
         n.sites <- sum(snp.chroms==chrom)  # boolean addition
         parent.paths <- extract.each.parent(
@@ -1036,7 +1034,7 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
         imputed.samples <- listapply(sample.names, function(sample) {
 
             ret.val <- impute.sample.chrom(sample, chrom)
-            ## display(1, "Imputed chromosome ", chrom, " of sample ", sample)
+
 
             ## Progress bar code
             ## -----------------------------------------------------------------
@@ -1055,7 +1053,6 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
         ret.val$posteriors <- do.call(cbind, get.posteriors(imputed.samples))
         ret.val$gt <- do.call(cbind, get.listed.gt(imputed.samples))
 
-                                        #do.call(abind2, imputed.samples)  # implicit return
         ret.val  # implicit return
 
     })
@@ -1105,16 +1102,11 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
-    ## browser()
-    ## u.chroms <- "2"  ##################################### REMOVE 
-
     transitions <- lapply(u.chroms, function(chrom) {
         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
         indices <- indices[-length(indices)]  # remove the last element
 
         ret.val.2  <- listapply(indices, function(i) {
-
-            ## ret.val.3 <- get.trans.probs(index)
 
             j <- i+1
 
@@ -1170,12 +1162,6 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                     recomb.val.mat[x,y] <- result$par
                     log.liklihood.mat[x,y] <- result$value
 
-                    ## if (i == 2880) {
-                    ##     print(result$value)
-                    ##     print(result$par)
-                    ##     print(log.liklihood.mat)
-                    ## }
-
                     ## Progress bar code
                     ## -----------------------------------------------------------------
                     writeBin(1/n.jobs, thefifo)  # update the progress bar info
@@ -1187,12 +1173,8 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                 }
             }
 
-            ## browser()
-
             mymat <- log(exp(log.liklihood.mat) / rep(rowSums(exp(log.liklihood.mat)), 16))
-            ## if (i == 2880) {print(mymat)}
             mymat[is.nan(mymat)] <- -Inf
-            ## if (i == 2880) {print(mymat)}
             log.liklihood.mat <- mymat
 
             if (all(log.liklihood.mat == -Inf)) {
@@ -1205,13 +1187,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                 ## should really be a check added so that if the probability of
                 ## the path is -Inf, it is computed again another way
                 log.liklihood.mat[2:15, 2:15] <- 0
-                ## print(i)
-                ## browser()
-                ## print(i)
             }
-
-            ## print("last one")
-            ## print(log.liklihood.mat)
 
             list(logliklihoods = log.liklihood.mat,
                  recombs = recomb.val.mat)
@@ -1351,10 +1327,6 @@ get.lapply <- function(parallel, cores=1) {
         lapply(...)
     }
 
-    ## parallel.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
-    ##     mclapply(..., mc.preschedule=mc.preschedule, mc.cores=mc.cores)
-    ## }
-
     parallel.lapply <- function(...) {
         mclapply(..., mc.preschedule=F, mc.cores=cores)
     }
@@ -1401,13 +1373,6 @@ estimate.read.err <- function(ad, n.gen) {
     ## haplotype level
     obj.fun <- function(r) {
         sum(log((1-h)/2 * (r^ref * (1-r)^alt + r^alt * (1-r)^ref) + h*0.5^(ref + alt)))
-            ## mapply(
-            ##     function(n.ref, n.alt) {
-            ##        (1-h)/2 * (r^n.ref * (1-r)^n.alt + r^n.alt * (1-r)^n.ref) +
-            ##             h*0.5^(n.ref + n.alt)
-            ##     }
-            ## , refs, alts)
-        ## ))
     }
 
     init <- 0.01
@@ -1704,216 +1669,5 @@ display <- function(indent, ...) {
     message(rep("   ", indent), " * ", ...)
 }
 
-
-## determine.parents.and.recombs.common.f1 <- function(emm.structure, parents, snp.chroms,
-##                                                     marker.names, sample.names,
-##                                                     parent.het, parallel, cores) {
-
-##     listapply <- get.lapply(parallel, cores)
-
-##     u.chroms <- unique(snp.chroms)
-##     which.parents <- sample.names %in% parents
-##     parental.rpgs <- emm.structure[ , which.parents, ]  # read probs given states
-##     rpgs <- emm.structure[ , !which.parents, ]
-
-
-##     ## Progress bar code
-##     ## -------------------------------------------------------------------------
-##     progress.env <- new.env()
-##     thefifo <- ProgressMonitor(progress.env)
-##     assign("progress", 0.0, envir=progress.env)
-##     prog.env <- progress.env
-##     n.jobs <- (length(snp.chroms) - length(u.chroms))*14^2
-##     ## -------------------------------------------------------------------------
-
-##     ## -------------------------------------------------------------------------
-##     writeBin(0, thefifo)  # update the progress bar info
-##     if (!parallel) {  # if running in serial mode
-##         prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
-##     }  # else the forked process handles this
-##     ## -------------------------------------------------------------------------
-##     ## Progress bar code
-
-##     ## browser()
-##     ## u.chroms <- "2"  ##################################### REMOVE 
-
-##     transitions <- lapply(u.chroms, function(chrom) {
-##         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
-##         indices <- indices[-length(indices)]  # remove the last element
-
-##         ret.val.2  <- listapply(indices, function(i) {
-
-##             ## ret.val.3 <- get.trans.probs(index)
-
-##             j <- i+1
-
-##             ## snp.i will be constant along the third dimension and snp.j will be
-##             ## constant along the second dimension. By binding additional copies in
-##             ## this way we can replicate mathematical matrix multiplication with
-##             ## element-by-element multiplication allowing us to do all SNPs at once
-##             ## without needing an apply function which can be slower
-##             snp.i <- abind(rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], along=3)
-##             snp.j <- abind(rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], along=3)
-##             snp.j <- aperm(snp.j, c(1,3,2))
-
-##             rpgsp <- snp.i * snp.j  # read probs given state pair
-##             essential.layers <- rowSums(rpgs[i, , ]) != 4 & rowSums(rpgs[j, , ]) != 4
-
-##             dimnames(rpgsp) <- list(sample.names[ !which.parents ],
-##                                     c("hom.ref", "het.I", "het.II", "hom.alt"),
-##                                     c("hom.ref", "het.I", "het.II", "hom.alt"))
-
-
-##             rm(snp.i, snp.j)
-
-##             get.objective.fun <- function(f) {
-##                 const.per.snp <- apply(rpgsp[!essential.layers,,], 1, function(layer) {
-##                     sum(layer * f(0))
-##                 })
-##                 k <- sum(log(const.per.snp))
-
-##                 function(r) {
-##                     f.of.r <- f(r)
-##                     per.snp <- apply(rpgsp[essential.layers,,], 1, function(layer) {
-##                         sum(layer * f.of.r)
-##                     })
-##                     sum(log(per.snp)) + k  # implicit return from objective.fun
-##                 }  # get.objective.fun returns this function
-##             }
-
-##             log.liklihood.mat <- matrix(-Inf, nrow=16, ncol=16)
-##             recomb.val.mat <- matrix(0, nrow=16, ncol=16)
-##             for (x in 2:15) {      # 1 and 16 are not biallelic parental states and there
-##                 for (y in 2:15) {  # is not optimal recombination probability
-##                     site.pair.probs.fun <- site.pair.transition.probs[[x]][[y]]
-##                     obj.fun <- get.objective.fun(site.pair.probs.fun)
-
-##                     init <- 0.1
-##                     result <- optim(par=init,
-##                                     obj.fun,
-##                                     method="Brent",
-##                                     lower=0,
-##                                     upper=0.5,
-##                                     control=list(ndeps=1e-2,  # step size
-##                                                  fnscale=-1))
-##                     recomb.val.mat[x,y] <- result$par
-##                     log.liklihood.mat[x,y] <- result$value
-
-##                     ## if (i == 2880) {
-##                     ##     print(result$value)
-##                     ##     print(result$par)
-##                     ##     print(log.liklihood.mat)
-##                     ## }
-
-##                     ## Progress bar code
-##                     ## -----------------------------------------------------------------
-##                     writeBin(1/n.jobs, thefifo)  # update the progress bar info
-##                     if (!parallel) {  # if running in serial mode
-##                         prog.env$progress <- PrintProgress(thefifo, prog.env$progress)
-##                     }  # else the forked process handles this
-##                     ## -----------------------------------------------------------------
-##                     ## Progress bar code
-##                 }
-##             }
-
-##             ## browser()
-
-##             mymat <- log(exp(log.liklihood.mat) / rep(rowSums(exp(log.liklihood.mat)), 16))
-##             ## if (i == 2880) {print(mymat)}
-##             mymat[is.nan(mymat)] <- -Inf
-##             ## if (i == 2880) {print(mymat)}
-##             log.liklihood.mat <- mymat
-
-##             if (all(log.liklihood.mat == -Inf)) {
-##                 ## TODO(Jason): This is a temporary fix due to numerical
-##                 ## instabilities. If the probabilities get too small, taking the
-##                 ## exponent above returns 0 and then taking the log again
-##                 ## returns negative infinity, and if all the probabilities are
-##                 ## negative infinity, then all paths will have -Inf log
-##                 ## probability and the wrong one will likely be returned. There
-##                 ## should really be a check added so that if the probability of
-##                 ## the path is -Inf, it is computed again another way
-##                 log.liklihood.mat[2:15, 2:15] <- 0
-##                 ## print(i)
-##                 ## browser()
-##                 ## print(i)
-##             }
-
-##             ## print("last one")
-##             ## print(log.liklihood.mat)
-
-##             list(logliklihoods = log.liklihood.mat,
-##                  recombs = recomb.val.mat)
-
-##         })
-
-##         ret.val.2
-
-##     })
-
-
-##     ## Progress bar code
-##     ## -------------------------------------------------------------------------
-##     close(thefifo)
-##     ## -------------------------------------------------------------------------
-##     ## Progress bar code
-
-##     names(transitions) <- u.chroms
-
-
-
-
-##     ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
-##     p <- 1 - parent.het  # probability of a site in parents being homozygous
-##     log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
-##                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
-##                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
-##                          p^2, p*(1-p), p*(1-p), p^2))
-
-##     emissions <- apply(parental.rpgs, 1, function(snp.depths) {
-##         result <- sapply(1:16, function(i) {
-##             i <- i-1            # deal with base 1 indexing
-##             p1 <- floor(i / 4)  # bit shift i right twice to get two most sig bits
-##             p2 <- i - p1*4      # two least significant bits
-##             log(snp.depths[1, (p1+1)]) +
-##                 log(snp.depths[2, (p2+1)]) +
-##                 log.penalty[i+1]
-##         })
-##         names(result) <- NULL
-##         result  # implicit return
-##     })
-
-##     ## TODO(Jason): verify that at least 2 sites are in the chromosome before
-##     ## runnin viterbi
-
-
-##     parental.models <- listapply(u.chroms, function(chrom) {
-##         viterbi(emissions[, snp.chroms == chrom],
-##                 do.call(abind3, lapply(transitions[[chrom]], function(elem) {elem$logliklihoods})),
-##                 emm.log = TRUE,
-##                 trans.log = TRUE)
-##     })
-##     names(parental.models) <- u.chroms
-
-##     recombs <- listapply(u.chroms, function(chrom) {
-##         parental.model <- parental.models[[chrom]]$path
-##         recomb.matrices <- lapply(transitions[[chrom]], function(elem) {elem$recombs})
-##         if (length(parental.model) != length(recomb.matrices) + 1)
-##             stop("This should never happen. Error in model lengths")
-
-##         sapply(seq_along(recomb.matrices), function(i) {
-##             recomb.matrices[[i]][parental.model[i], parental.model[i+1]]
-##         })
-##     })
-##     names(recombs) <- u.chroms
-
-##     result <- lapply(u.chroms, function(chrom) {
-##         list(model   = parental.models[[chrom]]$path,
-##              recombs = recombs[[chrom]])
-##     })
-##     names(result) <- u.chroms
-##     result
-
-## }
 
 print.labyrinth.header()
