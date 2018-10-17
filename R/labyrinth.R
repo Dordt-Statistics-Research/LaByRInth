@@ -61,6 +61,7 @@ require(digest, quietly=T)
 ##'        running in parallel.
 ##' @return A vcfR object with parental data replaced by imputation results.
 ##' @author Jason Vander Woude
+##' @export
 LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
                                     geno.err=0.01, parent.het=0.01,
                                     parallel=TRUE, cores=4) {
@@ -148,7 +149,22 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     timer <- new.timer()
     display(0, "Loading data specific to F", generation)
     ## site.pair.transition.probs variable will be loaded
-    source(paste0("./new-transition-probs/F", generation, ".R"))
+    tryCatch({
+        trans.file <- system.file("extdata",
+                                  "transition-probs",
+                                  paste0("F", generation, ".R"),
+                                  package = "LaByRInth",
+                                  mustWork = TRUE)
+        source(trans.file)
+    }, error = function(e) {
+        stop(paste("Cannot find file ", trans.file, "; the specified ",
+                   "generation may be too high, either try imputing as a ",
+                   "lower generation population or generate the appropriate ",
+                   "file yourself. To view details on how to generate such a ",
+                   "file, see the README file in the ",
+                   "inst/extdata/transition-probs subdirectory of the ",
+                   "LaByRInth package."))
+    })
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -249,6 +265,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 ##'        running in parallel.
 ##' @return A vcfR object with both parents and progeny imputed.
 ##' @author Jason Vander Woude
+##' @export
 LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
                                     calc.posteriors=TRUE, viterbi.threshold=1e-3,
                                     parallel=TRUE, cores=4) {
@@ -403,6 +420,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 ##' @return A vcfR object with both all sites removed that don't meet the
 ##'         specified criteria.
 ##' @author Jason Vander Woude
+##' @export
 LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 
     ## begin timer
@@ -524,6 +542,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##'        spawned if running in parallel.
 ##' @return A vcfR object with all low probability sites removed.
 ##' @author Jason Vander Woude
+##' @export
 LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
                                       parallel=TRUE, cores=4) {
     ## begin timer
