@@ -1388,34 +1388,6 @@ estimate.read.err <- function(ad, n.gen) {
 }
 
 
-print.labyrinth.header <- function() {
-
-    ## the image looks funny because '\' in the displayed image must be '\\' in the code
-    writeLines("")
-    writeLines("")
-    writeLines("")
-    writeLines("            __          ____        ____  _____")
-    writeLines("           / /         / __ \\      / __ \\/_  _/")
-    writeLines("          / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __")
-    writeLines("         / /   / _  \\/ _  _/\\ \\/ / _  _/ / / /  | / /_  __/ /_/ /")
-    writeLines("        / /___/ /_/ / /_\\ \\  \\  / / \\ \\_/ /_/ /||/ / / / / __  /")
-    writeLines("       /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/")
-    writeLines("")
-    writeLines("               L O W - C O V E R A G E   B I A L L E L I C")
-    writeLines("                 R - P A C K A G E   I M P U T A T I O N")
-    writeLines("       __________________________________________________________")
-    writeLines("")
-    writeLines("           Copyright 2017 Jason Vander Woude and Nathan Ryder")
-    writeLines("             Licensed under the Apache License, Version 2.0")
-    writeLines("             github.com/Dordt-Statistics-Research/LaByRInth")
-    writeLines("            Based on LB-Impute and funded by NSF IOS-1238187")
-    writeLines("")
-    writeLines("")
-    writeLines("")
-
-}
-
-
 
 
 
@@ -1668,6 +1640,3 @@ display <- function(indent, ...) {
         stop("indent must be numeric")
     message(rep("   ", indent), " * ", ...)
 }
-
-
-print.labyrinth.header()
