@@ -47,6 +47,23 @@
 ##' @param cores Numeric indicating how many subprocesses should be spawned if
 ##'        running in parallel.
 ##' @return A vcfR object with parental data replaced by imputation results.
+##' @examples
+##' input <- system.file("extdata",
+##'                      "vcf-files",
+##'                      "filtered-lakin-fuller-sample.vcf",
+##'                      package = "LaByRInth",
+##'                      mustWork = TRUE)
+##' output <- tempfile(fileext="-parental-result.rds")
+##' print(output)
+##' result <- LabyrinthImputeParents(
+##'               vcf = input,
+##'               out.file = output,
+##'               parents = c("LAKIN", "FULLER"),
+##'               generation = 5,
+##'               geno.err = 0.015,
+##'               parent.het = 0.005,
+##'               parallel = FALSE,
+##'               cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
@@ -251,6 +268,19 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 ##' @param cores Numeric indicating how many subprocesses should be spawned if
 ##'        running in parallel.
 ##' @return A vcfR object with both parents and progeny imputed.
+##' @examples
+##' input <- system.file("extdata",
+##'                      "vcf-files",
+##'                      "parental-lakin-fuller-sample.rds",
+##'                      package = "LaByRInth",
+##'                      mustWork = TRUE)
+##' output <- tempfile(fileext="-progeny-result.vcf.gz")
+##' print(output)
+##' result <- LabyrinthImputeProgeny(
+##'               parental = input,
+##'               out.file = output,
+##'               parallel = FALSE,
+##'               cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
@@ -406,6 +436,19 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 ##'        for legacy purposes and should generally be set to false.
 ##' @return A vcfR object with both all sites removed that don't meet the
 ##'         specified criteria.
+##' @examples
+##' input <- system.file("extdata",
+##'                      "vcf-files",
+##'                      "original-lakin-fuller-sample.vcf",
+##'                      package = "LaByRInth",
+##'                      mustWork = TRUE)
+##' output <- tempfile(fileext="-filtered.vcf.gz")
+##' print(output)
+##' result <- LabyrinthFilter(
+##'               vcf = input,
+##'               out.file = output,
+##'               parents = c("LAKIN", "FULLER"),
+##'               require.hom.poly = TRUE)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
@@ -528,6 +571,20 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##' @param cores Numeric indicating how many subprocesses should be
 ##'        spawned if running in parallel.
 ##' @return A vcfR object with all low probability sites removed.
+##' @examples
+##' input <- system.file("extdata",
+##'                      "vcf-files",
+##'                      "progeny-lakin-fuller-sample.vcf",
+##'                      package = "LaByRInth",
+##'                      mustWork = TRUE)
+##' output <- tempfile(fileext="-quality-result.vcf.gz")
+##' print(output)
+##' result <- LabyrinthQualityAssurance(
+##'               vcf = input,
+##'               out.file = output,
+##'               min.posterior = 0.8,
+##'               parallel = FALSE,
+##'               cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
