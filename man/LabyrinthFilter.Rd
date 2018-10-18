@@ -22,26 +22,27 @@ version of LaByRInth does not. This functionality is mostly included
 for legacy purposes and should generally be set to false.}
 }
 \value{
-A vcfR object with both all sites removed that don't meet the
-        specified criteria.
+A vcfR object with all sites removed that don't meet the specified
+        criteria.
 }
 \description{
 Remove all sites that are not biallelic and possibly sites which are not
 homozygous within and polymorphic between.
 }
 \examples{
-input <- system.file("extdata",
-                     "vcf-files",
-                     "original-lakin-fuller-sample.vcf",
-                     package = "LaByRInth",
-                     mustWork = TRUE)
-output <- tempfile(fileext="-filtered.vcf.gz")
+input <- system.file(
+    "extdata",
+    "vcf-files",
+    "original-lakin-fuller-sample.vcf",
+    package = "LaByRInth",
+    mustWork = TRUE)
+output <- tempfile(fileext="-filtered-result.vcf.gz")
 print(output)
 result <- LabyrinthFilter(
-              vcf = input,
-              out.file = output,
-              parents = c("LAKIN", "FULLER"),
-              require.hom.poly = TRUE)
+    vcf = input,
+    out.file = output,
+    parents = c("LAKIN", "FULLER"),
+    require.hom.poly = TRUE)
 }
 \author{
 Jason Vander Woude

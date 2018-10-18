@@ -35,22 +35,23 @@ Imputes both of the parents by maximizing liklihood of data across
 all progeny at each site.
 }
 \examples{
-input <- system.file("extdata",
-                     "vcf-files",
-                     "filtered-lakin-fuller-sample.vcf",
-                     package = "LaByRInth",
-                     mustWork = TRUE)
+input <- system.file(
+    "extdata",
+    "vcf-files",
+    "filtered-lakin-fuller-sample.vcf",
+    package = "LaByRInth",
+    mustWork = TRUE)
 output <- tempfile(fileext="-parental-result.rds")
 print(output)
 result <- LabyrinthImputeParents(
-              vcf = input,
-              out.file = output,
-              parents = c("LAKIN", "FULLER"),
-              generation = 5,
-              geno.err = 0.015,
-              parent.het = 0.005,
-              parallel = FALSE,
-              cores = 1)
+    vcf = input,
+    out.file = output,
+    parents = c("LAKIN", "FULLER"),
+    generation = 5,
+    geno.err = 0.015,
+    parent.het = 0.005,
+    parallel = FALSE,
+    cores = 1)
 }
 \author{
 Jason Vander Woude

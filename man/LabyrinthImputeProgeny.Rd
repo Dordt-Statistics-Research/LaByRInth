@@ -46,18 +46,19 @@ A vcfR object with both parents and progeny imputed.
 Imputes all of the progeny (offspring).
 }
 \examples{
-input <- system.file("extdata",
-                     "vcf-files",
-                     "parental-lakin-fuller-sample.rds",
-                     package = "LaByRInth",
-                     mustWork = TRUE)
+input <- system.file(
+    "extdata",
+    "vcf-files",
+    "parental-lakin-fuller-sample.rds",
+    package = "LaByRInth",
+    mustWork = TRUE)
 output <- tempfile(fileext="-progeny-result.vcf.gz")
 print(output)
 result <- LabyrinthImputeProgeny(
-              parental = input,
-              out.file = output,
-              parallel = FALSE,
-              cores = 1)
+    parental = input,
+    out.file = output,
+    parallel = FALSE,
+    cores = 1)
 }
 \author{
 Jason Vander Woude

@@ -31,19 +31,23 @@ LaByRInth provides the following four functions:
 1. `LabyrinthFilter`
 2. `LabyrinthImputeParents`
 3. `LabyrinthImputeProgeny`
-4. `LabyrinthQualityAssurance`
-For any imputation, these four functions should all be used (and in the order listed). Each function requires an input file and will generate an output file. Each output file should be used as the input file for the next function on the above list. The reason that these four functions were not combined into a single function is that having intermediate result files may be helpful if any part of the imputation is to be rerun on different parameters. LabyrinthFilter actually may not be necessary for every dataset (although running it won't hurt). The function LabyrinthImputeParents will check that the VCF file has only biallelic sites, and if any non-biallelic sites are detected, it will exit with a message stating that LabyrinthFilter must be run. LabyrinthImputeParents will impute the parents of the dataset so that the imputation of the progeny (offspring) will be more accurate. This is typically the most time consuming step of the process. The result file will contain all information about the population that is necessary for LabyrinthImputeProgeny. LabyrinthImputeProgeny will use this file and generate a VCF file with all members of the population (parents and progeny) imputed at every site. However, because every site is imputed, there may be some that are of low quality, so LabyrinthQualityAssurance should be used to remove any calls with low expected quality (the expected quality information is obtained from the forward-backward algorithm).
+4. `LabyrinthQualityControl`
+5. `LabyrinthImpute`
+For any imputation, either all of the first four functions should all be used (and in the order listed) or just the fifth function should be used. LabyrinthImpute is just a wrapper call to all of the others which is useful if only a single imputation needs to be run. If multiple imputations will be run with various parameter configurations, then using each of the first four functions sequentially will be useful as the intermediate files can be saved with more specific names.
+
+Each function requires an input file and will generate an output file. If using the first four functions, each output file should be used as the input file for the next function. LabyrinthFilter actually may not be necessary for every dataset (although running it won't hurt). The function LabyrinthImputeParents will check that the VCF file has only biallelic sites, and if any non-biallelic sites are detected, it will exit with a message stating that LabyrinthFilter must be run. LabyrinthImputeParents will impute the parents of the dataset so that the imputation of the progeny (offspring) will be more accurate. This is typically the most time consuming step of the process. The result file will contain all information about the population that is necessary for LabyrinthImputeProgeny. LabyrinthImputeProgeny will use this file and generate a VCF file with all members of the population (parents and progeny) imputed at every site. However, because every site is imputed, there may be some that are of low quality, so LabyrinthQualityControl should be used to remove any calls with low expected quality (the expected quality information is obtained from the forward-backward algorithm).
 
 
 
 # Help
 
-The LaByRInth package includes more detailed help information on each of these four functions. In an R session, try any of the following commands:
+The LaByRInth package includes more detailed help information on each of these functions. In an R session, try any of the following commands:
 ```r
 help(LabyrinthFilter)
 help(LabyrinthImputeParents)
 help(LabyrinthImputeProgeny)
-help(LabyrinthQualityAssurance)
+help(LabyrinthQualityControl)
+help(LabyrinthImpute)
 ```
 
 
@@ -55,22 +59,48 @@ The LaByRInth package also includes a small sample dataset which is part of the 
 example(LabyrinthFilter)
 example(LabyrinthImputeParents)
 example(LabyrinthImputeProgeny)
-example(LabyrinthQualityAssurance)
+example(LabyrinthQualityControl)
+example(LabyrinthImpute)
 ```
-Below is an example of how a dataset should be processed from start to finish using LaByRInth.
+Below is an example of how a dataset could be processed from start to finish using each of the first four LaByRInth functions and an example of an equivalent imputation using only LabyrinthImpute.
 
 ## Example 1
+```r
+input <- system.file(
+    "extdata",
+    "vcf-files",
+    "original-lakin-fuller-sample.vcf",
+    package = "LaByRInth",
+    mustWork = TRUE)
+
+dir.create("LaByRInth_example")
+quality.file <- "./LaByRInth_example/quality-imputed.vcf.gz"
+
+result <- LabyrinthImpute(
+    vcf = input,
+    out.file = output,
+    parents = c("LAKIN", "FULLER"),
+    generation = 5,
+    min.posterior = 0.8,
+    geno.err = 0.015,
+    parent.het = 0.005,
+    require.hom.poly = TRUE,
+    parallel = FALSE,
+    cores = 1)
+```
+
+## Example 2
 ```r
 library(LaByRInth)
 
 dir.create("LaByRInth_example")
 original.file <- system.file(
-                     "extdata",
-                     "vcf-files",
-                     "original-lakin-fuller-sample.vcf",
-                     package = "LaByRInth",
-                     mustWork = TRUE
-		 )
+    "extdata",
+    "vcf-files",
+    "original-lakin-fuller-sample.vcf",
+    package = "LaByRInth",
+    mustWork = TRUE)
+
 filtered.file    <- "./LaByRInth_example/filtered.vcf.gz"
 parental.file    <- "./LaByRInth_example/parental.rds"
 all.imputed.file <- "./LaByRInth_example/all-imputed.vcf.gz"
@@ -79,35 +109,31 @@ quality.file     <- "./LaByRInth_example/quality-imputed.vcf.gz"
 parents <- c("LAKIN", "FULLER")
 
 filtered.result <- LabyrinthFilter(
-                       vcf = original.file,
-                       out.file = filtered.file,
-                       parents = parents,
-                       require.hom.poly = FALSE  # should generally be false
-		   )
+    vcf = original.file,
+    out.file = filtered.file,
+    parents = parents,
+    require.hom.poly = FALSE  # should generally be false)
 
 parental.result <- LabyrinthImputeParents(
-                       vcf = filtered.file,      # or vcf = filtered.result
-                       out.file = parental.file,
-                       parents = parents,
-                       generation = 5,           # Lakin-Fuller is F5
-                       geno.err = 0.015,         # estimate
-                       parent.het = 0.005,       # estimate
-                       parallel = FALSE,         # if able, set TRUE
-                       cores = 1                 # more cores is faster
-		   )
+    vcf = filtered.file,      # or vcf = filtered.result
+    out.file = parental.file,
+    parents = parents,
+    generation = 5,           # Lakin-Fuller is F5
+    geno.err = 0.015,         # estimate
+    parent.het = 0.005,       # estimate
+    parallel = FALSE,         # if able, set TRUE
+    cores = 1)                # more cores is faster
 
 all.imputed.result <- LabyrinthImputeProgeny(
-                          parental = parental.file,    # or parental = parental.result
-                          out.file = all.imputed.file,
-                          parallel = FALSE,            # if able, set TRUE
-                          cores = 1                    # more cores is faster
-                      )
+    parental = parental.file,    # or parental = parental.result
+    out.file = all.imputed.file,
+    parallel = FALSE,            # if able, set TRUE
+    cores = 1)                   # more cores is faster
 
-quality.result <- LabyrinthQualityAssurance(
-                      vcf = all.imputed.file,  # or vcf = all.imputed.result
-                      out.file = quality.file,
-                      min.posterior = 0.8,     # require at least 80% probabilty of correctness
-                      parallel = FALSE,        # if able, set TRUE
-                      cores = 1                # more cores is faster
-                  )
+quality.result <- LabyrinthQualityControl(
+    vcf = all.imputed.file,  # or vcf = all.imputed.result
+    out.file = quality.file,
+    min.posterior = 0.8,     # require at least 80% probabilty of correctness
+    parallel = FALSE,        # if able, set TRUE
+    cores = 1)               # more cores is faster
 ```

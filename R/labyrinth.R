@@ -45,21 +45,22 @@
 ##'        of LB-Impute that LaByRInth is based on required this, but this
 ##'        version of LaByRInth does not. This functionality is mostly included
 ##'        for legacy purposes and should generally be set to false.
-##' @return A vcfR object with both all sites removed that don't meet the
-##'         specified criteria.
+##' @return A vcfR object with all sites removed that don't meet the specified
+##'         criteria.
 ##' @examples
-##' input <- system.file("extdata",
-##'                      "vcf-files",
-##'                      "original-lakin-fuller-sample.vcf",
-##'                      package = "LaByRInth",
-##'                      mustWork = TRUE)
-##' output <- tempfile(fileext="-filtered.vcf.gz")
+##' input <- system.file(
+##'     "extdata",
+##'     "vcf-files",
+##'     "original-lakin-fuller-sample.vcf",
+##'     package = "LaByRInth",
+##'     mustWork = TRUE)
+##' output <- tempfile(fileext="-filtered-result.vcf.gz")
 ##' print(output)
 ##' result <- LabyrinthFilter(
-##'               vcf = input,
-##'               out.file = output,
-##'               parents = c("LAKIN", "FULLER"),
-##'               require.hom.poly = TRUE)
+##'     vcf = input,
+##'     out.file = output,
+##'     parents = c("LAKIN", "FULLER"),
+##'     require.hom.poly = TRUE)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
@@ -184,22 +185,23 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##'        running in parallel.
 ##' @return A vcfR object with parental data replaced by imputation results.
 ##' @examples
-##' input <- system.file("extdata",
-##'                      "vcf-files",
-##'                      "filtered-lakin-fuller-sample.vcf",
-##'                      package = "LaByRInth",
-##'                      mustWork = TRUE)
+##' input <- system.file(
+##'     "extdata",
+##'     "vcf-files",
+##'     "filtered-lakin-fuller-sample.vcf",
+##'     package = "LaByRInth",
+##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-parental-result.rds")
 ##' print(output)
 ##' result <- LabyrinthImputeParents(
-##'               vcf = input,
-##'               out.file = output,
-##'               parents = c("LAKIN", "FULLER"),
-##'               generation = 5,
-##'               geno.err = 0.015,
-##'               parent.het = 0.005,
-##'               parallel = FALSE,
-##'               cores = 1)
+##'     vcf = input,
+##'     out.file = output,
+##'     parents = c("LAKIN", "FULLER"),
+##'     generation = 5,
+##'     geno.err = 0.015,
+##'     parent.het = 0.005,
+##'     parallel = FALSE,
+##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
@@ -405,18 +407,19 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 ##'        running in parallel.
 ##' @return A vcfR object with both parents and progeny imputed.
 ##' @examples
-##' input <- system.file("extdata",
-##'                      "vcf-files",
-##'                      "parental-lakin-fuller-sample.rds",
-##'                      package = "LaByRInth",
-##'                      mustWork = TRUE)
+##' input <- system.file(
+##'     "extdata",
+##'     "vcf-files",
+##'     "parental-lakin-fuller-sample.rds",
+##'     package = "LaByRInth",
+##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-progeny-result.vcf.gz")
 ##' print(output)
 ##' result <- LabyrinthImputeProgeny(
-##'               parental = input,
-##'               out.file = output,
-##'               parallel = FALSE,
-##'               cores = 1)
+##'     parental = input,
+##'     out.file = output,
+##'     parallel = FALSE,
+##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
@@ -572,22 +575,23 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 ##'        spawned if running in parallel.
 ##' @return A vcfR object with all low probability sites removed.
 ##' @examples
-##' input <- system.file("extdata",
-##'                      "vcf-files",
-##'                      "progeny-lakin-fuller-sample.vcf",
-##'                      package = "LaByRInth",
-##'                      mustWork = TRUE)
+##' input <- system.file(
+##'     "extdata",
+##'     "vcf-files",
+##'     "progeny-lakin-fuller-sample.vcf",
+##'     package = "LaByRInth",
+##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-quality-result.vcf.gz")
 ##' print(output)
-##' result <- LabyrinthQualityAssurance(
-##'               vcf = input,
-##'               out.file = output,
-##'               min.posterior = 0.8,
-##'               parallel = FALSE,
-##'               cores = 1)
+##' result <- LabyrinthQualityControl(
+##'     vcf = input,
+##'     out.file = output,
+##'     min.posterior = 0.8,
+##'     parallel = FALSE,
+##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
-LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
+LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
                                       parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
@@ -665,8 +669,115 @@ LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
     display(1, "Completed in ", timer(), "\n")
 
 
-    display(0, "LaByRInth quality assurance completed in ", total.timer(), "\n")
+    display(0, "LaByRInth quality control completed in ", total.timer(), "\n")
     invisible(vcf) ## implicit return
+}
+
+
+##' Run entire imputation including filtering and quality control
+##'
+##' Run all four other functions (LabyrinthFilter, LabyrinthImputeParents,
+##' LabyrinthImputeProgeny, and LabyrinthQualityControl) in sequence and save
+##' the intermediate files to a temporary directory. Running this function will
+##' produce equivalent results as running all four functions seperately; the
+##' only difference will be where the files are saved. This is provided simply
+##' for user convenience.
+##'
+##' @param vcf File path or vcfR object to impute.
+##' @param out.file File path of output file.
+##' @param parents Character vector with names of the two parents.
+##' @param generation Numeric representing generation (e.g. 5 for F5 population).
+##' @param min.posterior Numeric specifying the minimum probability for any call
+##'        that is kept.
+##' @param geno.err Estimate of proportion of calls genotyped incorrectly.
+##' @param parent.het Estimate of proportion of sites in each parent that are
+##'        truly heterozygous.
+##' @param require.hom.poly Logical indicating if the sites that are kept are
+##'        required to by homozygous within and polymorphic between (i.e. should
+##'        the parents be homozygous for different alleles at every kept site
+##'        according to the genotype (gt) field in the vcf). The implementation
+##'        of LB-Impute that LaByRInth is based on required this, but this
+##'        version of LaByRInth does not. This functionality is mostly included
+##'        for legacy purposes and should generally be set to false.
+##' @param parallel Logical indicating if imputation should be run in parallel
+##'        or serial.
+##' @param cores Numeric indicating how many subprocesses should be spawned if
+##'        running in parallel.
+##' @return A vcfR object with all sites removed that don't meet the filtering
+##'         critera, both parents and progeny imputed and low probability sites
+##'         removed.
+##' @examples
+##' input <- system.file(
+##'     "extdata",
+##'     "vcf-files",
+##'     "original-lakin-fuller-sample.vcf",
+##'     package = "LaByRInth",
+##'     mustWork = TRUE)
+##' output <- tempfile(fileext="-result.vcf.gz")
+##' result <- LabyrinthImpute(
+##'     vcf = input,
+##'     out.file = output,
+##'     parents = c("LAKIN", "FULLER"),
+##'     generation = 5,
+##'     min.posterior = 0.8,
+##'     geno.err = 0.015,
+##'     parent.het = 0.005,
+##'     require.hom.poly = TRUE,
+##'     parallel = FALSE,
+##'     cores = 1)
+##' @author Jason Vander Woude
+##' @export
+LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
+                            geno.err=0.01, parent.het=0.01,
+                            require.hom.poly=FALSE, parallel=TRUE, cores=4) {
+
+    total.timer <- new.timer()
+
+    dir <- tempdir()  # create temporary directory
+    filtered.file    <- paste0(dir, "/filtered.vcf.gz")
+    parental.file    <- paste0(dir, "/parental.rds")
+    all.imputed.file <- paste0(dir, "/all-imputed.vcf.gz")
+
+    display(0, "The itermediate files generated will be saved as follows:")
+    display(1, "Filtered population: ", filtered.file)
+    display(1, "Parental imputation: ", parental.file)
+    display(1, "Full imputation: ", all.imputed.file, "\n")
+
+    filtered.result <- LabyrinthFilter(
+        vcf = vcf,
+        out.file = filtered.file,
+        parents = parents,
+        require.hom.poly = require.hom.poly
+    )
+
+    parental.result <- LabyrinthImputeParents(
+        vcf = filtered.result,
+        out.file = parental.file,
+        parents = parents,
+        generation = generation,
+        geno.err = geno.err,
+        parent.het = parent.het,
+        parallel = parallel,
+        cores = cores
+    )
+
+    all.imputed.result <- LabyrinthImputeProgeny(
+        parental = parental.result,
+        out.file = all.imputed.file,
+        parallel = parallel,
+        cores = cores
+    )
+
+    quality.result <- LabyrinthQualityControl(
+        vcf = all.imputed.result,
+        out.file = out.file,
+        min.posterior = min.posterior,
+        parallel = parallel,
+        cores = cores
+    )
+
+    display(0, "LaByRInth full process completed in ", total.timer(), "\n")
+    invisible(quality.result) ## implicit return
 }
 
 
