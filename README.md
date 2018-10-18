@@ -63,7 +63,7 @@ example(LabyrinthImputeProgeny)
 example(LabyrinthQualityControl)
 example(LabyrinthImpute)
 ```
-Below is an example of how a dataset could be processed from start to finish using only LabyrinthImpute, and there is an example of an equivalent imputation using each of the first four LaByRInth functions in sequence.
+Below is an example of how a dataset could be processed from start to finish using only LabyrinthImpute, and there is an example of an equivalent imputation using each of the first four LaByRInth functions in sequence. In both examples, 'require.hom.poly' is set to true in order to show what the filtering looks like, but generally this should be false to limit the amount of data that is filtered out (because this data is still useful to the algorithm). The parameter 'parallel' is also set to false in order to ensure this example will run on all machines, but if the `parallel` R package is supported on a system, setting 'parallel' to true and 'cores' so the number of CPU cores available will increase the speed of LaByRInth significantly.
 
 ## Example 1
 ```r
@@ -86,7 +86,7 @@ result <- LabyrinthImpute(
     min.posterior = 0.8,
     geno.err = 0.015,
     parent.het = 0.005,
-    require.hom.poly = TRUE,
+    require.hom.poly = TRUE,     # should generally be false
     parallel = FALSE,
     cores = 1)
 ```
@@ -102,6 +102,7 @@ original.file <- system.file(
     "original-lakin-fuller-sample.vcf",
     package = "LaByRInth",
     mustWork = TRUE)
+
 filtered.file    <- "./LaByRInth_example/filtered.vcf.gz"
 parental.file    <- "./LaByRInth_example/parental.rds"
 all.imputed.file <- "./LaByRInth_example/all-imputed.vcf.gz"
@@ -113,17 +114,17 @@ filtered.result <- LabyrinthFilter(
     vcf = original.file,
     out.file = filtered.file,
     parents = parents,
-    require.hom.poly = FALSE)  # should generally be false
+    require.hom.poly = TRUE)     # should generally be false
 
 parental.result <- LabyrinthImputeParents(
-    vcf = filtered.file,      # or vcf = filtered.result
+    vcf = filtered.file,         # or vcf = filtered.result
     out.file = parental.file,
     parents = parents,
-    generation = 5,           # Lakin-Fuller is F5
-    geno.err = 0.015,         # estimate
-    parent.het = 0.005,       # estimate
-    parallel = FALSE,         # if able, set TRUE
-    cores = 1)                # more cores is faster
+    generation = 5,              # Lakin-Fuller is F5
+    geno.err = 0.015,            # estimate
+    parent.het = 0.005,          # estimate
+    parallel = FALSE,            # if able, set TRUE
+    cores = 1)                   # more cores is faster
 
 all.imputed.result <- LabyrinthImputeProgeny(
     parental = parental.file,    # or parental = parental.result
@@ -132,9 +133,9 @@ all.imputed.result <- LabyrinthImputeProgeny(
     cores = 1)                   # more cores is faster
 
 quality.result <- LabyrinthQualityControl(
-    vcf = all.imputed.file,  # or vcf = all.imputed.result
+    vcf = all.imputed.file,      # or vcf = all.imputed.result
     out.file = quality.file,
-    min.posterior = 0.8,     # require at least 80% probability of correctness
-    parallel = FALSE,        # if able, set TRUE
-    cores = 1)               # more cores is faster
+    min.posterior = 0.8,         # require at least 80% probability of correctness
+    parallel = FALSE,            # if able, set TRUE
+    cores = 1)                   # more cores is faster
 ```
