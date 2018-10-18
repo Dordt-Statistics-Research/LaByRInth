@@ -71,7 +71,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 
     ## check classes of arguments
     if (class(vcf) != "character" && class(vcf) != "vcfR")
-        stop("vcf must be of class chracter or vcfR\n")
+        stop("vcf must be of class character or vcfR\n")
     if (class(parents) != "character")
         stop("parents must be of class character\n")
     if (class(out.file) != "character")
@@ -86,7 +86,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
     if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
     if (! verify.file.dir.exists(out.file))
-        stop("Directory of the outuput file does not exist; please create it\n")
+        stop("Directory of the output file does not exist; please create it\n")
 
 
 
@@ -169,7 +169,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 
 ##' Parental imputation
 ##'
-##' Imputes both of the parents by maximizing liklihood of data across
+##' Imputes both of the parents by maximizing likelihood of data across
 ##' all progeny at each site.
 ##'
 ##' @param vcf File path or vcfR object to impute.
@@ -181,7 +181,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##'        truly heterozygous.
 ##' @param parallel Logical indicating if imputation should be run in parallel
 ##'        or serial.
-##' @param cores Numeric indicating how many subprocesses should be spawned if
+##' @param cores Numeric indicating how many sub-processes should be spawned if
 ##'        running in parallel.
 ##' @return A vcfR object with parental data replaced by imputation results.
 ##' @examples
@@ -213,7 +213,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 
     ## check classes of arguments
     if (class(vcf) != "character" && class(vcf) != "vcfR")
-        stop("vcf must be of class chracter or vcfR\n")
+        stop("vcf must be of class character or vcfR\n")
     if (class(parents) != "character")
         stop("parents must be of class character\n")
     if (class(generation) != "numeric")
@@ -236,7 +236,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     if (! verify.file.extension(out.file, ".rds"))
         stop("Output file name must end with '.rds'\n")
     if (! verify.file.dir.exists(out.file))
-        stop("Directory of the outuput file does not exist; please create it\n")
+        stop("Directory of the output file does not exist; please create it\n")
 
 
     ## parameter verification
@@ -304,7 +304,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
                    "lower generation population or generate the appropriate ",
                    "file yourself. To view details on how to generate such a ",
                    "file, see the README file in the ",
-                   "inst/extdata/transition-probs subdirectory of the ",
+                   "inst/extdata/transition-probs sub-directory of the ",
                    "LaByRInth package."))
     })
     display(1, "Completed in ", timer(), "\n")
@@ -403,7 +403,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 ##'        sites should be left uncalled instead of imputed.
 ##' @param parallel Logical indicating if imputation should be run in parallel
 ##'        or serial.
-##' @param cores Numeric indicating how many subprocesses should be spawned if
+##' @param cores Numeric indicating how many sub-processes should be spawned if
 ##'        running in parallel.
 ##' @return A vcfR object with both parents and progeny imputed.
 ##' @examples
@@ -431,7 +431,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 
     ## check classes of arguments
     if (class(parental) != "character" && class(parental) != "parental.imputation")
-        stop("vcf must be of class chracter or parental.imputation\n")
+        stop("vcf must be of class character or parental.imputation\n")
     if (class(out.file) != "character")
         stop("out.file must be of class character\n")
     if (class(use.fwd.bkwd) != "logical")
@@ -480,7 +480,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
     if (! verify.file.dir.exists(out.file))
-        stop("Directory of the outuput file does not exist; please create it\n")
+        stop("Directory of the output file does not exist; please create it\n")
 
     ## parameter verification
     if (use.fwd.bkwd && !calc.posteriors) {
@@ -497,7 +497,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 
     timer <- new.timer()
     display(0, "Restoring variables from parental imputation result")
-    fwd.bkwd.threshold <- 0  # use LabyrinthUncall for other thresholds
+    fwd.bkwd.threshold <- 0  # use LabyrinthQualityControl for other thresholds
     vcf <- parental$vcf
     parents <- parental$parents
     parent.models <- parental$parent.models
@@ -571,7 +571,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 ##'        that is kept.
 ##' @param parallel Logical indicating if imputation should be run in
 ##'        parallel or serial.
-##' @param cores Numeric indicating how many subprocesses should be
+##' @param cores Numeric indicating how many sub-processes should be
 ##'        spawned if running in parallel.
 ##' @return A vcfR object with all low probability sites removed.
 ##' @examples
@@ -599,7 +599,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 
     ## check classes of arguments
     if (class(vcf) != "character" && class(vcf) != "vcfR")
-        stop("vcf must be of class chracter or vcfR\n")
+        stop("vcf must be of class character or vcfR\n")
     if (class(out.file) != "character")
         stop("out.file must be of class character\n")
     if (class(parallel) != "logical")
@@ -609,7 +609,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
     if (class(min.posterior) != "numeric")
         stop("min.posterior must be of class numeric\n")
     if (class(vcf) != "character" && class(vcf) != "vcfR")
-        stop("vcf must be of class chracter or vcfR\n")
+        stop("vcf must be of class character or vcfR\n")
 
 
     ## file verification
@@ -618,7 +618,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
     if (! verify.file.extension(out.file, ".vcf.gz"))
         stop("Output file name must end with '.vcf.gz'\n")
     if (! verify.file.dir.exists(out.file))
-        stop("Directory of the outuput file does not exist; please create it\n")
+        stop("Directory of the output file does not exist; please create it\n")
 
 
     ## load vcf if needed
@@ -679,7 +679,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##' Run all four other functions (LabyrinthFilter, LabyrinthImputeParents,
 ##' LabyrinthImputeProgeny, and LabyrinthQualityControl) in sequence and save
 ##' the intermediate files to a temporary directory. Running this function will
-##' produce equivalent results as running all four functions seperately; the
+##' produce equivalent results as running all four functions separately; the
 ##' only difference will be where the files are saved. This is provided simply
 ##' for user convenience.
 ##'
@@ -701,10 +701,10 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##'        for legacy purposes and should generally be set to false.
 ##' @param parallel Logical indicating if imputation should be run in parallel
 ##'        or serial.
-##' @param cores Numeric indicating how many subprocesses should be spawned if
+##' @param cores Numeric indicating how many sub-processes should be spawned if
 ##'        running in parallel.
 ##' @return A vcfR object with all sites removed that don't meet the filtering
-##'         critera, both parents and progeny imputed and low probability sites
+##'         criteria, both parents and progeny imputed and low probability sites
 ##'         removed.
 ##' @examples
 ##' input <- system.file(
@@ -738,7 +738,7 @@ LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
     parental.file    <- paste0(dir, "/parental.rds")
     all.imputed.file <- paste0(dir, "/all-imputed.vcf.gz")
 
-    display(0, "The itermediate files generated will be saved as follows:")
+    display(0, "The intermediate files generated will be saved as follows:")
     display(1, "Filtered population: ", filtered.file)
     display(1, "Parental imputation: ", parental.file)
     display(1, "Full imputation: ", all.imputed.file, "\n")
@@ -817,7 +817,7 @@ get.emission.structures <- function(ad, sample.names, marker.names,
 
     ## by accounting for the probability that a given site was erroneously
     ## assembled we are in essence more heavily weighting the heterozygous
-    ## emisson probabilities
+    ## emission probabilities
     err.emm <- perc.hom.ref * hom.ref.read.emm +
                perc.hom.alt * hom.alt.read.emm +
                perc.het * het.read.emm
@@ -1049,9 +1049,9 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 ## hom.ref     het.I     het.II     hom.alt
 ## 0|0         0|1       1|0        1|1
 ##
-## When the Viterbi algorithm is used, a single opimal sequence of states is
+## When the Viterbi algorithm is used, a single optimal sequence of states is
 ## determined which thus includes haplotypic information and can thus
-## distinguish betwee het.I and het.II. Thus the calls are phased and the
+## distinguish between het.I and het.II. Thus the calls are phased and the
 ## vertical bar is used in the VCF file as shown above. If the forward backward
 ## algorithm is used, then it makes more sense to combine the het.I and het.II
 ## types because the VCF format does not allow for specifying posterior
@@ -1066,14 +1066,14 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
     listapply <- get.lapply(parallel, cores)
     u.chroms <- unique(snp.chroms)
 
-    ## Given two probabilites of odd recombinations (r1 between sites x and y;
+    ## Given two probabilities of odd recombinations (r1 between sites x and y;
     ## r2 between sites y and z) what is the probability of an odd number of
     ## recombinations between sites x and z
     combine.recombs <- function(r1, r2) {r1*(1-r2) + r2*(1-r1)}
 
     impute.sample.chrom <- function(sample, chrom) {
 
-        n.sites <- sum(snp.chroms==chrom)  # boolean addition
+        n.sites <- sum(snp.chroms==chrom)  # Boolean addition
         parent.paths <- extract.each.parent(
             parent.models[[chrom]]$model
         )
@@ -1382,7 +1382,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 
 
 
-    ## Construct emission liklihood matrix. There are 16 possible parental states at each SNP
+    ## Construct emission likelihood matrix. There are 16 possible parental states at each SNP
     p <- 1 - parent.het  # probability of a site in parents being homozygous
     log.penalty <- log(c(p^2, p*(1-p), p*(1-p), p^2,
                          p*(1-p), (1-p)^2, (1-p)^2, p*(1-p),
@@ -1403,7 +1403,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     })
 
     ## TODO(Jason): verify that at least 2 sites are in the chromosome before
-    ## runnin viterbi
+    ## running viterbi
 
 
     parental.models <- listapply(u.chroms, function(chrom) {

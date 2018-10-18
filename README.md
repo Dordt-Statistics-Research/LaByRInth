@@ -133,7 +133,7 @@ all.imputed.result <- LabyrinthImputeProgeny(
 quality.result <- LabyrinthQualityControl(
     vcf = all.imputed.file,  # or vcf = all.imputed.result
     out.file = quality.file,
-    min.posterior = 0.8,     # require at least 80% probabilty of correctness
+    min.posterior = 0.8,     # require at least 80% probability of correctness
     parallel = FALSE,        # if able, set TRUE
     cores = 1)               # more cores is faster
 ```
