@@ -26,19 +26,6 @@
 
 
 ################################################################################
-############################# LIBRARY REQUIREMENTS #############################
-################################################################################
-
-
-require(vcfR, quietly=T)
-require(abind, quietly=T)
-require(digest, quietly=T)
-
-
-
-
-
-################################################################################
 ###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
 ################################################################################
 
@@ -112,7 +99,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     if (inherits(vcf, "character")) {
         timer <- new.timer()
         display(0, "Loading vcf")
-        vcf <- read.vcfR(vcf, verbose=F)
+        vcf <- vcfR::read.vcfR(vcf, verbose=F)
         display(1, "Completed in ", timer(), "\n")
     }
 
@@ -128,11 +115,11 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
         stop(text)
     }
 
-    non.biallelic <- which(! is.biallelic(vcf))
+    non.biallelic <- which(! vcfR::is.biallelic(vcf))
     if (length(non.biallelic) != 0) {
         display(0, "The following sites are not biallelic:")
-        chroms <- getCHROM(vcf)[non.biallelic]
-        positions <- getPOS(vcf)[non.biallelic]
+        chroms <- vcfR::getCHROM(vcf)[non.biallelic]
+        positions <- vcfR::getPOS(vcf)[non.biallelic]
         for (i in seq_along(chroms)) {
             display(1, "\tCHR:", chroms[i], "\tPOS:", positions[i])
         }
@@ -182,11 +169,11 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     result$site.pair.transition.probs <- site.pair.transition.probs
 
     ## save additional information so that it doesn't have to be computed again
-    result$snp.chroms   <- snp.chroms   <- getCHROM(vcf)
+    result$snp.chroms   <- snp.chroms   <- vcfR::getCHROM(vcf)
     result$u.chroms     <- u.chroms     <- unique(snp.chroms)
     result$ad           <- ad           <- get.ad.array(vcf)
     result$sample.names <- sample.names <- getSAMPLES(vcf)
-    result$marker.names <- marker.names <- getID(vcf)
+    result$marker.names <- marker.names <- vcfR::getID(vcf)
 
     display(1, "Completed in ", timer(), "\n")
 
@@ -393,7 +380,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     timer <- new.timer()
     display(0, "Creating new vcf with imputed data")
     vcf <- update.vcf(vcf, imp.res$gt, imp.res$posteriors)
-    write.vcf(vcf, out.file)
+    vcfR::write.vcf(vcf, out.file)
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -452,7 +439,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
     if (inherits(vcf, "character")) {
         timer <- new.timer()
         display(0, "Loading vcf")
-        vcf <- read.vcfR(vcf, verbose=F)
+        vcf <- vcfR::read.vcfR(vcf, verbose=F)
         display(1, "Completed in ", timer(), "\n")
     }
 
@@ -465,11 +452,11 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
         stop(text)
     }
     display(0, "Checking for sites that are not biallelic")
-    biallelic <- is.biallelic(vcf)
+    biallelic <- vcfR::is.biallelic(vcf)
     if (any(!biallelic)) {
         display(1, "The following sites are not biallelic and will be removed:")
-        chroms <- getCHROM(vcf)[which(! biallelic)]
-        positions <- getPOS(vcf)[which(! biallelic)]
+        chroms <- vcfR::getCHROM(vcf)[which(! biallelic)]
+        positions <- vcfR::getPOS(vcf)[which(! biallelic)]
         refs <- vcf@fix[! biallelic, "REF"]
         alts <- vcf@fix[! biallelic, "ALT"]
         for (i in seq_along(chroms)) {
@@ -489,8 +476,8 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
         if (any(! hom.poly)) {
             display(1, "The parents are not homozygous within and polymorphic ",
                        "between at the following sites which will be removed:")
-            chroms <- getCHROM(vcf)[! hom.poly]
-            positions <- getPOS(vcf)[! hom.poly]
+            chroms <- vcfR::getCHROM(vcf)[! hom.poly]
+            positions <- vcfR::getPOS(vcf)[! hom.poly]
             gt <- getGT(vcf)[! hom.poly, parents, drop=FALSE]
             for (i in seq_along(chroms)) {
                 display(2, "CHR:", chroms[i],
@@ -509,10 +496,10 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
         display(0, "Removing sites and saving vcf\n")
         vcf@fix <- vcf@fix[mask, ]
         vcf@gt <- vcf@gt[mask, ]
-        write.vcf(vcf, out.file)
+        vcfR::write.vcf(vcf, out.file)
     } else {
         display(0, "All sites okay; copying original vcf file\n")
-        write.vcf(vcf, out.file)
+        vcfR::write.vcf(vcf, out.file)
     }
 
 
@@ -577,7 +564,7 @@ LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
     if (inherits(vcf, "character")) {
         timer <- new.timer()
         display(0, "Loading vcf")
-        vcf <- read.vcfR(vcf, verbose=F)
+        vcf <- vcfR::read.vcfR(vcf, verbose=F)
         display(1, "Completed in ", timer(), "\n")
     }
 
@@ -617,8 +604,9 @@ LabyrinthQualityAssurance <- function(vcf, out.file, min.posterior,
     rownames(vcf@gt) <- rownames
     colnames(vcf@gt) <- colnames
 
-    write.vcf(vcf, out.file)
+    vcfR::write.vcf(vcf, out.file)
     display(1, "Completed in ", timer(), "\n")
+
 
     display(0, "LaByRInth quality assurance completed in ", total.timer(), "\n")
     invisible(vcf) ## implicit return
@@ -674,7 +662,7 @@ get.emission.structures <- function(ad, sample.names, marker.names,
     ## first dimension is the markers/loci/SNPs
     ## second dimension is the members of the population
     ## third dimension is the state (hom ref, het type I, het type II, hom alt)
-    rpgs <- abind(
+    rpgs <- abind::abind(
         err.hom.ref.read.emm,
         err.het.read.emm,
         err.het.read.emm,
@@ -787,9 +775,6 @@ get.transition.structures <- function(snp.chroms, marker.names,
 ## are frequently being normalized. This is done to decrease the numerical
 ## instability that results when the probabilities become very low
 fwd.bkwd <- function(emm, trans, temp) {
-    ## if (temp) {
-    ##     browser()
-    ## }
     normalize <- function(mat, col) {
         s <- sum(mat[, col])
         if (s == 0){
@@ -1134,8 +1119,8 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
             ## this way we can replicate mathematical matrix multiplication with
             ## element-by-element multiplication allowing us to do all SNPs at once
             ## without needing an apply function which can be slower
-            snp.i <- abind(rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], along=3)
-            snp.j <- abind(rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], along=3)
+            snp.i <- abind::abind(rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], rpgs[i, , ], along=3)
+            snp.j <- abind::abind(rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], rpgs[j, , ], along=3)
             snp.j <- aperm(snp.j, c(1,3,2))
 
             rpgsp <- snp.i * snp.j  # read probs given state pair
@@ -1342,20 +1327,17 @@ update.vcf <- function(vcf, gt, posteriors=NULL) {
 
 
 get.lapply <- function(parallel, cores=1) {
-    serial.lapply <- function(..., mc.preschedule=F, mc.cores=cores) {
-        lapply(...)
-    }
-
-    parallel.lapply <- function(...) {
-        mclapply(..., mc.preschedule=F, mc.cores=cores)
-    }
-
-    ## implicit return
     if (parallel && cores != 1) {
-        require(parallel, quietly=T)
-        parallel.lapply
+        if (require(parallel, quietly=T)) {
+            function(...) {
+                parallel::mclapply(..., mc.preschedule=F, mc.cores=cores)
+            }  # implicit return
+        } else {
+            stop(paste0("In order to utilize parallel computation, the ",
+                        "package 'parallel' must be installed"))
+        }
     } else {
-        lapply
+        lapply  # implicit return
     }
 }
 
@@ -1367,7 +1349,7 @@ get.lapply <- function(parallel, cores=1) {
 ## second is the vector of states of parent 2
 extract.each.parent <- function(parental.model) {
     parents <- sapply(parental.model, function(call) {
-        call <- call-1            # deal with base 1 indexing
+        call <- call-1         # deal with base 1 indexing
         p1 <- floor(call / 4)  # bit shift i right twice to get two most sig bits
         p2 <- call - p1*4      # two least significant bits
         c(p1+1, p2+1)
@@ -1422,21 +1404,21 @@ getSAMPLES <- function(vcf) {
 
 
 getAD <- function(vcf) {
-    ad <- extract.gt(vcf, "AD")
+    ad <- vcfR::extract.gt(vcf, "AD")
     ad[is.na(ad)] <- "0,0"  # replace NA entries
     ad
 }
 
 
 getGT <- function(vcf) {
-    gt <- extract.gt(vcf, "GT")
+    gt <- vcfR::extract.gt(vcf, "GT")
     gt[is.na(gt)] <- "./."  # replace NA entries
     gt
 }
 
 
 getGP <- function(vcf) {
-    extract.gt(vcf, "GP")
+    vcfR::extract.gt(vcf, "GP")
 }
 
 
@@ -1490,7 +1472,7 @@ gp.to.num <- function(str) {
 
 get.ad.array <- function(vcf) {
     ads <- apply(getAD(vcf), 1:2, ad.to.num)
-    abind(ads[1, , ], ads[2, , ], along=3)
+    abind::abind(ads[1, , ], ads[2, , ], along=3)
 }
 
 
@@ -1506,17 +1488,17 @@ get.ad.array <- function(vcf) {
 ## some.list) calls because otherwise the 'along' argument has to be appended to
 ## the 'some.list' argument
 abind1 <- function(...) {
-    abind(..., along=1)
+    abind::abind(..., along=1)
 }
 
 
 abind2 <- function(...) {
-    abind(..., along=2)
+    abind::abind(..., along=2)
 }
 
 
 abind3 <- function(...) {
-    abind(..., along=3)
+    abind::abind(..., along=3)
 }
 
 
