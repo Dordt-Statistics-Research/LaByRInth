@@ -30,6 +30,142 @@
 ################################################################################
 
 
+##' Remove bad data prior to imputing
+##'
+##' Remove all sites that are not biallelic and possibly sites which are not
+##' homozygous within and polymorphic between.
+##'
+##' @param vcf File path or vcfR object to impute.
+##' @param out.file File path of output file.
+##' @param parents Character vector with names of the two parents.
+##' @param require.hom.poly Logical indicating if the sites that are kept are
+##'        required to by homozygous within and polymorphic between (i.e. should
+##'        the parents be homozygous for different alleles at every kept site
+##'        according to the genotype (gt) field in the vcf). The implementation
+##'        of LB-Impute that LaByRInth is based on required this, but this
+##'        version of LaByRInth does not. This functionality is mostly included
+##'        for legacy purposes and should generally be set to false.
+##' @return A vcfR object with both all sites removed that don't meet the
+##'         specified criteria.
+##' @examples
+##' input <- system.file("extdata",
+##'                      "vcf-files",
+##'                      "original-lakin-fuller-sample.vcf",
+##'                      package = "LaByRInth",
+##'                      mustWork = TRUE)
+##' output <- tempfile(fileext="-filtered.vcf.gz")
+##' print(output)
+##' result <- LabyrinthFilter(
+##'               vcf = input,
+##'               out.file = output,
+##'               parents = c("LAKIN", "FULLER"),
+##'               require.hom.poly = TRUE)
+##' @author Jason Vander Woude
+##' @export
+LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
+
+    ## begin timer
+    total.timer <- new.timer()
+
+
+    ## check classes of arguments
+    if (class(vcf) != "character" && class(vcf) != "vcfR")
+        stop("vcf must be of class chracter or vcfR\n")
+    if (class(parents) != "character")
+        stop("parents must be of class character\n")
+    if (class(out.file) != "character")
+        stop("out.file must be of class character\n")
+    if (class(require.hom.poly) != "logical")
+        stop("require.hom.poly must be of class logical\n")
+
+
+    ## file verification
+    if (file.exists(out.file))
+        stop("Output file already exists; please choose another name\n")
+    if (! verify.file.extension(out.file, ".vcf.gz"))
+        stop("Output file name must end with '.vcf.gz'\n")
+    if (! verify.file.dir.exists(out.file))
+        stop("Directory of the outuput file does not exist; please create it\n")
+
+
+
+    ## load vcf if needed
+    if (inherits(vcf, "character")) {
+        timer <- new.timer()
+        display(0, "Loading vcf")
+        vcf <- vcfR::read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
+    }
+
+
+    display(0, "Checking if parents are in the vcf\n")
+    if (! all(parents %in% getSAMPLES(vcf))) {
+        text <- "Some or all parents are not in the vcf"
+        if (all(toupper(parents) %in% toupper(getSAMPLES(vcf))))
+            text <- paste0(text, "; try checking the capitalization of the names")
+        stop(text)
+    }
+    display(0, "Checking for sites that are not biallelic")
+    biallelic <- vcfR::is.biallelic(vcf)
+    if (any(!biallelic)) {
+        display(1, "The following sites are not biallelic and will be removed:")
+        chroms <- vcfR::getCHROM(vcf)[which(! biallelic)]
+        positions <- vcfR::getPOS(vcf)[which(! biallelic)]
+        refs <- vcf@fix[! biallelic, "REF"]
+        alts <- vcf@fix[! biallelic, "ALT"]
+        for (i in seq_along(chroms)) {
+            display(2, "CHR:", chroms[i],
+                    "\tPOS:", positions[i],
+                    "\tREF:", refs[i],
+                    "\tALT:", alts[i])
+        }
+    }
+    message("")
+    mask <- biallelic
+
+    if (require.hom.poly) {
+        display(0, "Checking for sites where parents are not ",
+                   "homozygous within and polymorphic between")
+        hom.poly <- parent.hom.and.poly(vcf, parents)
+        if (any(! hom.poly)) {
+            display(1, "The parents are not homozygous within and polymorphic ",
+                       "between at the following sites which will be removed:")
+            chroms <- vcfR::getCHROM(vcf)[! hom.poly]
+            positions <- vcfR::getPOS(vcf)[! hom.poly]
+            gt <- getGT(vcf)[! hom.poly, parents, drop=FALSE]
+            for (i in seq_along(chroms)) {
+                display(2, "CHR:", chroms[i],
+                        "\tPOS:", positions[i],
+                        paste0("\t", parents[1], ":"), gt[i, 1],
+                        paste0("\t", parents[2], ":"), gt[i, 2])
+            }
+        }
+        message("")
+        mask <- mask & hom.poly
+    }
+
+    any.removed <- any(mask==FALSE)
+
+    if (any.removed) {
+        display(0, "Removing sites and saving vcf\n")
+        vcf@fix <- vcf@fix[mask, ]
+        vcf@gt <- vcf@gt[mask, ]
+        vcfR::write.vcf(vcf, out.file)
+    } else {
+        display(0, "All sites okay; copying original vcf file\n")
+        vcfR::write.vcf(vcf, out.file)
+    }
+
+
+    display(0, paste("Summary:", sum(!mask),
+                     "of", length(mask), "sites removed\n"))
+
+
+    display(0, "LaByRInth filtering completed in ", total.timer(), "\n")
+    invisible(vcf)
+}
+
+
 ##' Parental imputation
 ##'
 ##' Imputes both of the parents by maximizing liklihood of data across
@@ -416,142 +552,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 
     display(0, "LaByRInth progeny imputation completed in ", total.timer(), "\n")
     invisible(vcf) ## implicit return
-}
-
-
-##' Remove bad data prior to imputing
-##'
-##' Remove all sites that are not biallelic and possibly sites which are not
-##' homozygous within and polymorphic between.
-##'
-##' @param vcf File path or vcfR object to impute.
-##' @param out.file File path of output file.
-##' @param parents Character vector with names of the two parents.
-##' @param require.hom.poly Logical indicating if the sites that are kept are
-##'        required to by homozygous within and polymorphic between (i.e. should
-##'        the parents be homozygous for different alleles at every kept site
-##'        according to the genotype (gt) field in the vcf). The implementation
-##'        of LB-Impute that LaByRInth is based on required this, but this
-##'        version of LaByRInth does not. This functionality is mostly included
-##'        for legacy purposes and should generally be set to false.
-##' @return A vcfR object with both all sites removed that don't meet the
-##'         specified criteria.
-##' @examples
-##' input <- system.file("extdata",
-##'                      "vcf-files",
-##'                      "original-lakin-fuller-sample.vcf",
-##'                      package = "LaByRInth",
-##'                      mustWork = TRUE)
-##' output <- tempfile(fileext="-filtered.vcf.gz")
-##' print(output)
-##' result <- LabyrinthFilter(
-##'               vcf = input,
-##'               out.file = output,
-##'               parents = c("LAKIN", "FULLER"),
-##'               require.hom.poly = TRUE)
-##' @author Jason Vander Woude
-##' @export
-LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
-
-    ## begin timer
-    total.timer <- new.timer()
-
-
-    ## check classes of arguments
-    if (class(vcf) != "character" && class(vcf) != "vcfR")
-        stop("vcf must be of class chracter or vcfR\n")
-    if (class(parents) != "character")
-        stop("parents must be of class character\n")
-    if (class(out.file) != "character")
-        stop("out.file must be of class character\n")
-    if (class(require.hom.poly) != "logical")
-        stop("require.hom.poly must be of class logical\n")
-
-
-    ## file verification
-    if (file.exists(out.file))
-        stop("Output file already exists; please choose another name\n")
-    if (! verify.file.extension(out.file, ".vcf.gz"))
-        stop("Output file name must end with '.vcf.gz'\n")
-    if (! verify.file.dir.exists(out.file))
-        stop("Directory of the outuput file does not exist; please create it\n")
-
-
-
-    ## load vcf if needed
-    if (inherits(vcf, "character")) {
-        timer <- new.timer()
-        display(0, "Loading vcf")
-        vcf <- vcfR::read.vcfR(vcf, verbose=F)
-        display(1, "Completed in ", timer(), "\n")
-    }
-
-
-    display(0, "Checking if parents are in the vcf\n")
-    if (! all(parents %in% getSAMPLES(vcf))) {
-        text <- "Some or all parents are not in the vcf"
-        if (all(toupper(parents) %in% toupper(getSAMPLES(vcf))))
-            text <- paste0(text, "; try checking the capitalization of the names")
-        stop(text)
-    }
-    display(0, "Checking for sites that are not biallelic")
-    biallelic <- vcfR::is.biallelic(vcf)
-    if (any(!biallelic)) {
-        display(1, "The following sites are not biallelic and will be removed:")
-        chroms <- vcfR::getCHROM(vcf)[which(! biallelic)]
-        positions <- vcfR::getPOS(vcf)[which(! biallelic)]
-        refs <- vcf@fix[! biallelic, "REF"]
-        alts <- vcf@fix[! biallelic, "ALT"]
-        for (i in seq_along(chroms)) {
-            display(2, "CHR:", chroms[i],
-                    "\tPOS:", positions[i],
-                    "\tREF:", refs[i],
-                    "\tALT:", alts[i])
-        }
-    }
-    message("")
-    mask <- biallelic
-
-    if (require.hom.poly) {
-        display(0, "Checking for sites where parents are not ",
-                   "homozygous within and polymorphic between")
-        hom.poly <- parent.hom.and.poly(vcf, parents)
-        if (any(! hom.poly)) {
-            display(1, "The parents are not homozygous within and polymorphic ",
-                       "between at the following sites which will be removed:")
-            chroms <- vcfR::getCHROM(vcf)[! hom.poly]
-            positions <- vcfR::getPOS(vcf)[! hom.poly]
-            gt <- getGT(vcf)[! hom.poly, parents, drop=FALSE]
-            for (i in seq_along(chroms)) {
-                display(2, "CHR:", chroms[i],
-                        "\tPOS:", positions[i],
-                        paste0("\t", parents[1], ":"), gt[i, 1],
-                        paste0("\t", parents[2], ":"), gt[i, 2])
-            }
-        }
-        message("")
-        mask <- mask & hom.poly
-    }
-
-    any.removed <- any(mask==FALSE)
-
-    if (any.removed) {
-        display(0, "Removing sites and saving vcf\n")
-        vcf@fix <- vcf@fix[mask, ]
-        vcf@gt <- vcf@gt[mask, ]
-        vcfR::write.vcf(vcf, out.file)
-    } else {
-        display(0, "All sites okay; copying original vcf file\n")
-        vcfR::write.vcf(vcf, out.file)
-    }
-
-
-    display(0, paste("Summary:", sum(!mask),
-                     "of", length(mask), "sites removed\n"))
-
-
-    display(0, "LaByRInth filtering completed in ", total.timer(), "\n")
-    invisible(vcf)
 }
 
 
