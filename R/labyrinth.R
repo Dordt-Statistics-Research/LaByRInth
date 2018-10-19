@@ -738,11 +738,6 @@ LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
     parental.file    <- paste0(dir, "/parental.rds")
     all.imputed.file <- paste0(dir, "/all-imputed.vcf.gz")
 
-    display(0, "The intermediate files generated will be saved as follows:")
-    display(1, "Filtered population: ", filtered.file)
-    display(1, "Parental imputation: ", parental.file)
-    display(1, "Full imputation: ", all.imputed.file, "\n")
-
     filtered.result <- LabyrinthFilter(
         vcf = vcf,
         out.file = filtered.file,
@@ -775,6 +770,11 @@ LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
         parallel = parallel,
         cores = cores
     )
+
+    display(0, "The intermediate files generated were saved as follows:")
+    display(1, "Filtered population: ", filtered.file)
+    display(1, "Parental imputation: ", parental.file)
+    display(1, "Full imputation: ", all.imputed.file, "\n")
 
     display(0, "LaByRInth full process completed in ", total.timer(), "\n")
     invisible(quality.result) ## implicit return
