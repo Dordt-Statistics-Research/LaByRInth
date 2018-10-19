@@ -24,14 +24,14 @@ truly heterozygous.}
 \item{parallel}{Logical indicating if imputation should be run in parallel
 or serial.}
 
-\item{cores}{Numeric indicating how many subprocesses should be spawned if
+\item{cores}{Numeric indicating how many sub-processes should be spawned if
 running in parallel.}
 }
 \value{
 A vcfR object with parental data replaced by imputation results.
 }
 \description{
-Imputes both of the parents by maximizing liklihood of data across
+Imputes both of the parents by maximizing likelihood of data across
 all progeny at each site.
 }
 \examples{

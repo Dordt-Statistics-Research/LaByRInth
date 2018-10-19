@@ -36,19 +36,19 @@ for legacy purposes and should generally be set to false.}
 \item{parallel}{Logical indicating if imputation should be run in parallel
 or serial.}
 
-\item{cores}{Numeric indicating how many subprocesses should be spawned if
+\item{cores}{Numeric indicating how many sub-processes should be spawned if
 running in parallel.}
 }
 \value{
 A vcfR object with all sites removed that don't meet the filtering
-        critera, both parents and progeny imputed and low probability sites
+        criteria, both parents and progeny imputed and low probability sites
         removed.
 }
 \description{
 Run all four other functions (LabyrinthFilter, LabyrinthImputeParents,
 LabyrinthImputeProgeny, and LabyrinthQualityControl) in sequence and save
 the intermediate files to a temporary directory. Running this function will
-produce equivalent results as running all four functions seperately; the
+produce equivalent results as running all four functions separately; the
 only difference will be where the files are saved. This is provided simply
 for user convenience.
 }

@@ -36,7 +36,7 @@ sites should be left uncalled instead of imputed.}
 \item{parallel}{Logical indicating if imputation should be run in parallel
 or serial.}
 
-\item{cores}{Numeric indicating how many subprocesses should be spawned if
+\item{cores}{Numeric indicating how many sub-processes should be spawned if
 running in parallel.}
 }
 \value{
