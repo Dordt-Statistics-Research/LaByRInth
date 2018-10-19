@@ -40,7 +40,7 @@
     packageStartupMessage("                 R - P A C K A G E   I M P U T A T I O N")
     packageStartupMessage("       __________________________________________________________")
     packageStartupMessage("")
-    packageStartupMessage("                    Copyright 2018 Jason Vander Woude")
+    packageStartupMessage("            Version 3.2.0: Copyright 2018 Jason Vander Woude")
     packageStartupMessage("             Licensed under the Apache License, Version 2.0")
     packageStartupMessage("             github.com/Dordt-Statistics-Research/LaByRInth")
     packageStartupMessage("            Based on LB-Impute and funded by NSF IOS-1238187")
