@@ -1,6 +1,6 @@
 Package: LaByRInth
 Title: Low-coverage Biallelic R-package Imputation
-Version: 3.2.0
+Version: 3.2.1
 Authors@R: person("Jason", "Vander Woude", email = "jasonvwoude@gmail.com", role = c("aut", "cre"))
 Description: LaByRInth is a genetic imputation algorithm based heavily on the LB-Impute algorithm. It is designed to impute the missing sites in a low-coverage biallelic population where the parental genotypes are known and primarily homozygous.
 Depends: R (>= 2.14.0)

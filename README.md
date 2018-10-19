@@ -10,17 +10,23 @@ LaByRInth version 3.x.x includes several significant methodological improvements
 
 # Installation
 
-LaByRInth can be installed directly as an R package on your system by using the `devtools` package to install it from here as shown below:
+LaByRInth can be installed directly as an R package by using the `devtools` package to install it from here as shown below:
 ```r
 ## Install devtools from CRAN if it is not installed already
 if (!require("devtools")) install.packages("devtools")
-## Use devtools to install LaByRInth
+
+## Install latest code
 devtools::install_github('Dordt-Statistics-Research/LaByRInth')
 ```
 It can then be used by running the following command as usual:
 ```r
 ## Attach LaByRInth
 library(LaByRInth)
+```
+To install a specific [release/version](https://github.com/Dordt-Statistics-Research/LaByRInth/releases) of LaByRInth, use the following command after installing devtools from CRAN:
+```r
+## Install version vX.X.X
+devtools::install_github('Dordt-Statistics-Research/LaByRInth@vX.X.X')
 ```
 
 
