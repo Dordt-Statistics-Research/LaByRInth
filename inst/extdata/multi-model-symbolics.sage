@@ -1,4 +1,4 @@
-## Copyright 2017 Jason Vander Woude and Nathan Ryder
+## Copyright 2018 Jason Vander Woude
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
 ## you may not use this file except in compliance with the License.
@@ -227,7 +227,7 @@ def get_from_to_matrix(generation, prog_probs):
 
 
 def parse_common_F1_probs_to_R(generation):
-    print("## Copyright 2017 Jason Vander Woude and Nathan Ryder"                               )
+    print("## Copyright 2018 Jason Vander Woude"                               )
     print("##"                                                                                  )
     print("## Licensed under the Apache License, Version 2.0 (the \"License\");"                )
     print("## you may not use this file except in compliance with the License."                 )
@@ -316,7 +316,7 @@ def parse_common_F1_probs_to_R(generation):
 
 
 def parse_probs_to_R(generation):
-    print("## Copyright 2017 Jason Vander Woude and Nathan Ryder"                               )
+    print("## Copyright 2018 Jason Vander Woude"                                                )
     print("##"                                                                                  )
     print("## Licensed under the Apache License, Version 2.0 (the \"License\");"                )
     print("## you may not use this file except in compliance with the License."                 )

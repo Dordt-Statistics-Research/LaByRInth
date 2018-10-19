@@ -1,4 +1,4 @@
-## Copyright 2017 Jason Vander Woude and Nathan Ryder
+## Copyright 2018 Jason Vander Woude
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
 ## you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@
     packageStartupMessage("                 R - P A C K A G E   I M P U T A T I O N")
     packageStartupMessage("       __________________________________________________________")
     packageStartupMessage("")
-    packageStartupMessage("           Copyright 2017 Jason Vander Woude and Nathan Ryder")
+    packageStartupMessage("                    Copyright 2018 Jason Vander Woude")
     packageStartupMessage("             Licensed under the Apache License, Version 2.0")
     packageStartupMessage("             github.com/Dordt-Statistics-Research/LaByRInth")
     packageStartupMessage("            Based on LB-Impute and funded by NSF IOS-1238187")
