@@ -334,13 +334,41 @@ def _next_probs_helper(progeny_probs):
     return new_probs
 
 
+def breed_probabilistic_taxa(taxon_1_probs, taxon_2_probs):
 
+    r = var("r")
 
+    # set up the probabilities of recombination
+    rs = [1/2 * (1-r),
+          1/2 * r,
+          1/2 * r,
+          1/2 * (1-r)]
 
+    # initiate the next progeny probabilities
+    new_probs = [[0,0,0,0],
+                 [0,0,0,0],
+                 [0,0,0,0],
+                 [0,0,0,0]]
 
+    for taxon_1_h1 in range(4):
+        for taxon_1_h2 in range(4):
+            taxon_1_prob = taxon_1_probs[taxon_1_h1][taxon_1_h2]
 
+            for taxon_2_h1 in range(4):
+                for taxon_2_h2 in range(4):
 
+                    taxon_2_prob = taxon_2_probs[taxon_2_h1][taxon_2_h2]
 
+                    taxon_1_and_2_progeny_probs = breed_parents(
+                        taxon_1_h1, taxon_1_h2, taxon_2_h1, taxon_2_h2)
+
+                    new_probs = add_matrices(
+                        new_probs,
+                        mult_matrix(taxon_1_and_2_progeny_probs,
+                                    taxon_1_prob*taxon_2_prob)
+                    )
+
+    return new_probs
 
 
 def rec_apply(fun, data):
@@ -352,6 +380,19 @@ def rec_apply(fun, data):
     except TypeError:
         return fun(data)
 
+
+def add_arrays(arr_1, arr_2):
+    return map(sum, zip(arr_1, arr_2))
+
+def add_matrices(m_1, m_2):
+    return map(lambda matrices: add_arrays(
+        matrices[0], matrices[1]), zip(m_1, m_2))
+
+def mult_array(arr, const):
+    return map(lambda x: const*x, arr)
+
+def mult_matrix(m, const):
+    return map(lambda arr: mult_array(arr, const), m)
 
 # def verify(generation):
 #     cond = condensed_model_probs(generation)
