@@ -245,62 +245,6 @@ def _next_probs_helper(progeny_probs):
     return new_probs
 
 
-# The from_to_matrix will be such that if the current state is i, the
-# probability of transitioning to state j is from_to_matrix[i][j]
-
-# i and j are not longer binary encodings of homologs, but are each binary
-# encodings of the two alleles at a given site where order of alleles at a given
-# site matters (because the first site is homolog 1 and the second site is
-# homolog 2). i is for the first of the two sites, and j is for the second of
-# the two sites.
-def get_from_to_matrix(generation, prog_probs):
-    # ftmat is from_to_matrix
-    ftmat = [[0,0,0,0],
-             [0,0,0,0],
-             [0,0,0,0],
-             [0,0,0,0]]
-
-    # all cases where the first state is 00
-    prob0 = prog_probs[0][0] + prog_probs[0][1] + prog_probs[1][0] + prog_probs[1][1]
-    if (prob0 == 0):
-        prob0 = 1  # if 0 all terms are 0 so dividing by 1 prevents error
-
-    ftmat[0][0] = prog_probs[0][0] / prob0
-    ftmat[0][1] = prog_probs[0][1] / prob0
-    ftmat[0][2] = prog_probs[1][0] / prob0
-    ftmat[0][3] = prog_probs[1][1] / prob0
-
-
-    prob1 = prog_probs[0][2] + prog_probs[0][3] + prog_probs[1][2] + prog_probs[1][3]
-    if (prob1 == 0):
-        prob1 = 1  # if 0 all terms are 0 so dividing by 1 prevents error
-
-    ftmat[1][0] = prog_probs[0][2] / prob1
-    ftmat[1][1] = prog_probs[0][3] / prob1
-    ftmat[1][2] = prog_probs[1][2] / prob1
-    ftmat[1][3] = prog_probs[1][3] / prob1
-
-
-    prob2 = prog_probs[2][0] + prog_probs[2][1] + prog_probs[3][0] + prog_probs[3][1]
-    if (prob2 == 0):
-        prob2 = 1  # if 0 all terms are 0 so dividing by 1 prevents error
-
-    ftmat[2][0] = prog_probs[2][0] / prob2
-    ftmat[2][1] = prog_probs[2][1] / prob2
-    ftmat[2][2] = prog_probs[3][0] / prob2
-    ftmat[2][3] = prog_probs[3][1] / prob2
-
-
-    prob3 = prog_probs[2][2] + prog_probs[2][3] + prog_probs[3][2] + prog_probs[3][3]
-    if (prob3 == 0):
-        prob3 = 1  # if 0 all terms are 0 so dividing by 1 prevents error
-
-    ftmat[3][0] = prog_probs[2][2] / prob3
-    ftmat[3][1] = prog_probs[2][3] / prob3
-    ftmat[3][2] = prog_probs[3][2] / prob3
-    ftmat[3][3] = prog_probs[3][3] / prob3
-
-    return ftmat
 
 
 def parse_common_F1_probs_to_R(generation):
