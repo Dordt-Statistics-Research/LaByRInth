@@ -32,7 +32,9 @@ def get_progeny_probs(generation):
     # Initial symbolic probabilities in the F1 generation. Symbolics allows
     # setting the F1 progeny probabilities later. While in theory we know what
     # the F1 progeny should look like, it is possible that the two parents are
-    # not truely homozygous within and polymorphic between at all sites
+    # not truely homozygous within and polymorphic between at all sites.
+    # This generates a 4x4 matrix of symbolic probabilities labeled as sij for
+    # row i and column j, where "s" stands for "starting probability".
     probs = [[var("s%d%d" %(i, j)) for j in range(4)] for i in range(4)]
 
     # probs = [[0,   0, 0, 1/2],
@@ -40,7 +42,12 @@ def get_progeny_probs(generation):
     #          [0,   0, 0, 0  ],
     #          [1/2, 0, 0, 0  ]]
 
+    # Execute this loop (generation-1) times, so e.g. if generation=1 then the
+    # loop will not run at all.
     for gen in range(1, generation):
+        # given that we know what a member of gen looks like probabilistically,
+        # we can self it probabilistically to obtain a probabilistic description
+        # of the next generation.
         probs = _next_probs_helper(probs)
 
     return probs
@@ -50,7 +57,8 @@ def breed_parents(p1h1, p1h2, p2h1, p2h2):
     # Set up the symbolic variables. 'ps' is the probability of each of the four
     # gamete types for from parent 1 and 'qs' is the probability of each of the
     # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
-    # identical.
+    # identically the same organism. Note that gamete 1 comes solely from parent
+    # 1 and gamete 2 comes solely from parent 2.
     #    ps[0]: probability that gamete 1 is identical to homolog 1 in parent 1
     #    ps[1]: probability that the first allele of gamete 1 is from homolog 1
     #           in parent 1 and the second allele is from homolog 2 of parent 1
@@ -58,14 +66,50 @@ def breed_parents(p1h1, p1h2, p2h1, p2h2):
     #           in parent 1 and the second allele is from homolog 1 of parent 1
     #    ps[3]: probability that gamete 1 is identical to homolog 2 in parent 1
     #
-    #    qs   : same idea but gamete 2 from parent 2
-    r = var("r")
+    #    qs   : same idea but gamete 2 from parent 2. That is:
+    #
+    #    qs[0]: probability that gamete 2 is identical to homolog 1 in parent 2
+    #    qs[1]: probability that the first allele of gamete 2 is from homolog 1
+    #           in parent 2 and the second allele is from homolog 2 of parent 2
+    #    qs[2]: probability that the first allele of gamete 2 is from homolog 2
+    #           in parent 2 and the second allele is from homolog 1 of parent 2
+    #    qs[3]: probability that gamete 2 is identical to homolog 2 in parent 2
 
-    # set up the probabilities of recombination
-    rs = [1/2 * (1-r),
-          1/2 * r,
-          1/2 * r,
-          1/2 * (1-r)]
+
+    r = var("r")
+    # The previous line instantiates a symbolic variable which applies
+    # symmetrically to both parents because this is a parameter of the
+    # species. An organism has 2 homologous chromosomes and we examine two
+    # markers on this homologous pair.  Each of those two homologous chromosomes
+    # has two sister chromatids. When a cell undergoes meiosis, four gametes
+    # will be produced, and for a fixed gamete, the allele at the first marker
+    # came from one of the four sister chromatids. Call this fixed gamete G and
+    # the corresponding sister chromatid S. The paremeter r represents the
+    # probability that there is some kind of crossover event between the two
+    # markers such that allele at the second marker of gamete G belongs to a
+    # chromatid which is not S or the sister of S. The parameter is specified
+    # this way because if there is a crossover event such that the allele of G
+    # at the second marker belongs to S or the sister of S, the type of allele
+    # in G is the same as if no crossover event had occurred.
+
+
+    # set up the probabilities of recombination. For a fixed organism, a
+    # randomly produced gamete will have a 1/2 probability of having an allele
+    # at the first marker from homolog 1 (either chromatid) and a 1/2
+    # probability of having an allele at the first marker from homolog 2 (either
+    # chromatid). In the array rs below the first two entries together represent
+    # the prior, and the last two elements represent the latter. Then, fixing
+    # one of these events, there is a probability of r that the allele at the
+    # second marker comes from a chromatid of the opposite homolog.
+    #
+    #     Array element:    binary encoding of index (0 means allele is from
+    #                                                 a chromatid of homolog 1
+    #                                                 and 1 means allele is from
+    #                                                 a chromatid of homolog 2)
+    rs = [1/2 * (1-r),      # 00
+          1/2 * r,          # 01
+          1/2 * r,          # 10
+          1/2 * (1-r)]      # 11
 
     # initiate the next progeny probabilities
     progeny_probs = [[0,0,0,0],
@@ -73,8 +117,10 @@ def breed_parents(p1h1, p1h2, p2h1, p2h2):
                      [0,0,0,0],
                      [0,0,0,0]]
 
-    # define possible gametes that can be produced from the progeny
-    # using bitwise selection of the alleles
+    # define possible gametes that can be produced from the progeny using
+    # bitwise selection of the alleles. The code "& 0b01" zeros the first/most
+    # significant bit of the value on the left and similarly the code "& 0b10"
+    # zeros the second/least significant bit of the value on the left.
     p1gametes = [p1h1,                        # associated with ps[0] and qs[0]
                 (p1h1 & 0b10) + (p1h2 & 0b01),# associated with ps[1] and qs[1]
                 (p1h2 & 0b10) + (p1h1 & 0b01),# associated with ps[2] and qs[2]
@@ -88,25 +134,56 @@ def breed_parents(p1h1, p1h2, p2h1, p2h2):
     # for each possible gamete from parent 1
     for i in range(4):
         g1 = p1gametes[i]  # new gamete 1
+
         # for each possible gamete from parent 2
         for j in range(4):
             g2 = p2gametes[j]  # new gamete 2
+
+            # The progeny that would be formed by these gametes would have one
+            # homolog which is identically gamete 1 and the other homolog would
+            # be identicaly gamete 2. However, because we need to consider fixed
+            # homologs in an organism in order to perform the calculations of
+            # this script (in the Hidden Markov Model of LaByRInth where these
+            # computations are used, it is essential to keep track of the two
+            # separate homologs), and it does not make sense to fix the ordering
+            # in the progeny yet, (i.e. in the progeny we could consider gamete
+            # 1 becoming homolog 1 and gamete 2 becoming homolog 2, but we could
+            # also consider gamete 1 becoming homolog 2 and gamete 2 becoming
+            # homolog 1) we apply half of the appropriate probability
+            # symmetrically to both of these possibilities.
             progeny_probs[g1][g2] += rs[i]*rs[j] / 2
             progeny_probs[g2][g1] += rs[i]*rs[j] / 2
 
+    # The return value is a 4x4 matrix of probabilities. The matrix is
+    # indexed by genetic makeup of a potential progeny. More specifically, the
+    # rows and columns are indexed by the genetic composition of a homolog. So
+    # to find the probability that a progeny would have an reference allele at
+    # both markers in the first homolog (represented by 00 which is the binary
+    # representation of 0) and a second homolog with an alternate allele at the
+    # first marker and a reference allele at the second (represented by 10 which
+    # is the binary representation of 2), then use progeny_probs[0][2].
     return progeny_probs
 
 
-# any of the last four arguments should be between 0 and 3 inclusinve where 0b00 is homozygous reference, 0b01 is heterozygous type I, 0b10 is heterozygous type II, and 0b11 is homozygous alternate
+# All of the last four arguments should be between 0 and 3 inclusinve where 0b00
+# (binary of 0) is homozygous reference, 0b01 (binary of 1) is heterozygous type
+# I, 0b10 (binary for 2) is heterozygous type II, and 0b11 (binary for 3) is
+# homozygous alternate. Note that the 0 and 1 in the binary representations now
+# represent reference and alternate alleles for a biallelic marker and DO NOT
+# have anything to do with the genetic makeup of the parents.
 def sub_w_parents(data, p1h1, p1h2, p2h1, p2h2):
     init_progeny_probs = breed_parents(p1h1, p1h2, p2h1, p2h2)
+
+    # create a dictionary with symbolic variable names (sij for i,j in
+    # {0,1,2,3}) indicating each type of progeny for keys, and values indicating
+    # the probability of occurring. The creation of the dictionary is required
+    # in order to do the substitution and expansion of the next line.
     d = {var("s%d%d" %(i, j)): init_progeny_probs[i][j] for j in range(4) for i in range(4)}
 
     return rec_apply(lambda x: x.subs(d).expand(), data)
 
 
 def _next_probs_helper(progeny_probs):
-
     # Set up the symbolic variables. 'ps' is the probability of each of the four
     # gamete types for from parent 1 and 'qs' is the probability of each of the
     # four gamete types from parent 2. When selfing, parent 1 and parent 2 are
@@ -330,6 +407,7 @@ def parse_probs_to_R(generation):
     print("## See the License for the specific language governing permissions and"              )
     print("## limitations under the License."                                                   )
     print(""                                                                                    )
+    print("## _____________________________________________________________________________"    )
     print(""                                                                                    )
     print("## This file is auto-generated by multi-model-symbolics.sage for F" + str(generation))
     print("## generation plants. To generate a similar file for any generation of"              )
@@ -344,7 +422,7 @@ def parse_probs_to_R(generation):
     print(""                                                                                    )
     print(""                                                                                    )
     print("## There is a seperate function for each file because at runtime, only one"          )
-    print("## function will be needed, so there is no need to source to code for all other"     )
+    print("## function will be needed, so there is no need to source the code for all other"    )
     print("## generations"                                                                      )
     print(""                                                                                    )
 
@@ -374,7 +452,7 @@ def parse_probs_to_R(generation):
     site_pair_trans_probs = get_site_pair_trans_probs(generation)
 
     print("site.pair.transition.probs <- list(")
-    last_list = 15  # 16 - 1
+    last_list = 15  # 16 list entries in 0-based indexing
     for marker1 in range(16):
         print("    list(")
         for marker2 in range(16):
@@ -404,6 +482,9 @@ def parse_probs_to_R(generation):
 
 
 def rec_apply(fun, data):
+    # Apply function fun to all non-iterable portions of data. For example, if
+    # data is a matrix (an array of arrays) then fun will be applied to all the
+    # elements of the matrix by recursively moving through the arrays.
     try:
         return [rec_apply(fun, x) for x in data]
     except TypeError:
