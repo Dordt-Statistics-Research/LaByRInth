@@ -1464,8 +1464,13 @@ parent.hom.and.poly <- function(vcf, parents) {
     }
     par.mat <- getGT(vcf)[ , parents]
     apply(par.mat, 1, function(row) {
+        row <- gsub("\\|", "/", row)  # replace '|' with '/'
         (all(row==c("0/0", "1/1")) ||
-         all(row==c("1/1", "0/0")))
+         all(row==c("1/1", "0/0")) ||
+         all(row==c("./.", "0/0")) ||
+         all(row==c("./.", "1/1")) ||
+         all(row==c("0/0", "./.")) ||
+         all(row==c("1/1", "./.")))
     })
 }
 
