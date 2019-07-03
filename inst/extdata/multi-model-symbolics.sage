@@ -543,19 +543,26 @@ def get_generalized_trans_probs(generation):
 
 
 
+def progeny_probs_to_4_state_transition_probs(p):
+    # This is the matrix specifying the transition probabilities used in
+    # LaByRInth. Index i,j of the returned matrix is the probability of
+    # transitioning from state i at a marker to state j at the next marker
+    # where states are specified by the allele type (reference or alternate)
+    # in the first homolog and second homolog. Note that states of the
+    # matrix are not dependent on the genetic makeup of the parents.
+
+    return [
+        # ref,ref      ref,alt      alt,ref      alt,alt
+        [p[0][0],     p[0][1],     p[1][0],     p[1][1]],  # ref,ref
+        [p[0][2],     p[0][3],     p[1][2],     p[1][3]],  # ref,alt
+        [p[2][0],     p[2][1],     p[3][0],     p[3][1]],  # alt,ref
+        [p[2][2],     p[2][3],     p[3][2],     p[3][3]]   # alt,alt
+    ]
+
+
+
 def get_site_pair_trans_probs(generation):
-
-    def prog_probs_to_4_state_transition_probs(p):
-        # from row to column
-        return [
-            #  P1          H1          H2          P2
-            [p[0][0],     p[0][1],     p[1][0],     p[1][1]],
-            [p[0][2],     p[0][3],     p[1][2],     p[1][3]],
-            [p[2][0],     p[2][1],     p[3][0],     p[3][1]],
-            [p[2][2],     p[2][3],     p[3][2],     p[3][3]]
-        ]
-
-    return prog_probs_to_4_state_transition_probs(get_progeny_probs(generation))
+    return progeny_probs_to_4_state_transition_probs(get_progeny_probs(generation))
 
 
 # compute the probability of an odd number of recombination between distant
