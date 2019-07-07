@@ -298,6 +298,7 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
             ## determine which progeny have a called genotype at both markers
             ## and remove those that don't
             valid <- !is.na(numeric.gt.1) & !is.na(numeric.gt.2)
+            num.valid <- sum(valid)
             numeric.gt.1 <- numeric.gt.1[valid]
             numeric.gt.2 <- numeric.gt.2[valid]
 
@@ -332,7 +333,7 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
                 ## actually used, we will want to minimize the visual distance
                 ## between the data points and theory lines, so we minimize the
                 ## sum of absolute values of differences
-                sum(abs(expected.props - props))
+                sum((expected.props - props)^2)
             }
 
             ## DON'T USE THIS NUMERICAL OPTIMIZATION BECAUSE THE FUNCTIONS ARE
@@ -348,8 +349,8 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
             possible.r <- seq(from=0, to=1, by=1/1000)
             objective.vals <- sapply(possible.r, objective.function)
 
-            ## return estimated r value and proportions
-            c(possible.r[which.min(objective.vals)], props)
+            ## return estimated r value and proportions and total number
+            c(possible.r[which.min(objective.vals)], props, num.valid)
         }
 
 
@@ -370,11 +371,12 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
             names(positions) <- markers
             if (length(markers) > 2) {
                 ## estimate r for each adjacent pair of markers
-                r.ests.and.props <-
+                r.ests.and.props.and.n.valid <-
                     matrix(sapply.pairs(markers, estimate.r),
-                           byrow=TRUE, ncol=5)
+                           byrow=TRUE, ncol=6)
 
-                all.props <- r.ests.and.props[ , 2:5]
+                ## skip r estimate and number of valid
+                all.props <- r.ests.and.props.and.n.valid[ , 2:5]
                 colnames(all.props) <- types
 
                 phys.dists <-
@@ -384,7 +386,8 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
                 df1 <- data.frame(marker1=markers[1:(length(markers)-1)],
                                   marker2=markers[2:length(markers)],
                                   phys.dist=phys.dists,
-                                  r=r.ests.and.props[ , 1])
+                                  r=r.ests.and.props.and.n.valid[ , 1],
+                                  n=r.ests.and.props.and.n.valid[ , 6])
                 df2 <- as.data.frame(all.props)
 
                 ## return a data frame for the chromosome
@@ -466,6 +469,7 @@ characteristics.to.ggplot.format <- function(plot.data) {
 
 
 generate.plot <- function(ggplot.data, transition.proportions.generator) {
+    require(ggplot2)
     get.theory.function <- function(type) {
         function(r) {
             sapply(r, function(each) {
@@ -473,13 +477,15 @@ generate.plot <- function(ggplot.data, transition.proportions.generator) {
             })
         }
     }
+    x.max <- 1
     color1 <- "#37474F"
     color2 <- '#CACACA'
-    xlims <- c(0, 1)
+    xlims <- c(0, x.max)
     ylims <- c(0, 1)
     ## gentext <- ifelse(gen==2, "Generation", "Generations")
     thickness <- 0.5
-    ggplot(ggplot.data, aes(x=r, y=proportion, color=type)) + geom_point(size=1.75) +
+    mod.data <- ggplot.data[ggplot.data$r <= x.max, ]
+    ggplot(mod.data, aes(x=r, y=proportion, color=type)) + geom_point(size=1.75) +
         stat_function(aes(color="X -> X"), fun=get.theory.function("X -> X"),
                       xlim=xlims, size=thickness) +
         stat_function(aes(color="X -> !X"),
@@ -495,7 +501,7 @@ generate.plot <- function(ggplot.data, transition.proportions.generator) {
         coord_cartesian(xlim = xlims) +
         coord_cartesian(ylim = ylims) +
         scale_y_continuous(breaks=seq(0, 1, 0.2)) +
-        scale_x_continuous(breaks=seq(0, 1, 0.2)) +
+        scale_x_continuous(breaks=seq(0, x.max, 0.2)) +
         ggtitle(paste0("Transitional Characteristics")) +
         xlab("Recombination Parameter (r)") +
         ylab("Proportion of Population") +
@@ -563,14 +569,99 @@ get.condensed.characeristic.generator <- function(vcf, parents, model) {
 }
 
 
+## return vcf object with data only from specified chromosomes
+filter.vcf.by.chrom <- function(vcf, chroms) {
+
+    ## load vcf if needed
+    if (inherits(vcf, "character")) {
+        timer <- new.timer()
+        display(0, "Loading vcf")
+        vcf <- vcfR::read.vcfR(vcf, verbose=F)
+        display(1, "Completed in ", timer(), "\n")
+    }
+
+    keep <- vcf@fix[ , "CHROM"] %in% chroms
+
+    fix <- vcf@fix[keep, ]
+    fix[ , "INFO"] <- "none" # remove info which may have dealt with ref/alt
+    vcf@fix <- fix
+    vcf@gt <- vcf@gt[keep, ]
+    vcf@meta <- c("##fileformat=VCFv4.2",
+                  paste0("##filedate=",format(Sys.Date(),"%Y%m%d")),
+                  paste0("##source=LaByRInth_version_", version()))
+
+    vcf
+}
+
+
 
 do.it <- function() {
     parents <- c("LAKIN", "FULLER")
     hom.poly.vcf <- vcfR::read.vcfR("~/Desktop/LF-big-hom-poly.vcf.gz")
     nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(hom.poly.vcf, parents)
-    characteristics <-
+    characteristics.sq <-
         calculate.transitional.characteristics(nice.vcf, parents, "F5")
-    saveRDS(characteristics, "~/Desktop/LF-characteristics.rds")
-    gg.data <- characteristics.to.ggplot.format(characteristics)
+    saveRDS(characteristics.sq, "~/Desktop/LF-characteristics-sq.rds")
+    gg.data <- characteristics.to.ggplot.format(characteristics.sq)
     generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F5"))
+
+
+    parents <- c("RsaI_B73", "RsaI_CG")
+    vcf <- vcfR::read.vcfR("~/Desktop/RsaI-filtered.vcf.gz")
+    hom.poly.vcf <- LabyrinthFilter(vcf, "~/Desktop/RsaI-hom-poly.vcf.gz",
+                                    parents, require.hom.poly=TRUE)
+    nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(hom.poly.vcf, parents)
+    RsaI.characteristics <-
+        calculate.transitional.characteristics(nice.vcf, parents, "F2")
+    saveRDS(RsaI.characteristics, "~/Desktop/RsaI-characteristics.rds")
+    gg.data <- characteristics.to.ggplot.format(RsaI.characteristics)
+    generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F2"))
+
+
+    HincII.parents <- c("HincII_B73", "HincII_CG")
+    HincII.vcf <- vcfR::read.vcfR("~/Desktop/HincII-masked_1.vcf.gz")
+    HincII.hom.poly.vcf <- LabyrinthFilter(HincII.vcf, "~/Desktop/HincII-hom-poly.vcf.gz",
+                                           HincII.parents, require.hom.poly=TRUE)
+    HincII.hom.poly.vcf <- vcfR::read.vcfR("~/Desktop/HincII-hom-poly.vcf.gz")
+    HincII.nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(HincII.hom.poly.vcf, HincII.parents)
+    HincII.characteristics.sq <-
+        calculate.transitional.characteristics(HincII.nice.vcf, HincII.parents, "F2")
+    saveRDS(HincII.characteristics.sq, "~/Desktop/HincII-characteristics-sq.rds")
+    HincII.characteristics.sq <- readRDS("~/Desktop/HincII-characteristics-sq.rds")
+    HincII.gg.data <- characteristics.to.ggplot.format(HincII.characteristics.sq)
+    generate.plot(HincII.gg.data, get.condensed.characeristic.generator(HincII.nice.vcf, HincII.parents, "F2"))
+
+
+
+    
+
+
+    LF.parents <- c("LAKIN", "FULLER")
+    LF.vcf <- vcfR::read.vcfR("~/Desktop/LF-masked_1-chr_1A.vcf.gz")
+    LF.hom.poly.vcf <- LabyrinthFilter(LF.vcf, "~/Desktop/LF-masked_1-chr_1A-hom-poly.vcf.gz",
+                                       LF.parents, require.hom.poly=TRUE)
+    LF.nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(LF.hom.poly.vcf, parents)
+    LF.characteristics <-
+        calculate.transitional.characteristics(LF.nice.vcf, LF.parents, "F5")
+
+    LabyrinthImputeParents(vcf="~/Desktop/LF-masked_1-chr_1A.vcf.gz", out.file="~/Desktop/LF-parents-chr_1A.rds", parents=c("LAKIN", "FULLER"), generation=5)
+    parental <- readRDS("~/Desktop/LF-parents-chr_1A.rds")
+    markers <- parental$marker.names
+    hom.poly.markers <- parental$parent.models[["1A"]]$model %in% c(4,13)
+    ## ensure both surrounding markers were hom poly
+    valid.transition.regions <- sapply.pairs(hom.poly.markers, function(m1, m2) {m1 && m2})
+    LF.sub.chraractersitics <- LF.characteristics[valid.transition.regions, ]
+    LF.sub.chraractersitics$r <- parental$parent.models[["1A"]]$recombs[valid.transition.regions, ]
+
+
+
+    saveRDS(characteristics.sq, "~/Desktop/LF-characteristics-sq.rds")
+    gg.data <- characteristics.to.ggplot.format(characteristics.sq)
+    generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F5"))
+    non.hom.poly.sites.in.parents <- !(parental$parent.models[["1A"]]$model %in% c(4,13))
+    bad.marker.indices <- which(non.hom.poly.sites.in.parents)
+    bad.pair.indices <- c(bad.marker.indices, bad.marker.indices-1)
+    bad.marker.indices <- bad.marker.indices[bad.marker.indices >= 1 & bad.marker.indices <= length(markers) - 1]
+    
+
 }
