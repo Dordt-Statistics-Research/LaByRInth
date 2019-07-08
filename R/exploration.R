@@ -96,7 +96,7 @@ hom.poly.vcf.to.common.ref.alt.parents <- function(vcf, parents) {
 
 
 
-calculate.transitional.characteristics <- function(vcf, parents, model) {
+calculate.transitional.characteristics.old <- function(vcf, parents, model) {
     if (model %in% c("F2","F3","F4","F5","F6","F7")) {
         tryCatch({
             trans.file <- system.file("extdata",
@@ -407,11 +407,22 @@ calculate.transitional.characteristics <- function(vcf, parents, model) {
 }
 
 
-## rows <- clean.vcf@fix[ , "CHROM"] %in% c("1A","1B","1C","1D"); small.vcf@fix <- clean.vcf@fix[rows, ]; small.vcf@gt <- clean.vcf@gt[rows, ]
-
-
-characteristics.to.ggplot.format <- function(plot.data) {
+characteristics.to.ggplot.format <- function(plot.data, total=TRUE) {
     trans.types <- c("X -> X", "X -> !X", "het -> hom", "het -> het")
+    if (total) {
+        min.count <- 10                 # must be strictly greater than 0
+        counts <- apply(plot.data[ , trans.types], 1, sum)
+
+        if (any(counts < min.count)) {
+            remove <- which(counts < min.count)
+            plot.data <- plot.data[-remove, ]
+            counts <- counts[counts >= min.count]
+        }
+
+        matrix.counts <- matrix(rep(counts, length(trans.types)), byrow=FALSE, ncol=length(trans.types))
+        plot.data[ , trans.types] <- plot.data[ , trans.types]/matrix.counts
+    }
+
     data.frames <- lapply(trans.types, function(type) {
         inner.df <- plot.data
         inner.df[ , "proportion"] <- inner.df[ , type]
@@ -525,7 +536,7 @@ generate.plot <- function(ggplot.data, transition.proportions.generator) {
 
 
 
-get.condensed.characeristic.generator <- function(vcf, parents, model) {
+get.condensed.characeristic.generator.old <- function(vcf, parents, model) {
     if (model %in% c("F2","F3","F4","F5","F6","F7")) {
         tryCatch({
             trans.file <- system.file("extdata",
@@ -602,8 +613,9 @@ do.it <- function() {
     characteristics.sq <-
         calculate.transitional.characteristics(nice.vcf, parents, "F5")
     saveRDS(characteristics.sq, "~/Desktop/LF-characteristics-sq.rds")
+    characteristics.sq <- readRDS("~/Desktop/LF-characteristics-sq.rds")
     gg.data <- characteristics.to.ggplot.format(characteristics.sq)
-    generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F5"))
+    generate.plot(gg.data, get.condensed.characeristic.generator(parental))
 
 
     parents <- c("RsaI_B73", "RsaI_CG")
@@ -642,26 +654,448 @@ do.it <- function() {
                                        LF.parents, require.hom.poly=TRUE)
     LF.nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(LF.hom.poly.vcf, parents)
     LF.characteristics <-
-        calculate.transitional.characteristics(LF.nice.vcf, LF.parents, "F5")
-
-    LabyrinthImputeParents(vcf="~/Desktop/LF-masked_1-chr_1A.vcf.gz", out.file="~/Desktop/LF-parents-chr_1A.rds", parents=c("LAKIN", "FULLER"), generation=5)
-    parental <- readRDS("~/Desktop/LF-parents-chr_1A.rds")
-    markers <- parental$marker.names
-    hom.poly.markers <- parental$parent.models[["1A"]]$model %in% c(4,13)
-    ## ensure both surrounding markers were hom poly
-    valid.transition.regions <- sapply.pairs(hom.poly.markers, function(m1, m2) {m1 && m2})
-    LF.sub.chraractersitics <- LF.characteristics[valid.transition.regions, ]
-    LF.sub.chraractersitics$r <- parental$parent.models[["1A"]]$recombs[valid.transition.regions, ]
+        calculate.transitional.characteristics.old(LF.nice.vcf, LF.parents, "F5")
+    LF.gg.data <- characteristics.to.ggplot.format(LF.characteristics, FALSE)
+    generate.plot(LF.gg.data, get.condensed.characeristic.generator.old(nice.vcf, parents, "F5"))
 
 
 
-    saveRDS(characteristics.sq, "~/Desktop/LF-characteristics-sq.rds")
-    gg.data <- characteristics.to.ggplot.format(characteristics.sq)
-    generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F5"))
-    non.hom.poly.sites.in.parents <- !(parental$parent.models[["1A"]]$model %in% c(4,13))
-    bad.marker.indices <- which(non.hom.poly.sites.in.parents)
-    bad.pair.indices <- c(bad.marker.indices, bad.marker.indices-1)
-    bad.marker.indices <- bad.marker.indices[bad.marker.indices >= 1 & bad.marker.indices <= length(markers) - 1]
+    tc <- calculate.transitional.characteristics(parental)
+    gg.tc <- characteristics.to.ggplot.format(tc)
+    generate.plot(gg.tc, get.condensed.characeristic.generator(parental))
+
+
+    ## LabyrinthImputeParents(vcf="~/Desktop/LF-masked_1-chr_1A.vcf.gz", out.file="~/Desktop/LF-parents-chr_1A.rds", parents=c("LAKIN", "FULLER"), generation=5)
+    ## parental <- readRDS("~/Desktop/LF-parents-chr_1A.rds")
+    ## markers <- parental$marker.names
+    ## hom.poly.markers <- parental$parent.models[["1A"]]$model %in% c(4,13)
+    ## ## ensure both surrounding markers were hom poly
+    ## valid.transition.regions <- sapply.pairs(hom.poly.markers, function(m1, m2) {m1 && m2})
+    ## LF.sub.chraractersitics <- LF.characteristics[valid.transition.regions, ]
+    ## LF.sub.chraractersitics$r <- parental$parent.models[["1A"]]$recombs[valid.transition.regions, ]
+
+
+
+    ## LF.parents <- c("LAKIN", "FULLER")
+    ## LF.vcf <- vcfR::read.vcfR("~/Desktop/LF-masked_1-chr_1A2A.vcf.gz")
+    ## LF.hom.poly.vcf <- LabyrinthFilter(LF.vcf, "~/Desktop/LF-masked_1-chr_1A2A-hom-poly.vcf.gz",
+    ##                                    LF.parents, require.hom.poly=TRUE)
+    ## LF.nice.vcf <- hom.poly.vcf.to.common.ref.alt.parents(LF.hom.poly.vcf, parents)
+    ## LF.characteristics <-
+    ##     calculate.transitional.characteristics(LF.nice.vcf, LF.parents, "F5")
+
+
+
+    ## saveRDS(characteristics.sq, "~/Desktop/LF-characteristics-sq.rds")
+    ## gg.data <- characteristics.to.ggplot.format(characteristics.sq)
+    ## generate.plot(gg.data, get.condensed.characeristic.generator(nice.vcf, parents, "F5"))
+    ## non.hom.poly.sites.in.parents <- !(parental$parent.models[["1A"]]$model %in% c(4,13))
+    ## bad.marker.indices <- which(non.hom.poly.sites.in.parents)
+    ## bad.pair.indices <- c(bad.marker.indices, bad.marker.indices-1)
+    ## bad.marker.indices <- bad.marker.indices[bad.marker.indices >= 1 & bad.marker.indices <= length(markers) - 1]
     
 
+}
+
+
+
+
+
+
+
+
+calculate.transitional.characteristics <- function(parental) {
+
+    get.chrom.characteristics <- function(chrom.name) {
+
+        combine.recomb.ests <- function(i, j) {
+            last.r.index <- j-1 # last recomb is just before marker j
+            index <- i
+            combined.r <- 0             # initial value
+            while (index <= last.r.index) {
+                current.r <- old.r[index]
+                combined.r <- current.r*(1-combined.r) + (1-current.r)*combined.r
+                index <- index + 1
+            }
+            combined.r                  # return value
+        }
+        rows.of.interest <- row.associated.chroms == chrom.name
+        parents.model <- parental$parent.models[[chrom.name]]
+        markers.to.keep <- parents.model$model %in% c(4, 13)
+        old.r <- parents.model$recomb
+        new.r <- rep(0, times=sum(markers.to.keep)-1)
+        i <- j <- min(which(markers.to.keep)) # first marker kept
+        r.index <- 1
+        while(r.index <= length(new.r)) {
+            j <- j+1              # move one location right of index i
+            while(markers.to.keep[j]==FALSE) {
+                j <- j+1    # keep moving right until marker j is kept
+                ## if (j > sum(markers.to.keep)) { # j too big
+                ##     break
+                ## }
+            }
+            new.r[r.index] <- combine.recomb.ests(i, j)
+            r.index <- r.index + 1
+            i <- j                      # move index i up to j
+        }
+
+        new.marker.names <- (parental$marker.names[rows.of.interest])[markers.to.keep]
+        new.marker.models <- parents.model[markers.to.keep]
+        first.marker.names <- new.marker.names[1:(length(new.marker.names)-1)]
+        first.marker.models <- new.marker.models[1:(length(new.marker.names)-1)]
+        second.marker.names <- new.marker.names[2:length(new.marker.names)]
+        second.marker.models <- new.marker.models[2:length(new.marker.names)]
+
+
+        df1 <- data.frame(marker1=first.marker.names,
+                          marker2=second.marker.names,
+                          r=new.r)
+
+        parent.indices <- getSAMPLES(parental$vcf) %in% parental$parents
+        ad.array <- get.ad.array(parental$vcf)
+        ad.array <- ad.array[rows.of.interest, !parent.indices, ][markers.to.keep, , ]
+
+        ## swap necessary reads so that the first layer of the third dimension
+        ## is how many reads from the first parent and the second layer of the
+        ## third dimension is the second parent
+        for (i in seq_along(new.marker.names)) {
+            model <- (parents.model$model[markers.to.keep])[i]
+            if (!(model %in% c(4, 13))) {
+                print(c(i, model))
+                stop("Model is not homozygous and polymorphic")
+            }
+            ## Index 13 is the equivalent of 12 in 0-based indexing which is
+            ## 1100 in binary which means the first parent is homozygous
+            ## alternate and the second is homozygous reference.
+            if (model == 13) {
+                temp <- ad.array[i, , 1]
+                ad.array[i, , 1] <- ad.array[i, , 2]
+                ad.array[i, , 2] <- temp
+            }
+        }
+
+        get.types <- function(i) {
+            gt.data.1 <- ad.array[i,   , ]
+            gt.data.2 <- ad.array[i+1, , ]
+            get.unweighted.counts(gt.data.1, gt.data.2,
+                                gen=parental$generation,
+                                rerr=parental$read.err)
+        }
+
+        df2 <- t(sapply(seq_along(first.marker.names), get.types))
+
+
+        return(cbind(df1, df2))
+    }
+
+    condensed.generator <- get.condensed.characeristic.generator(parental)
+
+    unique.chroms <- parental$u.chroms
+    row.associated.chroms <- parental$snp.chroms # chrom associated with each row
+
+    chrom.char.data.frames <- lapply(unique.chroms, get.chrom.characteristics)
+    result <- do.call(rbind, chrom.char.data.frames) # returned after defining functions
+
+    return(result)
+}
+
+
+get.type.names <- function() {c("X -> X", "X -> !X", "het -> hom", "het -> het")}
+
+
+get.condensed.characeristic.generator <- function(parental) {
+    model <- paste0("F", parental$generation)
+    if (model %in% c("F2","F3","F4","F5","F6","F7")) {
+        tryCatch({
+            trans.file <- system.file("extdata",
+                                      "transition-probs",
+                                      paste0(model, ".R"),
+                                      package = "LaByRInth",
+                                      mustWork = TRUE)
+            source(trans.file)
+        }, error = function(e) {
+            stop(paste("Invalid model"))
+        })
+
+        ## site.pair.transition.probs is loaded when trans.file is sourced
+        ## above. It is a list containing 16 entries. Each entry is itself a
+        ## list containing 16 functions. Each of these 16*16=256 functions takes
+        ## a single parameter r. The previous line instantiates a symbolic
+        ## variable which applies symmetrically to both parents because this is
+        ## a parameter of the species. An organism has 2 homologous chromosomes
+        ## and we examine two markers on this homologous pair.  Each of those
+        ## two homologous chromosomes has two sister chromatids. When a cell
+        ## undergoes meiosis, four gametes will be produced, and for a fixed
+        ## gamete, the allele at the first marker came from one of the four
+        ## sister chromatids. Call this fixed gamete G and the corresponding
+        ## sister chromatid S. The paremeter r represents the probability that
+        ## there is some kind of crossover event between the two markers such
+        ## that allele at the second marker of gamete G belongs to a chromatid
+        ## which is not S or the sister of S. The parameter is specified this
+        ## way because if there is a crossover event such that the allele of G
+        ## at the second marker belongs to S or the sister of S, the type of
+        ## allele in G is the same as if no crossover event had occurred.
+        ##
+        ## This 2D list can be used to determine what the transition
+        ## probabilites are between two markers if the value r is known and the
+        ## allele type (reference or alternate) of both homologs of both parents
+        ## are known at both markers. The first index of the 2D list corresponds
+        ## to marker 1 and the second index corresponds to marker 2. Indexing
+        ## should be viewed in terms of binary representations. Specifically,
+        ## the binary number obtained where the four bits are as follows
+        ##
+        ##     Most significant/left bit   (bit 3): allele of parent 1 homolog 1
+        ##                                 (bit 2): allele of parent 1 homolog 2
+        ##                                 (bit 1): allele of parent 2 homolog 1
+        ##     least significant/right bit (bit 0): allele of parent 2 homolog 2
+        ##
+        ## would correspond to the the first or second index (in a 0-based
+        ## indexing system) of the 2D list when the alleles are for the first or
+        ## second marker respectively. The allele should be 0 if it is the
+        ## reference allele and should be 1 if it is the alternate
+        ## allele. Because R uses a 1-based indexing system, it is necessary to
+        ## add 1 to the above number to obtain the correct index.
+        ## The file inst/extdata/multi-model-symbolics.sage should be viewed for
+        ## more details.
+        ##
+        ## Because the vcf file has been modified such that parent 1 is always
+        ## homozygous reference and parent 2 is always homozygous alternate,
+        ## then the appropriate binary value is 0011 for both markers. 0011 is
+        ## binary for 3, so we use index 4 in both dimensions of this matrix
+        ## because of the addition of 1 to compensate for the indexing
+        ## type. Thus, transition.prob.matrix.generator will be a function that
+        ## takes a single parameter r and returns a transition matrix. The
+        ## returned matrix (call it T) is also indexed by binary
+        ## representations.
+        ##
+        ## To use the transition matrix T, for a taxa/progeny/member of the
+        ## population, encode a possible genetic state of the first marker as a
+        ## binary representation of a number, i, as follows:
+        ##
+        ##     Most significant/left bit   (bit 1): allele of progeny homolog 1
+        ##     Least significant/right bit (bit 0): allele of progeny homolog 2
+        ##
+        ## Encode the genetic state of a possible second marker as the number j
+        ## in the same way. Then in a 0-based indexing system, row i and column
+        ## j of T is the probability that the chosen progeny would be produced
+        ## by the speficied parents (those used to index into the 2D
+        ## list). Because R uses 1-based indexing the probability is actually
+        ## obtained using row i+1 and column j+1. This probability will be
+        ## written as T[i+1,j+1]. To obtain a transition probability to use in a
+        ## hidden Markov Model (HMM), this probability should be conditioned on
+        ## the first marker of the progeny having a genetic state as defined by
+        ## the number i. That is, the probability T[i+1,j+1] must be divided by
+        ## the sum of row i+1 of T (this sum is T[i+1,1] + T[i+1,2] + T[i+1,3] +
+        ## T[i+1,4]).
+        transition.prob.matrix.generator <- site.pair.transition.probs[[4]][[4]]
+
+
+        ## A useful feature of these matrices is that while conditioning on a
+        ## row gives transition probabilities, if no conditioning is used
+        ## (i.e. the matrix is used as is) then the matrix encodes the
+        ## probabilities of each possible marker pair genetic makeup. Thus in
+        ## any population, and for any i,j if a pair of markers has an
+        ## associated transition parameter of r, then the value T(r)[i,j] is the
+        ## expected proportion of the population in which the first marker in the
+        ## pair has configuration i and the second marker has configuration
+        ## j. In a large population, the expected value can be approximated by
+        ## the proportion of the population having such configurations. This
+        ## idea works in reverse as well meaning that by first checking for each
+        ## configuration pair <i,j> the proportion of the population matching that
+        ## configuration, the value of r can be empirically estimated by
+        ## choosing the value r such that the matrix T(r) most closely matches
+        ## what is observed in the population. The matrix indices can be
+        ## summarized as follows where ref is reference, alt is alternate, hom
+        ## is homozygous, het t.1 is heterozygous type 1 (homolog 1 is reference
+        ## and homolog 2 is alternate), and het t.2 is heterozygous type 2
+        ## (homolog 1 is alternate and homolog 2 is reference).
+        ##
+        ##            | marker1 -> marker2
+        ##    --------+--------------------
+        ##     T[1,1] | hom ref -> hom ref
+        ##     T[4,4] | hom alt -> hom alt
+        ##    --------+--------------------
+        ##     T[1,4] | hom ref -> hom alt
+        ##     T[4,1] | hom alt -> hom ref
+        ##    --------+--------------------
+        ##     T[2,1] | het t.1 -> hom ref
+        ##     T[3,1] | het t.2 -> hom ref
+        ##     T[1,2] | hom ref -> het t.1
+        ##     T[1,3] | hom ref -> het t.2
+        ##     T[4,2] | hom alt -> het t.1
+        ##     T[4,3] | hom alt -> het t.2
+        ##     T[2,3] | het t.1 -> hom alt
+        ##     T[2,4] | het t.2 -> hom alt
+        ##    --------+--------------------
+        ##     T[2,2] | het t.1 -> het t.1
+        ##     T[3,3] | het t.2 -> het t.2
+        ##    --------+--------------------
+        ##     T[2,3] | het t.1 -> het t.2
+        ##     T[3,2] | het t.2 -> het t.1
+        ##
+        ## Further, it turns out that when both parents are homozygous for
+        ## opposite alleles at adjacent markers, and the progeny come from an
+        ## F{n} population where n is a positive integer, then the following
+        ## hold for the matrix T returned by transition.prob.matrix.generator
+        ## regardless of the parameter r. The following equations are in 1-based
+        ## indexing.
+        ##
+        ## T[1,1] = T[4,4]
+        ## T[1,4] = T[4,1]
+        ## T[2,1] = T[3,1] = T[1,2] = T[1,3] = T[4,2] = T[4,3] = T[2,4] = T[3,4]
+        ## T[2,2] = T[3,3]
+        ## T[3,2] = T[2,3]
+        ##
+        ## Thus, rather than categorizing each progeny into one of 16 categories
+        ## they can be placed in one of 5 categories which should make the
+        ## proportions more accurately reflect the expected values because the
+        ## sample size will be larger. Further, because configurations <2,2> and
+        ## <2,3> and <3,2> and <3,3> all represent progeny that are heterozygous
+        ## at both markers, it is not possible to distinguish between them when
+        ## looking at reads (because it is unknown which homolog a read came
+        ## from), so these states will be combined as well. Thus each progeny in
+        ## the population (that has reads) will be counted toward exactly one of the
+        ## following 4 categories:
+        ##
+        ##         Category     |         Expected Proportion
+        ##    ------------------|------------------------------------
+        ##     hom X -> hom X   |T[1,1] + T[4,4]
+        ##    ------------------|------------------------------------
+        ##     hom X -> hom !X  |T[1,4] + T[4,1]
+        ##    ------------------|------------------------------------
+        ##     het -> hom OR    |T[2,1] + T[3,1] + T[1,2] + T[1,3]
+        ##     hom -> het       |+ T[4,2] + T[4,3] + T[2,4] + T[3,4]
+        ##    ------------------|------------------------------------
+        ##     het -> het       |T[2,2] + T[3,3] + T[3,2] + T[2,3]
+        ##        ## site.pair.transition.probs list sourced in call to `source(trans.file)`
+
+        condensed.trans.characteristics.generator <- function(r) {
+            T <- transition.prob.matrix.generator(r)
+            return.val <- c(T[1,1] + T[4,4],
+                            T[1,4] + T[4,1],
+                            T[2,1] + T[3,1] + T[1,2] + T[1,3]
+                            + T[4,2] + T[4,3] + T[2,4] + T[3,4],
+                            T[2,2] + T[3,3] + T[3,2] + T[2,3])
+
+            names(return.val) <- get.type.names()
+            return.val
+        }
+        condensed.trans.characteristics.generator # return value
+    } else {
+        stop("Invalid model")
+    }
+}
+
+
+
+## a and b should be matrices with an arbitrary but equal number of rows and
+## two columns which represen the number of parent 1 allele reads and the number of
+## parent 2 allele reads at each site
+get.weighted.counts <- function(a, b, gen, rerr) {
+
+    ## probability of each of 3 genetic states given the reads
+    perc.het <- 0.5 ^ (gen - 1)
+    perc.hom <- 1 - perc.het
+    state.probs.3 <- function(ad) {
+        p1.reads <- ad[1]
+        p2.reads <- ad[2]
+        ## total.reads <- p1.reads + p2.reads
+        ## total.choose.p1 <- choose(total.reads, p1.reads) # = choose(total.reads, p2.reads)
+
+        p.p1  <- perc.hom/2 * rerr^p2.reads * (1-rerr)^p1.reads
+        p.p2  <- perc.hom/2 * rerr^p1.reads * (1-rerr)^p2.reads
+        p.het <- perc.het   * 0.5^(p1.reads + p2.reads)
+
+        probs <- c(p.p1, p.het, p.p2)
+        probs / sum(probs)
+    }
+
+    valid <- mapply(function(quant.a, quant.b) {
+        quant.a != 0 && quant.b != 0
+    }, apply(a, 1, sum), apply(b, 1, sum))
+
+    valid.indices <- which(valid)
+
+    mat.probs <- lapply(valid.indices, function(i) {
+        col.vec <- matrix(state.probs.3(a[i, ]), ncol=1)
+        row.vec <- matrix(state.probs.3(b[i, ]), nrow=1)
+        col.vec %*% row.vec
+    })
+
+    bound <- do.call(abind3, mat.probs)
+    probs <- apply(bound, 1:2, sum)
+    counts <- c(
+        "X -> X"     = probs[1,1] + probs[3,3],
+        "X -> !X"    = probs[1,3] + probs[3,1],
+        "het -> hom" = probs[1,2] + probs[2,1] + probs[2,3] + probs[3,2],
+        "het -> het" = probs[2,2]
+    )
+    counts
+}
+
+
+
+## a and b should be matrices with an arbitrary but equal number of rows and
+## two columns which represen the number of parent 1 allele reads and the number of
+## parent 2 allele reads at each site
+get.unweighted.counts <- function(a, b, gen, rerr) {
+    min.reads <- 1
+
+    ## probability of each of 3 genetic states given the reads
+    perc.het <- 0.5 ^ (gen - 1)
+    perc.hom <- 1 - perc.het
+    state.probs.3 <- function(ad) {
+        p1.reads <- ad[1]
+        p2.reads <- ad[2]
+        ## total.reads <- p1.reads + p2.reads
+        ## total.choose.p1 <- choose(total.reads, p1.reads) # = choose(total.reads, p2.reads)
+
+        p.p1  <- p2.reads==0 & p1.reads!=0
+        p.p2  <- p1.reads==0 & p2.reads!=0
+        p.het <- p1.reads!=0 & p2.reads!=0
+
+        probs <- c(p.p1, p.het, p.p2)
+        probs / sum(probs)
+    }
+
+    valid <- mapply(function(quant.a, quant.b) {
+        quant.a >= min.reads && quant.b >= min.reads
+    }, apply(a, 1, sum), apply(b, 1, sum))
+
+    valid.indices <- which(valid)
+
+    if (length(valid.indices) > 0) {
+
+        mat.probs <- lapply(valid.indices, function(i) {
+            col.vec <- matrix(state.probs.3(a[i, ]), ncol=1)
+            row.vec <- matrix(state.probs.3(b[i, ]), nrow=1)
+            col.vec %*% row.vec
+        })
+
+        bound <- do.call(abind3, mat.probs)
+        probs <- apply(bound, 1:2, sum)
+        counts <- c(
+            "X -> X"     = probs[1,1] + probs[3,3],
+            "X -> !X"    = probs[1,3] + probs[3,1],
+            "het -> hom" = probs[1,2] + probs[2,1] + probs[2,3] + probs[3,2],
+            "het -> het" = probs[2,2]
+        )
+        counts
+    } else {
+        counts <- c(
+            "X -> X"     = 0,
+            "X -> !X"    = 0,
+            "het -> hom" = 0,
+            "het -> het" = 0
+        )
+        counts
+    }
+}
+
+
+
+do.it <- function() {
+    tc <- calculate.transitional.characteristics(parental)
+    gg.tc <- characteristics.to.ggplot.format(tc)
+    generate.plot(gg.tc, get.condensed.characeristic.generator(parental))
 }
