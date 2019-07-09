@@ -1,4 +1,4 @@
-Package: LaByRInth
+Package: labyrinth
 Title: Low-coverage Biallelic R-package Imputation
 Version: 3.2.1
 Authors@R: person("Jason", "Vander Woude", email = "jasonvwoude@gmail.com", role = c("aut", "cre"))
