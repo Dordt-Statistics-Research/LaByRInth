@@ -25,35 +25,55 @@
 ##
 
 
-datasets <- c("Lakin-Fuller", "HincII", "RsaI", "IBM-RIL")
+get.datasets <- function() {c("Lakin-Fuller", "HincII", "RsaI", "IBM-RIL")}
 
-all.parents <- list("Lakin-Fuller"  = c("LAKIN",      "FULLER"),
-                    "HincII"        = c("HincII_B73", "HincII_CG"),
-                    "RsaI"          = c("RsaI_B73",   "RsaI_CG"),
-                    "IBM-RIL"       = c("B73",        "M17"))
-names(all.parents) <- datasets
+get.all.parents <- function() {
+    list("Lakin-Fuller"  = c("LAKIN",      "FULLER"),
+         "HincII"        = c("HincII_B73", "HincII_CG"),
+         "RsaI"          = c("RsaI_B73",   "RsaI_CG"),
+         "IBM-RIL"       = c("B73",        "M17"))
+}
 
 ## I don't actually know what generation IBM-RIL is, so I'm just saying 7
-generations <- c(5, 2, 2, 7); names(generations) <- datasets
+get.generations <- function() {
+    generations <- c(5, 2, 2, 7)
+    names(generations) <- get.datasets()
+    generations
+}
 
 ## minimum call depths found with trial and error to get ~1% called sites masked
-min.mask.depths <- c(7, 90, 12, 11); names(min.mask.depths) <- datasets
+get.min.mask.depths <- function() {
+    min.mask.depths <- c(7, 90, 12, 11)
+    names(min.mask.depths) <- get.datasets()
+    min.mask.depths
+}
 
+## directory associated with extra data files for package
+extdata.dir <- function() {system.file("extdata", package = "labyrinth", mustWork = TRUE)}
+
+## directory for imputation result files
+result.dir <- function() {paste0(extdata.dir(), "/publication_results/", package = "labyrinth", mustWork = TRUE)}
 
 original.file <- function(dataset.name) {
-    c("Lakin-Fuller" = "../data/original_files/LakinFuller_GBSv2_20170509.vcf.gz",
-      "HincII"       = "../data/original_files/HincII_ordered.vcf.gz",
-      "RsaI"         = "../data/original_files/RsaI_ordered.vcf.gz",
-      "IBM-RIL"      = "../data/original_files/IBM-RIL_ordered.vcf.gz"
+    file.name <- c("Lakin-Fuller" = "LakinFuller_GBSv2_20170509.vcf.gz",
+                   "HincII"       = "HincII_ordered.vcf.gz",
+                   "RsaI"         = "RsaI_ordered.vcf.gz",
+                   "IBM-RIL"      = "IBM-RIL_ordered.vcf.gz"
       )[dataset.name]
+    paste0(extdata.dir(), "datasets/original_files/", dataset.name)
 }
 
+## for the masked and filtered datasets
 dataset.dir <- function(dataset.name) {
-    paste0("../data/", dataset.name, "/")
+    paste0(extdata.dir(), "datasets/", dataset.name, "/")
 }
 
-imputed.dir <- function(dataset.name) {
-    paste0(dataset.dir(dataset.name), "/LaByRInth/")
+imputed.dir <- function(dataset.name, algorithm) {
+    if (algorithm %in% c("LaByRInth", "LB-Impute")) {
+        paste0(result.dir(), "/", dataset.name, "/LaByRInth/")
+    } else {
+        stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
+    }
 }
 
 filtered.file <- function(dataset.name) {
@@ -68,18 +88,22 @@ uncompressed.masked.file <- function(dataset.name, mask.ID = 1) {
     paste0(dataset.dir(dataset.name), "/masked_", mask.ID, ".vcf")
 }
 
-parental.file <- function(dataset.name, config = 1) {
-    paste0(imputed.dir(dataset.name), "/parental_imputation_result_", config, ".rds")
+imputed.parents.file <- function(dataset.name, algorithm, config = 1) {
+    if (algorithm="LaByRInth") {
+        paste0(imputed.dir(dataset.name, algorithm), "/parental-imputation-result_", config, ".rds")
+    } else if (algorithm="LB-Impute") {
+        paste0(imputed.dir(dataset.name, algorithm), "/imputed-parents_", config, ".rds")
+    } else {
+        stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
+    }
 }
 
-imputed.file <- function(dataset.name, parental.config = 1, progeny.config = 1) {
-    paste0(imputed.dir(dataset.name), "/imputed_", parental.config, "_", progeny.config, ".vcf.gz")
-}
-
-analysis.file <- function(dataset.name, progeny.config = 1) {
-    paste0(imputed.dir(dataset.name), "/analysis_summary_", progeny.config, ".csv")
-}
-
-mimicked.file <- function(dataset.name, mimic.ID = 1) {
-    paste0(dataset.dir(dataset.name), "/mimicked_", mimic.ID, ".vcf.gz")
+imputed.progeny.file <- function(dataset.name, parental.config = 1, progeny.config = 1) {
+    if (algorithm="LaByRInth") {
+        paste0(imputed.dir(dataset.name, algorithm), "/imputed-progeny_", parental.config, "_", progeny.config, ".vcf.gz")
+    } else if (algorithm="LB-Impute") {
+        paste0(imputed.dir(dataset.name, algorithm), "/imputed-progeny_", parental.config, "_", progeny.config, ".vcf")
+    } else {
+        stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
+    }
 }
