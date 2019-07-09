@@ -24,6 +24,7 @@
 ##                    R - P A C K A G E   I M P U T A T I O N
 ##
 
+version <- function() {"3.2.1"}
 
 ################################################################################
 ###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
@@ -1328,7 +1329,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
                                     obj.fun,
                                     method="Brent",
                                     lower=0,
-                                    upper=0.5,
+                                    upper=1,
                                     control=list(ndeps=1e-2,  # step size
                                                  fnscale=-1))
                     recomb.val.mat[x,y] <- result$par
@@ -1541,6 +1542,8 @@ estimate.read.err <- function(ad, n.gen) {
     ref <- ad[ , , 1][relevant]
     alt <- ad[ , , 2][relevant]
 
+    ## TODO(Jason): this should depend on the expected heterozygosity of the
+    ## parents and the single F1 that all progeny are based on
     h <- 0.5^(n.gen - 1)  # expected proportion of sites that are heterozygous
 
     ## objective function of r, the probability of an erroneous read at the
