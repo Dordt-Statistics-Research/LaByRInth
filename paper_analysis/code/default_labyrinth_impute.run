@@ -88,40 +88,40 @@ for (i in seq_along(geno.errs)) {
 
 }
 
-original <- read.vcfR(filtered.file(dataset))
-masked <- read.vcfR(in.file)
+## original <- read.vcfR(filtered.file(dataset))
+## masked <- read.vcfR(in.file)
 
-analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
-    parental.result <- readRDS(parental.file(dataset, config=i))
-    imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
-    good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
-    really.good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.99)
+## analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
+##     parental.result <- readRDS(parental.file(dataset, config=i))
+##     imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
+##     good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
+##     really.good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.99)
 
-    rbind(
-        LBImputeAnalyze(original,
-                        masked,
-                        imputed,
-                        parental.result$read.err,
-                        parental.result$geno.err,
-                        NA,
-                        "everything"),
+##     rbind(
+##         LBImputeAnalyze(original,
+##                         masked,
+##                         imputed,
+##                         parental.result$read.err,
+##                         parental.result$geno.err,
+##                         NA,
+##                         "everything"),
 
-        LBImputeAnalyze(original,
-                        masked,
-                        good.imputed,
-                        parental.result$read.err,
-                        parental.result$geno.err,
-                        NA,
-                        "> 90% posterior"),
+##         LBImputeAnalyze(original,
+##                         masked,
+##                         good.imputed,
+##                         parental.result$read.err,
+##                         parental.result$geno.err,
+##                         NA,
+##                         "> 90% posterior"),
 
-        LBImputeAnalyze(original,
-                        masked,
-                        really.good.imputed,
-                        parental.result$read.err,
-                        parental.result$geno.err,
-                        NA,
-                        "> 99% posterior")
-    )
-}))
+##         LBImputeAnalyze(original,
+##                         masked,
+##                         really.good.imputed,
+##                         parental.result$read.err,
+##                         parental.result$geno.err,
+##                         NA,
+##                         "> 99% posterior")
+##     )
+## }))
 
-write.csv(analysis.df, analysis.file(dataset), row.names = FALSE)
+## write.csv(analysis.df, analysis.file(dataset), row.names = FALSE)
