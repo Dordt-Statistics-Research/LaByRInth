@@ -50,7 +50,7 @@ input <- system.file(
     "extdata",
     "vcf-files",
     "parental-lakin-fuller-sample.rds",
-    package = "LaByRInth",
+    package = "labyrinth",
     mustWork = TRUE)
 output <- tempfile(fileext="-progeny-result.vcf.gz")
 print(output)

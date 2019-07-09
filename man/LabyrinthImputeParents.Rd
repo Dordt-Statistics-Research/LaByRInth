@@ -39,7 +39,7 @@ input <- system.file(
     "extdata",
     "vcf-files",
     "filtered-lakin-fuller-sample.vcf",
-    package = "LaByRInth",
+    package = "labyrinth",
     mustWork = TRUE)
 output <- tempfile(fileext="-parental-result.rds")
 print(output)

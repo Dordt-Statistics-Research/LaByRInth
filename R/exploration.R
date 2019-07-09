@@ -102,7 +102,7 @@ calculate.transitional.characteristics.old <- function(vcf, parents, model) {
             trans.file <- system.file("extdata",
                                       "transition-probs",
                                       paste0(model, ".R"),
-                                      package = "LaByRInth",
+                                      package = "labyrinth",
                                       mustWork = TRUE)
             source(trans.file)
         }, error = function(e) {
@@ -542,7 +542,7 @@ get.condensed.characeristic.generator.old <- function(vcf, parents, model) {
             trans.file <- system.file("extdata",
                                       "transition-probs",
                                       paste0(model, ".R"),
-                                      package = "LaByRInth",
+                                      package = "labyrinth",
                                       mustWork = TRUE)
             source(trans.file)
         }, error = function(e) {
@@ -810,7 +810,7 @@ get.condensed.characeristic.generator <- function(parental) {
             trans.file <- system.file("extdata",
                                       "transition-probs",
                                       paste0(model, ".R"),
-                                      package = "LaByRInth",
+                                      package = "labyrinth",
                                       mustWork = TRUE)
             source(trans.file)
         }, error = function(e) {

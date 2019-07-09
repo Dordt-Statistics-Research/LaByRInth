@@ -53,7 +53,7 @@ version <- function() {"3.2.1"}
 ##'     "extdata",
 ##'     "vcf-files",
 ##'     "original-lakin-fuller-sample.vcf",
-##'     package = "LaByRInth",
+##'     package = "labyrinth",
 ##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-filtered-result.vcf.gz")
 ##' print(output)
@@ -190,7 +190,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##'     "extdata",
 ##'     "vcf-files",
 ##'     "filtered-lakin-fuller-sample.vcf",
-##'     package = "LaByRInth",
+##'     package = "labyrinth",
 ##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-parental-result.rds")
 ##' print(output)
@@ -296,7 +296,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
         trans.file <- system.file("extdata",
                                   "transition-probs",
                                   paste0("F", generation, ".R"),
-                                  package = "LaByRInth",
+                                  package = "labyrinth",
                                   mustWork = TRUE)
         source(trans.file)
     }, error = function(e) {
@@ -412,7 +412,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 ##'     "extdata",
 ##'     "vcf-files",
 ##'     "parental-lakin-fuller-sample.rds",
-##'     package = "LaByRInth",
+##'     package = "labyrinth",
 ##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-progeny-result.vcf.gz")
 ##' print(output)
@@ -580,7 +580,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
 ##'     "extdata",
 ##'     "vcf-files",
 ##'     "progeny-lakin-fuller-sample.vcf",
-##'     package = "LaByRInth",
+##'     package = "labyrinth",
 ##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-quality-result.vcf.gz")
 ##' print(output)
@@ -712,7 +712,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##'     "extdata",
 ##'     "vcf-files",
 ##'     "original-lakin-fuller-sample.vcf",
-##'     package = "LaByRInth",
+##'     package = "labyrinth",
 ##'     mustWork = TRUE)
 ##' output <- tempfile(fileext="-result.vcf.gz")
 ##' result <- LabyrinthImpute(

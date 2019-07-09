@@ -81,7 +81,7 @@ original.file <- system.file(
     "extdata",
     "vcf-files",
     "original-lakin-fuller-sample.vcf",
-    package = "LaByRInth",
+    package = "labyrinth",
     mustWork = TRUE)
 
 result <- LabyrinthImpute(
@@ -106,7 +106,7 @@ original.file <- system.file(
     "extdata",
     "vcf-files",
     "original-lakin-fuller-sample.vcf",
-    package = "LaByRInth",
+    package = "labyrinth",
     mustWork = TRUE)
 
 filtered.file    <- "./LaByRInth_example/filtered.vcf.gz"

@@ -34,7 +34,7 @@ input <- system.file(
     "extdata",
     "vcf-files",
     "original-lakin-fuller-sample.vcf",
-    package = "LaByRInth",
+    package = "labyrinth",
     mustWork = TRUE)
 output <- tempfile(fileext="-filtered-result.vcf.gz")
 print(output)
