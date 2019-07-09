@@ -410,7 +410,7 @@ calculate.transitional.characteristics.old <- function(vcf, parents, model) {
 characteristics.to.ggplot.format <- function(plot.data, total=TRUE) {
     trans.types <- c("X -> X", "X -> !X", "het -> hom", "het -> het")
     if (total) {
-        min.count <- 10                 # must be strictly greater than 0
+        min.count <- 20                 # must be strictly greater than 0
         counts <- apply(plot.data[ , trans.types], 1, sum)
 
         if (any(counts < min.count)) {
@@ -439,47 +439,7 @@ characteristics.to.ggplot.format <- function(plot.data, total=TRUE) {
 }
 
 
-
-## plot.data.to.ggplot.format <- function(plot.data) {
-##     trans.types <- c("X -> X", "X -> !X", "het -> hom", "het -> het")
-##     data.frames <- apply(plot.data, 1, function(row.of.plot.data) {
-##         ## inner.df <- data.frame()
-##         browser()
-##         inner.df <- data.frame(marker1=I(row.of.plot.data["marker1"]),
-##                                marker2=I(row.of.plot.data["marker2"]),
-##                                r=I(row.of.plot.data["r"]),
-##                                type=I(trans.types),
-##                                proportion=I(row.of.plot.data[trans.types]),
-
-##                                row.names=NULL)
-
-##         ## inner.df$marker1 <- as.character(inner.df$marker1) # R thinks it is a factor
-##         ## inner.df$marker2 <- as.character(inner.df$marker2) # R thinks it is a
-##         ##                                 # factor
-##         ## browser()
-##         ## inner.df$r <- as.numeric(inner.df$r) # R thinks it is a factor
-##         ## inner.df$type <- as.character(inner.df$type) # R thinks it is a factor
-##         ## inner.df$proportion <- as.numeric(inner.df$proportion) # R thinks it is a factor
-
-##         ## df.columns.1 <- rbind(row.of.plot.data[c("marker1", "marker2", "r", "X -> X")],
-##         ##                       row.of.plot.data[c("marker1", "marker2", "r", "X -> !X")],
-##         ##                       row.of.plot.data[c("marker1", "marker2", "r", "het -> hom")],
-##         ##                       row.of.plot.data[c("marker1", "marker2", "r", "het -> het")])
-##         ## df.columns.2 <- data.frame(type=c("X -> X", "X -> !X", "het -> hom",
-##         ##                                   "het -> het"))
-##         ## cbind(df.columns.1, df.columns.2)
-
-##         inner.df
-##     })
-
-##     ggplot.data <- do.call(rbind, data.frames)
-##     rownames(ggplot.data) <- NULL       # remove row names
-##     ggplot.data                         # return value
-## }
-
-
-
-generate.plot <- function(ggplot.data, transition.proportions.generator) {
+generate.plot <- function(ggplot.data, transition.proportions.generator, title="Transitional Characteristics") {
     require(ggplot2)
     get.theory.function <- function(type) {
         function(r) {
@@ -489,47 +449,124 @@ generate.plot <- function(ggplot.data, transition.proportions.generator) {
         }
     }
     x.max <- 1
-    color1 <- "#37474F"
-    color2 <- '#CACACA'
+    navy <- "#37474F"
+    white <- "#FFFFFF"
+    gray <- '#000000'
+    mid.gray <- '#888888'
+    light.gray <- '#CACACA'
+
     xlims <- c(0, x.max)
     ylims <- c(0, 1)
-    ## gentext <- ifelse(gen==2, "Generation", "Generations")
-    thickness <- 0.5
-    mod.data <- ggplot.data[ggplot.data$r <= x.max, ]
-    ggplot(mod.data, aes(x=r, y=proportion, color=type)) + geom_point(size=1.75) +
-        stat_function(aes(color="X -> X"), fun=get.theory.function("X -> X"),
+    thickness <- 0.5                    # theory line thickness
+    mod.data <- ggplot.data[ggplot.data$r <= x.max, ] # allows for 'zooming in'
+
+    ggplot(mod.data, aes(x=r, y=proportion, color=type, shape=type)) +
+        geom_point(size=1.8) +
+        stat_function(aes(color="X -> X"),
+                      fun=get.theory.function("X -> X"),
                       xlim=xlims, size=thickness) +
         stat_function(aes(color="X -> !X"),
-                      fun=get.theory.function("X -> !X"), xlim=xlims, size=thickness) +
+                      fun=get.theory.function("X -> !X"),
+                      xlim=xlims, size=thickness) +
         stat_function(aes(color="het -> hom"),
-                      fun=get.theory.function("het -> hom"), xlim=xlims, size=thickness) +
+                      fun=get.theory.function("het -> hom"),
+                      xlim=xlims, size=thickness) +
         stat_function(aes(color="het -> het"),
-                      fun=get.theory.function("het -> het"), xlim=xlims, size=thickness) +
-        ## scale_color_manual(values = c("X -> X" = 1,
-        ##                               "X -> !X" = 2,
-        ##                               "het -> hom" = 3,
-        ##                               "het -> het" = 4)) +
+                      fun=get.theory.function("het -> het"),
+                      xlim=xlims, size=thickness) +
         coord_cartesian(xlim = xlims) +
         coord_cartesian(ylim = ylims) +
         scale_y_continuous(breaks=seq(0, 1, 0.2)) +
         scale_x_continuous(breaks=seq(0, x.max, 0.2)) +
-        ggtitle(paste0("Transitional Characteristics")) +
-        xlab("Recombination Parameter (r)") +
+        scale_shape_manual(values = c(3, 4, 17, 16)) +
+        scale_shape_manual(values = c(17, 18, 15, 19)) +
+        ## scale_shape_manual(values = c(16, 17, 15, 19)) +
+        ## scale_color_manual(values = c(1,1,1,1)) +  # all black
+        ggtitle(title) +
+        labs(color="Transition Type") +
+        labs(shape="Transition Type") +
+        xlab("Estimated Recombination Parameter (r)") +
         ylab("Proportion of Population") +
-        scale_color_discrete(name="Type") +
         theme(plot.title = element_text(hjust = 0.5),
-              plot.background = element_rect(fill = '#37474F', colour = '#37474F'),
-              panel.background = element_rect(fill = color2, color = color2),
+              plot.background = element_rect(fill = white, colour = white),
+              panel.background = element_rect(fill = light.gray, color = light.gray),
+              panel.grid.major = element_line(color = white, size = thickness),
+              panel.grid.minor = element_line(color = white, size = thickness),
               text = element_text(size=20),
-              legend.key = element_rect(fill = color1, color=color1),
-              legend.background = element_rect(fill = color1, color=color1),
-              axis.text.x=element_text(color = color2),
-              axis.text.y=element_text(color = color2),
-              axis.title.x=element_text(color = color2, vjust = -3),
-              axis.title.y=element_text(color = color2, vjust = 3),
-              legend.title=element_text(color = color2),
-              legend.text=element_text(color = color2),
-              title=element_text(color = color2),
+              legend.key = element_rect(fill = white, color=white),
+              legend.background = element_rect(fill = white, color=white),
+              axis.text.x=element_text(color = mid.gray),
+              axis.text.y=element_text(color = mid.gray),
+              axis.title.x=element_text(color = gray, vjust = -3),
+              axis.title.y=element_text(color = gray, vjust = 3),
+              legend.title=element_text(color = gray),
+              legend.text=element_text(color = gray),
+              title=element_text(color = gray),
+              plot.margin = unit(c(1,1,1,1), "cm"),
+              legend.key.size = unit(3, 'lines'))
+}
+
+
+
+generate.theory.plot <- function(transition.proportions.generator, title="Theoretical Transitional Characteristics") {
+    require(ggplot2)
+    get.theory.function <- function(type) {
+        function(r) {
+            sapply(r, function(each) {
+                transition.proportions.generator(each)[type]
+            })
+        }
+    }
+    x.max <- 1
+    navy <- "#37474F"
+    white <- "#FFFFFF"
+    gray <- '#000000'
+    mid.gray <- '#888888'
+    light.gray <- '#CACACA'
+
+    xlims <- c(0, x.max)
+    ylims <- c(0, 1)
+    thickness <- 1.5
+    mod.data <- data.frame()
+
+    ggplot(mod.data, aes()) +
+        geom_point(size=1.8) +
+        stat_function(aes(color="X -> X"),
+                      fun=get.theory.function("X -> X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="X -> !X"),
+                      fun=get.theory.function("X -> !X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> hom"),
+                      fun=get.theory.function("het -> hom"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> het"),
+                      fun=get.theory.function("het -> het"),
+                      xlim=xlims, size=thickness) +
+        coord_cartesian(xlim = xlims) +
+        coord_cartesian(ylim = ylims) +
+        scale_y_continuous(breaks=seq(0, 1, 0.2)) +
+        scale_x_continuous(breaks=seq(0, x.max, 0.2)) +
+        ## scale_color_manual(values = c(1,1,1,1)) +  # all black
+        ggtitle(title) +
+        labs(color="Transition Type") +
+        xlab("Estimated Recombination Parameter (r)") +
+        ylab("Proportion of Population") +
+        theme(plot.title = element_text(hjust = 0.5),
+              plot.background = element_rect(fill = white, colour = white),
+              panel.background = element_rect(fill = light.gray, color = light.gray),
+              panel.grid.major = element_line(color = white, size = 0.5),
+              panel.grid.minor = element_line(color = white, size = 0.5),
+              text = element_text(size=20),
+              legend.key = element_rect(fill = white, color=white),
+              legend.background = element_rect(fill = white, color=white),
+              axis.text.x=element_text(color = mid.gray),
+              axis.text.y=element_text(color = mid.gray),
+              axis.title.x=element_text(color = gray, vjust = -3),
+              axis.title.y=element_text(color = gray, vjust = 3),
+              legend.title=element_text(color = gray),
+              legend.text=element_text(color = gray),
+              title=element_text(color = gray),
               plot.margin = unit(c(1,1,1,1), "cm"),
               legend.key.size = unit(3, 'lines'))
 }
@@ -706,7 +743,23 @@ do.it <- function() {
 
 calculate.transitional.characteristics <- function(parental) {
 
+    timer <- new.timer()
+    display(0, "Converting allelic depths to numeric array")
+    ad.array <- get.ad.array(parental$vcf)
+    parent.indices <- parental$marker.names %in% parental$parents
+    read.depths <- apply(ad.array, 1:2, sum) # sum ref and alt reads for each site
+    parent.1.read.depths <- read.depths[ , parental$parents[1]]
+    parent.2.read.depths <- read.depths[ , parental$parents[2]]
+
+    ## If the min.parent.depth is set to a positive value, then a lot
+    ## of sites are removed, and thus a lot of the r estimates from
+    ## parental have to be combined and they become less accurate
+    ## leading to less appealing plots
+    min.parent.depth <- 0
+    display(1, "Completed in ", timer(), "\n")
+
     get.chrom.characteristics <- function(chrom.name) {
+        display(1, "Getting characteristics for ", chrom.name)
 
         combine.recomb.ests <- function(i, j) {
             last.r.index <- j-1 # last recomb is just before marker j
@@ -719,9 +772,14 @@ calculate.transitional.characteristics <- function(parental) {
             }
             combined.r                  # return value
         }
+
         rows.of.interest <- row.associated.chroms == chrom.name
+
         parents.model <- parental$parent.models[[chrom.name]]
-        markers.to.keep <- parents.model$model %in% c(4, 13)
+        markers.to.keep <- parents.model$model %in% c(4, 13) &
+                           parent.1.read.depths[rows.of.interest] >= min.parent.depth &
+                           parent.2.read.depths[rows.of.interest] >= min.parent.depth
+
         old.r <- parents.model$recomb
         new.r <- rep(0, times=sum(markers.to.keep)-1)
         i <- j <- min(which(markers.to.keep)) # first marker kept
@@ -751,9 +809,7 @@ calculate.transitional.characteristics <- function(parental) {
                           marker2=second.marker.names,
                           r=new.r)
 
-        parent.indices <- getSAMPLES(parental$vcf) %in% parental$parents
-        ad.array <- get.ad.array(parental$vcf)
-        ad.array <- ad.array[rows.of.interest, !parent.indices, ][markers.to.keep, , ]
+        chrom.ad.array <- (ad.array[rows.of.interest, , ])[markers.to.keep, , ]
 
         ## swap necessary reads so that the first layer of the third dimension
         ## is how many reads from the first parent and the second layer of the
@@ -768,15 +824,15 @@ calculate.transitional.characteristics <- function(parental) {
             ## 1100 in binary which means the first parent is homozygous
             ## alternate and the second is homozygous reference.
             if (model == 13) {
-                temp <- ad.array[i, , 1]
-                ad.array[i, , 1] <- ad.array[i, , 2]
-                ad.array[i, , 2] <- temp
+                temp <- chrom.ad.array[i, , 1]
+                chrom.ad.array[i, , 1] <- chrom.ad.array[i, , 2]
+                chrom.ad.array[i, , 2] <- temp
             }
         }
 
         get.types <- function(i) {
-            gt.data.1 <- ad.array[i,   , ]
-            gt.data.2 <- ad.array[i+1, , ]
+            gt.data.1 <- chrom.ad.array[i,   , ]
+            gt.data.2 <- chrom.ad.array[i+1, , ]
             get.unweighted.counts(gt.data.1, gt.data.2,
                                 gen=parental$generation,
                                 rerr=parental$read.err)
@@ -788,13 +844,19 @@ calculate.transitional.characteristics <- function(parental) {
         return(cbind(df1, df2))
     }
 
-    condensed.generator <- get.condensed.characeristic.generator(parental)
+
+    model <- paste0("F", parental$generation)
+    condensed.generator <- get.condensed.characeristic.generator(model)
 
     unique.chroms <- parental$u.chroms
     row.associated.chroms <- parental$snp.chroms # chrom associated with each row
 
+    timer <- new.timer()
+    display(0, "Getting chromosome characteristics:")
     chrom.char.data.frames <- lapply(unique.chroms, get.chrom.characteristics)
     result <- do.call(rbind, chrom.char.data.frames) # returned after defining functions
+    display(1, "Completed in ", timer(), "\n")
+
 
     return(result)
 }
@@ -803,8 +865,7 @@ calculate.transitional.characteristics <- function(parental) {
 get.type.names <- function() {c("X -> X", "X -> !X", "het -> hom", "het -> het")}
 
 
-get.condensed.characeristic.generator <- function(parental) {
-    model <- paste0("F", parental$generation)
+get.condensed.characeristic.generator <- function(model) {
     if (model %in% c("F2","F3","F4","F5","F6","F7")) {
         tryCatch({
             trans.file <- system.file("extdata",
@@ -1094,8 +1155,18 @@ get.unweighted.counts <- function(a, b, gen, rerr) {
 
 
 
+rowsums <- function(matrix) {
+    apply(matrix, 1, sum)
+}
+
+
+
 do.it <- function() {
-    tc <- calculate.transitional.characteristics(parental)
-    gg.tc <- characteristics.to.ggplot.format(tc)
-    generate.plot(gg.tc, get.condensed.characeristic.generator(parental))
+parental <- readRDS("../paper_analysis/data/Lakin-Fuller/patental_imputation_result_jul9.rds")
+tc2 <- calculate.transitional.characteristics(parental)
+F5.theory.generator <- get.condensed.characeristic.generator("F5")
+F4.theory.generator <- get.condensed.characeristic.generator("F4")
+F3.theory.generator <- get.condensed.characeristic.generator("F3")
+gg.tc2 <- characteristics.to.ggplot.format(tc2)
+generate.plot(gg.tc2, F5.theory.generator)
 }
