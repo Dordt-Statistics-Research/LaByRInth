@@ -1275,6 +1275,13 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
     ## -------------------------------------------------------------------------
     ## Progress bar code
 
+    ## transitions will be a list with an entry for every chromosome. Each
+    ## chromosome entry will be a list with an entry for every adjacent pair of
+    ## markers in the chromosome (one fewer entries than the number of markers
+    ## in the chromosome). Each chromosome-markerpair entry is a list
+    ## containing two elements: each a 16x16 matrix indicating pairs of parental
+    ## states, the first containing the maximized log-liklihoods, and the second
+    ## containing the recombination values at which they were maximized.
     transitions <- lapply(u.chroms, function(chrom) {
         indices <- which(snp.chroms == chrom)  # which indices correspond with this chrom
         indices <- indices[-length(indices)]  # remove the last element
