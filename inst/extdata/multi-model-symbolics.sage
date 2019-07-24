@@ -27,6 +27,7 @@
 
 import pdb
 import operator as op
+import os.path
 
 
 # To add an additional breeding scheme, uncomment the lines below and follow the
@@ -49,105 +50,107 @@ def get_progeny_probs(model, name_1, name_2):
 
     # UNCOMMENT THE LINES BELOW
 
-    elif (model == "NEW_USER_DEFINED_MODEL"):
-        # Initialize symbolic parents for the population
-        p1 = init_symbolic_probabilistic_parent(name_1)
-        p2 = init_symbolic_probabilistic_parent(name_2)
+    # elif (model == "NEW_USER_DEFINED_MODEL"):
+    #     # Initialize symbolic parents for the population
+    #     p1 = init_symbolic_probabilistic_parent(name_1)
+    #     p2 = init_symbolic_probabilistic_parent(name_2)
 
-        # use `breed_probabilistic_taxa(taxa1, taxa2)` to breed two members
+    #     # use `breed_probabilistic_taxa(taxa1, taxa2)` to breed two members
 
-        # use `breed_probabilistic_self(taxa)` to self a member. This can also be
-        # accomplished by calling `breed_probabilistic_taxa(taxa, taxa)`, but
-        # using `breed_probabilistic_self` will be faster
+    #     # use `breed_probabilistic_self(taxa)` to self a member. This can also be
+    #     # accomplished by calling `breed_probabilistic_taxa(taxa, taxa)`, but
+    #     # using `breed_probabilistic_self` will be faster
 
-        # for example, to represent an F3 population, do the following:
-        F1 = breed_probabilistic_taxa(p1, p2)
-        F2 = breed_probabilistic_self(F1)
-        F3 = breed_probabilistic_self(F2)
-        # etc.
-        BC1 = breed_probabilistic_taxa(p1, F1)
-        BC2 = breed_probabilistic_taxa(p1, BC1 )
+    #     # for example, to represent an F3 population, do the following:
+    #     F1 = breed_probabilistic_taxa(p1, p2)
+    #     F2 = breed_probabilistic_self(F1)
+    #     F3 = breed_probabilistic_self(F2)
+    #     # etc.
+    #     BC1 = breed_probabilistic_taxa(p1, F1)
+    #     BC2 = breed_probabilistic_taxa(p1, BC1 )
 
     else:
         raise ValueError("Specified model not found")
 
 
-def parse_probs_to_R(model):
-    print('## Copyright 2018 Jason Vander Woude'                                            )
-    print('##'                                                                              )
-    print('## Licensed under the Apache License, Version 2.0 (the "License");'              )
-    print('## you may not use this file except in compliance with the License.'             )
-    print('## You may obtain a copy of the License at'                                      )
-    print('##'                                                                              )
-    print('##     http://www.apache.org/licenses/LICENSE-2.0'                               )
-    print('##'                                                                              )
-    print('## Unless required by applicable law or agreed to in writing, software'          )
-    print('## distributed under the License is distributed on an "AS IS" BASIS,'            )
-    print('## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.'     )
-    print('## See the License for the specific language governing permissions and'          )
-    print('## limitations under the License.'                                               )
-    print(''                                                                                )
-    print(''                                                                                )
-    print('##               __          ____        ____  _____'                            )
-    print('##              / /         / __ \      / __ \/_  _/'                            )
-    print('##             / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __'          )
-    print('##            / /   / _  \/ _  _/\ \/ / _  _/ / / /  | / /_  __/ /_/ /'          )
-    print('##           / /___/ /_/ / /_\ \  \  / / \ \_/ /_/ /||/ / / / / __  /'           )
-    print('##          /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/'            )
-    print('##'                                                                              )
-    print('##                  L O W - C O V E R A G E   B I A L L E L I C'                 )
-    print('##                    R - P A C K A G E   I M P U T A T I O N'                   )
-    print('##'                                                                              )
-    print(''                                                                                )
-    print(''                                                                                )
-    print('################################################################################')
-    print('##                                                                            ##')
-    print('##            ATTENTION! THIS FILE IS AUTO-GENERATED. DO NOT EDIT             ##')
-    print('##                                                                            ##')
-    print('################################################################################')
-    print('##                                                                            ##')
-    print('## This file is auto-generated by multi-model-symbolics.sage for populations  ##')
-    print('## bred under the following breeding scheme:                                  ##')
-    print('##                                                                            ##')
-    print('## ' +model + ' '*(80 - len(model) - 5) +                                    '##')
-    print('##                                                                            ##')
-    print('## To generate a similar file for other types of breeding schemes, edit the   ##')
-    print('## multi-model-symbolics.sage file according to the comments in that          ##')
-    print('## file. Then load multi-model-symbolics.sage in a SAGE interpreter and run   ##')
-    print('## the function `parse_probs_to_R` with the model parameter being the string  ##')
-    print('## that you use to define your breeding scheme. Running the function will     ##')
-    print('## print the required text for the R file to the console where it must be     ##')
-    print('## copied and pasted into a file called `{model}.R` where {model} is replaced ##')
-    print('## with your breeding scheme model name. Save `{model}.R` in the appropriate  ##')
-    print('## directory in the labyrinth package (/inst/extdata/transitions-probs/).     ##')
-    print('##                                                                            ##')
-    print('## To download SAGE, visit https://www.sagemath.org/download.html             ##')
-    print('##                                                                            ##')
-    print('## There is a seperate file for each model because at when LaByRInth runs,    ##')
-    print('## only one model will be needed, so there is no need to source the code for  ##')
-    print('## all other models.                                                          ##')
-    print('##                                                                            ##')
-    print('################################################################################')
-    print(''                                                                                )
+def parse_probs_to_R(model, out_dir):
+    out_file = out_dir + "/" + model + ".R"
+    if not os.path.isdir(out_dir):
+        raise AssertionError("Directory " + out_dir + " does not exist. ",
+                             "Please create it or choose another directory.")
+    if os.path.isfile(out_file):
+        raise AssertionError(out_file + " already exists. Choose another file.")
 
-    def print_vector(v):
-        print("        c(")
-        last_elem = len(v) - 1
-        for i, elem in enumerate(v):
-            trailing = "," if not i==last_elem else ""
-            print("            function(r){" + str(elem) + "}" + trailing)
-        print("        )")
+    f = file(out_file, 'w')
+    def show(str):
+        f.write(str + "\n")
 
-    def print_matrix(m):
-        print("            matrix(c(")
+    show('## Copyright 2018 Jason Vander Woude'                                            )
+    show('##'                                                                              )
+    show('## Licensed under the Apache License, Version 2.0 (the "License");'              )
+    show('## you may not use this file except in compliance with the License.'             )
+    show('## You may obtain a copy of the License at'                                      )
+    show('##'                                                                              )
+    show('##     http://www.apache.org/licenses/LICENSE-2.0'                               )
+    show('##'                                                                              )
+    show('## Unless required by applicable law or agreed to in writing, software'          )
+    show('## distributed under the License is distributed on an "AS IS" BASIS,'            )
+    show('## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.'     )
+    show('## See the License for the specific language governing permissions and'          )
+    show('## limitations under the License.'                                               )
+    show(''                                                                                )
+    show(''                                                                                )
+    show('##               __          ____        ____  _____'                            )
+    show('##              / /         / __ \      / __ \/_  _/'                            )
+    show('##             / /   ____  / /_/ /_  __/ /_/ / / / __   __________  __'          )
+    show('##            / /   / _  \/ _  _/\ \/ / _  _/ / / /  | / /_  __/ /_/ /'          )
+    show('##           / /___/ /_/ / /_\ \  \  / / \ \_/ /_/ /||/ / / / / __  /'           )
+    show('##          /_____/_/ /_/______/  /_/_/  /_/____/_/ |__/ /_/ /_/ /_/'            )
+    show('##'                                                                              )
+    show('##                  L O W - C O V E R A G E   B I A L L E L I C'                 )
+    show('##                    R - P A C K A G E   I M P U T A T I O N'                   )
+    show('##'                                                                              )
+    show(''                                                                                )
+    show(''                                                                                )
+    show('################################################################################')
+    show('##                                                                            ##')
+    show('##            ATTENTION! THIS FILE IS AUTO-GENERATED. DO NOT EDIT             ##')
+    show('##                                                                            ##')
+    show('################################################################################')
+    show('##                                                                            ##')
+    show('## This file is auto-generated by multi-model-symbolics.sage for populations  ##')
+    show('## bred under the following breeding scheme:                                  ##')
+    show('##                                                                            ##')
+    show('## F1BC1                                                                      ##')
+    show('##                                                                            ##')
+    show('## To generate a similar file for other types of breeding schemes, edit the   ##')
+    show('## multi-model-symbolics.sage file according to the comments in that          ##')
+    show('## file. Then load multi-model-symbolics.sage in a SAGE interpreter and run   ##')
+    show('## the function `parse_probs_to_R`. The first parameter should be the string  ##')
+    show('## that you use to define your breeding scheme. The second parameter should   ##')
+    show('## be the name of the directory where the result should be temporarily saved. ##')
+    show('## The resulting file must then be moved into the following directory in the  ##')
+    show('## labyrinth package (inst/extdata/transitions-probs/).                       ##')
+    show('##                                                                            ##')
+    show('## To download SAGE, visit https://www.sagemath.org/download.html             ##')
+    show('##                                                                            ##')
+    show('## There is a seperate file for each model because when LaByRInth runs, only  ##')
+    show('## one model will be needed, so there is no need to source the code for all   ##')
+    show('## other models.                                                              ##')
+    show('##                                                                            ##')
+    show('################################################################################')
+    show(''                                                                                )
+
+    def show_matrix(m):
+        show("            matrix(c(")
 
         last_row = len(m) - 1
         for j, row in enumerate(m):
             trailing = "," if not j==last_row else ""
 
-            print("                " + ", ".join([str(x) for x in row]) + trailing)
+            show("                " + ", ".join([str(x) for x in row]) + trailing)
 
-        print("            ), nrow=" +
+        show("            ), nrow=" +
               str(len(m)) +
               ", ncol=" +
               str(len(m[0])) +
@@ -163,16 +166,17 @@ def parse_probs_to_R(model):
     name_2 = "parent_2"
     progeny_probs = get_progeny_probs(model, name_1, name_2)
 
-    print("site.pair.transition.probs <- list(")
+    show("site.pair.transition.probs <- list(")
     last_list = 15  # 16 list entries in 0-based indexing
     for marker1 in range(16): # =2^(2*2) = (#alleles)^(#parents * #homologs)
-        print("    list(")
+        show("    list(")
         for marker2 in range(16): # =2^(2*2) = (#alleles)^(#parents * #homologs)
             p1h1 = ((marker1 & 0b1000) >> 2) + ((marker2 & 0b1000) >> 3)
             p1h2 = ((marker1 & 0b0100) >> 1) + ((marker2 & 0b0100) >> 2)
             p2h1 = ((marker1 & 0b0010) << 0) + ((marker2 & 0b0010) >> 1)
             p2h2 = ((marker1 & 0b0001) << 1) + ((marker2 & 0b0001) >> 0)
 
+            print("Handling case " + str(marker1*16 + marker2 + 1) + " of 256")
             # convert the parent homologs into the required probabilistic form
             # which will give a probability of 1 in a single entry of the matrix
             p1_probs = convert_parent_to_probabilistic(p1h1, p1h2)
@@ -185,25 +189,26 @@ def parse_probs_to_R(model):
             trans_probs = progeny_probs_to_4_state_transition_probs(with_both_parents)
 
 
-            print("        function(r) {")
-            print_matrix(trans_probs)
+            show("        function(r) {")
+            show_matrix(trans_probs)
 
 
             ########################## END MAIN LOGIC ##########################
 
 
             if marker2 != 15:
-                print("        },\n")
+                show("        },\n")
             else:
-                print("        }")
+                show("        }")
 
 
         if marker1 != 15:
-            print("    ),\n")
+            show("    ),\n")
         else:
-            print("    )")
-    print(")")
+            show("    )")
+    show(")")
 
+    f.close()
 
 def breed_deterministic_taxa(p1h1, p1h2, p2h1, p2h2):
 
@@ -434,15 +439,6 @@ def progeny_probs_to_4_state_transition_probs(p):
         [p[2][0],     p[2][1],     p[3][0],     p[3][1]],  # alt,ref
         [p[2][2],     p[2][3],     p[3][2],     p[3][3]]   # alt,alt
     ]
-
-
-def print_vector(v):
-    print("        c(")
-    last_elem = len(v) - 1
-    for i, elem in enumerate(v):
-        trailing = "," if not i==last_elem else ""
-        print("            function(r){" + str(elem) + "}" + trailing)
-    print("        )")
 
 
 def init_symbolic_probabilistic_parent(parent_name):
