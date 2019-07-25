@@ -42,7 +42,7 @@ get.breed.schemes <- function() {
 }
 
 get.progeny.het <- function() {
-    result <- sapply(get.breed.schemes, LabyrinthCalcProgenyHet)
+    result <- sapply(get.breed.schemes(), LabyrinthCalcProgenyHet)
     names(result) <- get.datasets()
     result
 }
