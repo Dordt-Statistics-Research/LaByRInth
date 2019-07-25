@@ -1283,6 +1283,7 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
 
 
             rm(snp.i, snp.j)
+            gc()
 
             get.objective.fun <- function(f) {
                 const.per.snp <- apply(rpgsp[!essential.layers,,], 1, function(layer) {
