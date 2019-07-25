@@ -410,7 +410,7 @@ calculate.transitional.characteristics.old <- function(vcf, parents, model) {
 characteristics.to.ggplot.format <- function(plot.data, total=TRUE) {
     trans.types <- c("X -> X", "X -> !X", "het -> hom", "het -> het")
     if (total) {
-        min.count <- 20                 # must be strictly greater than 0
+        min.count <- 10                 # must be strictly greater than 0
         counts <- apply(plot.data[ , trans.types], 1, sum)
 
         if (any(counts < min.count)) {
@@ -473,6 +473,95 @@ generate.plot <- function(ggplot.data, transition.proportions.generator, title="
                       xlim=xlims, size=thickness) +
         stat_function(aes(color="het -> het"),
                       fun=get.theory.function("het -> het"),
+                      xlim=xlims, size=thickness) +
+        coord_cartesian(xlim = xlims) +
+        coord_cartesian(ylim = ylims) +
+        scale_y_continuous(breaks=seq(0, 1, 0.2)) +
+        scale_x_continuous(breaks=seq(0, x.max, 0.2)) +
+        ## scale_shape_manual(values = c(3, 4, 17, 16)) +
+        scale_shape_manual(values = c(17, 18, 15, 19)) +
+        ## scale_shape_manual(values = c(16, 17, 15, 19)) +
+        ## scale_color_manual(values = c(1,1,1,1)) +  # all black
+        ggtitle(title) +
+        labs(color="Transition Type") +
+        labs(shape="Transition Type") +
+        xlab("Estimated Recombination Parameter (r)") +
+        ylab("Proportion of Population") +
+        theme(plot.title = element_text(hjust = 0.5),
+              plot.background = element_rect(fill = white, colour = white),
+              panel.background = element_rect(fill = light.gray, color = light.gray),
+              panel.grid.major = element_line(color = white, size = thickness),
+              panel.grid.minor = element_line(color = white, size = thickness),
+              text = element_text(size=20),
+              legend.key = element_rect(fill = white, color=white),
+              legend.background = element_rect(fill = white, color=white),
+              axis.text.x=element_text(color = mid.gray),
+              axis.text.y=element_text(color = mid.gray),
+              axis.title.x=element_text(color = gray, vjust = -3),
+              axis.title.y=element_text(color = gray, vjust = 3),
+              legend.title=element_text(color = gray),
+              legend.text=element_text(color = gray),
+              title=element_text(color = gray),
+              plot.margin = unit(c(1,1,1,1), "cm"),
+              legend.key.size = unit(3, 'lines'))
+}
+
+
+
+
+generate.mixed.plot <- function(ggplot.data, transition.proportions.generator1, transition.proportions.generator2, title="Transitional Characteristics") {
+    require(ggplot2)
+    get.theory.function1 <- function(type) {
+        function(r) {
+            sapply(r, function(each) {
+                transition.proportions.generator1(each)[type]
+            })
+        }
+    }
+    get.theory.function2 <- function(type) {
+        function(r) {
+            sapply(r, function(each) {
+                transition.proportions.generator2(each)[type]
+            })
+        }
+    }
+    x.max <- 1
+    navy <- "#37474F"
+    white <- "#FFFFFF"
+    gray <- '#000000'
+    mid.gray <- '#888888'
+    light.gray <- '#CACACA'
+
+    xlims <- c(0, x.max)
+    ylims <- c(0, 1)
+    thickness <- 0.5                    # theory line thickness
+    mod.data <- ggplot.data[ggplot.data$r <= x.max, ] # allows for 'zooming in'
+
+    ggplot(mod.data, aes(x=r, y=proportion, color=type, shape=type)) +
+        geom_point(size=1.8) +
+        stat_function(aes(color="X -> X"),
+                      fun=get.theory.function1("X -> X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="X -> !X"),
+                      fun=get.theory.function1("X -> !X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> hom"),
+                      fun=get.theory.function1("het -> hom"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> het"),
+                      fun=get.theory.function1("het -> het"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="X -> X"),
+                      fun=get.theory.function2("X -> X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="X -> !X"),
+                      fun=get.theory.function2("X -> !X"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> hom"),
+                      fun=get.theory.function2("het -> hom"),
+                      xlim=xlims, size=thickness) +
+        stat_function(aes(color="het -> het"),
+                      fun=get.theory.function2("het -> het"),
                       xlim=xlims, size=thickness) +
         coord_cartesian(xlim = xlims) +
         coord_cartesian(ylim = ylims) +
@@ -866,185 +955,181 @@ get.type.names <- function() {c("X -> X", "X -> !X", "het -> hom", "het -> het")
 
 
 get.condensed.characeristic.generator <- function(model) {
-    if (model %in% c("F2","F3","F4","F5","F6","F7")) {
-        tryCatch({
-            trans.file <- system.file("extdata",
-                                      "transition-probs",
-                                      paste0(model, ".R"),
-                                      package = "labyrinth",
-                                      mustWork = TRUE)
-            source(trans.file)
-        }, error = function(e) {
-            stop(paste("Invalid model"))
-        })
+    tryCatch({
+        trans.file <- system.file("extdata",
+                                  "transition-probs",
+                                  paste0(model, ".R"),
+                                  package = "labyrinth",
+                                  mustWork = TRUE)
+        source(trans.file)
+    }, error = function(e) {
+        stop(paste("Invalid model"))
+    })
 
-        ## site.pair.transition.probs is loaded when trans.file is sourced
-        ## above. It is a list containing 16 entries. Each entry is itself a
-        ## list containing 16 functions. Each of these 16*16=256 functions takes
-        ## a single parameter r. The previous line instantiates a symbolic
-        ## variable which applies symmetrically to both parents because this is
-        ## a parameter of the species. An organism has 2 homologous chromosomes
-        ## and we examine two markers on this homologous pair.  Each of those
-        ## two homologous chromosomes has two sister chromatids. When a cell
-        ## undergoes meiosis, four gametes will be produced, and for a fixed
-        ## gamete, the allele at the first marker came from one of the four
-        ## sister chromatids. Call this fixed gamete G and the corresponding
-        ## sister chromatid S. The paremeter r represents the probability that
-        ## there is some kind of crossover event between the two markers such
-        ## that allele at the second marker of gamete G belongs to a chromatid
-        ## which is not S or the sister of S. The parameter is specified this
-        ## way because if there is a crossover event such that the allele of G
-        ## at the second marker belongs to S or the sister of S, the type of
-        ## allele in G is the same as if no crossover event had occurred.
-        ##
-        ## This 2D list can be used to determine what the transition
-        ## probabilites are between two markers if the value r is known and the
-        ## allele type (reference or alternate) of both homologs of both parents
-        ## are known at both markers. The first index of the 2D list corresponds
-        ## to marker 1 and the second index corresponds to marker 2. Indexing
-        ## should be viewed in terms of binary representations. Specifically,
-        ## the binary number obtained where the four bits are as follows
-        ##
-        ##     Most significant/left bit   (bit 3): allele of parent 1 homolog 1
-        ##                                 (bit 2): allele of parent 1 homolog 2
-        ##                                 (bit 1): allele of parent 2 homolog 1
-        ##     least significant/right bit (bit 0): allele of parent 2 homolog 2
-        ##
-        ## would correspond to the the first or second index (in a 0-based
-        ## indexing system) of the 2D list when the alleles are for the first or
-        ## second marker respectively. The allele should be 0 if it is the
-        ## reference allele and should be 1 if it is the alternate
-        ## allele. Because R uses a 1-based indexing system, it is necessary to
-        ## add 1 to the above number to obtain the correct index.
-        ## The file inst/extdata/multi-model-symbolics.sage should be viewed for
-        ## more details.
-        ##
-        ## Because the vcf file has been modified such that parent 1 is always
-        ## homozygous reference and parent 2 is always homozygous alternate,
-        ## then the appropriate binary value is 0011 for both markers. 0011 is
-        ## binary for 3, so we use index 4 in both dimensions of this matrix
-        ## because of the addition of 1 to compensate for the indexing
-        ## type. Thus, transition.prob.matrix.generator will be a function that
-        ## takes a single parameter r and returns a transition matrix. The
-        ## returned matrix (call it T) is also indexed by binary
-        ## representations.
-        ##
-        ## To use the transition matrix T, for a taxa/progeny/member of the
-        ## population, encode a possible genetic state of the first marker as a
-        ## binary representation of a number, i, as follows:
-        ##
-        ##     Most significant/left bit   (bit 1): allele of progeny homolog 1
-        ##     Least significant/right bit (bit 0): allele of progeny homolog 2
-        ##
-        ## Encode the genetic state of a possible second marker as the number j
-        ## in the same way. Then in a 0-based indexing system, row i and column
-        ## j of T is the probability that the chosen progeny would be produced
-        ## by the speficied parents (those used to index into the 2D
-        ## list). Because R uses 1-based indexing the probability is actually
-        ## obtained using row i+1 and column j+1. This probability will be
-        ## written as T[i+1,j+1]. To obtain a transition probability to use in a
-        ## hidden Markov Model (HMM), this probability should be conditioned on
-        ## the first marker of the progeny having a genetic state as defined by
-        ## the number i. That is, the probability T[i+1,j+1] must be divided by
-        ## the sum of row i+1 of T (this sum is T[i+1,1] + T[i+1,2] + T[i+1,3] +
-        ## T[i+1,4]).
-        transition.prob.matrix.generator <- site.pair.transition.probs[[4]][[4]]
+    ## site.pair.transition.probs is loaded when trans.file is sourced
+    ## above. It is a list containing 16 entries. Each entry is itself a
+    ## list containing 16 functions. Each of these 16*16=256 functions takes
+    ## a single parameter r. The previous line instantiates a symbolic
+    ## variable which applies symmetrically to both parents because this is
+    ## a parameter of the species. An organism has 2 homologous chromosomes
+    ## and we examine two markers on this homologous pair.  Each of those
+    ## two homologous chromosomes has two sister chromatids. When a cell
+    ## undergoes meiosis, four gametes will be produced, and for a fixed
+    ## gamete, the allele at the first marker came from one of the four
+    ## sister chromatids. Call this fixed gamete G and the corresponding
+    ## sister chromatid S. The paremeter r represents the probability that
+    ## there is some kind of crossover event between the two markers such
+    ## that allele at the second marker of gamete G belongs to a chromatid
+    ## which is not S or the sister of S. The parameter is specified this
+    ## way because if there is a crossover event such that the allele of G
+    ## at the second marker belongs to S or the sister of S, the type of
+    ## allele in G is the same as if no crossover event had occurred.
+    ##
+    ## This 2D list can be used to determine what the transition
+    ## probabilites are between two markers if the value r is known and the
+    ## allele type (reference or alternate) of both homologs of both parents
+    ## are known at both markers. The first index of the 2D list corresponds
+    ## to marker 1 and the second index corresponds to marker 2. Indexing
+    ## should be viewed in terms of binary representations. Specifically,
+    ## the binary number obtained where the four bits are as follows
+    ##
+    ##     Most significant/left bit   (bit 3): allele of parent 1 homolog 1
+    ##                                 (bit 2): allele of parent 1 homolog 2
+    ##                                 (bit 1): allele of parent 2 homolog 1
+    ##     least significant/right bit (bit 0): allele of parent 2 homolog 2
+    ##
+    ## would correspond to the the first or second index (in a 0-based
+    ## indexing system) of the 2D list when the alleles are for the first or
+    ## second marker respectively. The allele should be 0 if it is the
+    ## reference allele and should be 1 if it is the alternate
+    ## allele. Because R uses a 1-based indexing system, it is necessary to
+    ## add 1 to the above number to obtain the correct index.
+    ## The file inst/extdata/multi-model-symbolics.sage should be viewed for
+    ## more details.
+    ##
+    ## Because the vcf file has been modified such that parent 1 is always
+    ## homozygous reference and parent 2 is always homozygous alternate,
+    ## then the appropriate binary value is 0011 for both markers. 0011 is
+    ## binary for 3, so we use index 4 in both dimensions of this matrix
+    ## because of the addition of 1 to compensate for the indexing
+    ## type. Thus, transition.prob.matrix.generator will be a function that
+    ## takes a single parameter r and returns a transition matrix. The
+    ## returned matrix (call it T) is also indexed by binary
+    ## representations.
+    ##
+    ## To use the transition matrix T, for a taxa/progeny/member of the
+    ## population, encode a possible genetic state of the first marker as a
+    ## binary representation of a number, i, as follows:
+    ##
+    ##     Most significant/left bit   (bit 1): allele of progeny homolog 1
+    ##     Least significant/right bit (bit 0): allele of progeny homolog 2
+    ##
+    ## Encode the genetic state of a possible second marker as the number j
+    ## in the same way. Then in a 0-based indexing system, row i and column
+    ## j of T is the probability that the chosen progeny would be produced
+    ## by the speficied parents (those used to index into the 2D
+    ## list). Because R uses 1-based indexing the probability is actually
+    ## obtained using row i+1 and column j+1. This probability will be
+    ## written as T[i+1,j+1]. To obtain a transition probability to use in a
+    ## hidden Markov Model (HMM), this probability should be conditioned on
+    ## the first marker of the progeny having a genetic state as defined by
+    ## the number i. That is, the probability T[i+1,j+1] must be divided by
+    ## the sum of row i+1 of T (this sum is T[i+1,1] + T[i+1,2] + T[i+1,3] +
+    ## T[i+1,4]).
+    transition.prob.matrix.generator <- site.pair.transition.probs[[4]][[4]]
 
 
-        ## A useful feature of these matrices is that while conditioning on a
-        ## row gives transition probabilities, if no conditioning is used
-        ## (i.e. the matrix is used as is) then the matrix encodes the
-        ## probabilities of each possible marker pair genetic makeup. Thus in
-        ## any population, and for any i,j if a pair of markers has an
-        ## associated transition parameter of r, then the value T(r)[i,j] is the
-        ## expected proportion of the population in which the first marker in the
-        ## pair has configuration i and the second marker has configuration
-        ## j. In a large population, the expected value can be approximated by
-        ## the proportion of the population having such configurations. This
-        ## idea works in reverse as well meaning that by first checking for each
-        ## configuration pair <i,j> the proportion of the population matching that
-        ## configuration, the value of r can be empirically estimated by
-        ## choosing the value r such that the matrix T(r) most closely matches
-        ## what is observed in the population. The matrix indices can be
-        ## summarized as follows where ref is reference, alt is alternate, hom
-        ## is homozygous, het t.1 is heterozygous type 1 (homolog 1 is reference
-        ## and homolog 2 is alternate), and het t.2 is heterozygous type 2
-        ## (homolog 1 is alternate and homolog 2 is reference).
-        ##
-        ##            | marker1 -> marker2
-        ##    --------+--------------------
-        ##     T[1,1] | hom ref -> hom ref
-        ##     T[4,4] | hom alt -> hom alt
-        ##    --------+--------------------
-        ##     T[1,4] | hom ref -> hom alt
-        ##     T[4,1] | hom alt -> hom ref
-        ##    --------+--------------------
-        ##     T[2,1] | het t.1 -> hom ref
-        ##     T[3,1] | het t.2 -> hom ref
-        ##     T[1,2] | hom ref -> het t.1
-        ##     T[1,3] | hom ref -> het t.2
-        ##     T[4,2] | hom alt -> het t.1
-        ##     T[4,3] | hom alt -> het t.2
-        ##     T[2,3] | het t.1 -> hom alt
-        ##     T[2,4] | het t.2 -> hom alt
-        ##    --------+--------------------
-        ##     T[2,2] | het t.1 -> het t.1
-        ##     T[3,3] | het t.2 -> het t.2
-        ##    --------+--------------------
-        ##     T[2,3] | het t.1 -> het t.2
-        ##     T[3,2] | het t.2 -> het t.1
-        ##
-        ## Further, it turns out that when both parents are homozygous for
-        ## opposite alleles at adjacent markers, and the progeny come from an
-        ## F{n} population where n is a positive integer, then the following
-        ## hold for the matrix T returned by transition.prob.matrix.generator
-        ## regardless of the parameter r. The following equations are in 1-based
-        ## indexing.
-        ##
-        ## T[1,1] = T[4,4]
-        ## T[1,4] = T[4,1]
-        ## T[2,1] = T[3,1] = T[1,2] = T[1,3] = T[4,2] = T[4,3] = T[2,4] = T[3,4]
-        ## T[2,2] = T[3,3]
-        ## T[3,2] = T[2,3]
-        ##
-        ## Thus, rather than categorizing each progeny into one of 16 categories
-        ## they can be placed in one of 5 categories which should make the
-        ## proportions more accurately reflect the expected values because the
-        ## sample size will be larger. Further, because configurations <2,2> and
-        ## <2,3> and <3,2> and <3,3> all represent progeny that are heterozygous
-        ## at both markers, it is not possible to distinguish between them when
-        ## looking at reads (because it is unknown which homolog a read came
-        ## from), so these states will be combined as well. Thus each progeny in
-        ## the population (that has reads) will be counted toward exactly one of the
-        ## following 4 categories:
-        ##
-        ##         Category     |         Expected Proportion
-        ##    ------------------|------------------------------------
-        ##     hom X -> hom X   |T[1,1] + T[4,4]
-        ##    ------------------|------------------------------------
-        ##     hom X -> hom !X  |T[1,4] + T[4,1]
-        ##    ------------------|------------------------------------
-        ##     het -> hom OR    |T[2,1] + T[3,1] + T[1,2] + T[1,3]
-        ##     hom -> het       |+ T[4,2] + T[4,3] + T[2,4] + T[3,4]
-        ##    ------------------|------------------------------------
-        ##     het -> het       |T[2,2] + T[3,3] + T[3,2] + T[2,3]
-        ##        ## site.pair.transition.probs list sourced in call to `source(trans.file)`
+    ## A useful feature of these matrices is that while conditioning on a
+    ## row gives transition probabilities, if no conditioning is used
+    ## (i.e. the matrix is used as is) then the matrix encodes the
+    ## probabilities of each possible marker pair genetic makeup. Thus in
+    ## any population, and for any i,j if a pair of markers has an
+    ## associated transition parameter of r, then the value T(r)[i,j] is the
+    ## expected proportion of the population in which the first marker in the
+    ## pair has configuration i and the second marker has configuration
+    ## j. In a large population, the expected value can be approximated by
+    ## the proportion of the population having such configurations. This
+    ## idea works in reverse as well meaning that by first checking for each
+    ## configuration pair <i,j> the proportion of the population matching that
+    ## configuration, the value of r can be empirically estimated by
+    ## choosing the value r such that the matrix T(r) most closely matches
+    ## what is observed in the population. The matrix indices can be
+    ## summarized as follows where ref is reference, alt is alternate, hom
+    ## is homozygous, het t.1 is heterozygous type 1 (homolog 1 is reference
+    ## and homolog 2 is alternate), and het t.2 is heterozygous type 2
+    ## (homolog 1 is alternate and homolog 2 is reference).
+    ##
+    ##            | marker1 -> marker2
+    ##    --------+--------------------
+    ##     T[1,1] | hom ref -> hom ref
+    ##     T[4,4] | hom alt -> hom alt
+    ##    --------+--------------------
+    ##     T[1,4] | hom ref -> hom alt
+    ##     T[4,1] | hom alt -> hom ref
+    ##    --------+--------------------
+    ##     T[2,1] | het t.1 -> hom ref
+    ##     T[3,1] | het t.2 -> hom ref
+    ##     T[1,2] | hom ref -> het t.1
+    ##     T[1,3] | hom ref -> het t.2
+    ##     T[4,2] | hom alt -> het t.1
+    ##     T[4,3] | hom alt -> het t.2
+    ##     T[2,3] | het t.1 -> hom alt
+    ##     T[2,4] | het t.2 -> hom alt
+    ##    --------+--------------------
+    ##     T[2,2] | het t.1 -> het t.1
+    ##     T[3,3] | het t.2 -> het t.2
+    ##    --------+--------------------
+    ##     T[2,3] | het t.1 -> het t.2
+    ##     T[3,2] | het t.2 -> het t.1
+    ##
+    ## Further, it turns out that when both parents are homozygous for
+    ## opposite alleles at adjacent markers, and the progeny come from an
+    ## F{n} population where n is a positive integer, then the following
+    ## hold for the matrix T returned by transition.prob.matrix.generator
+    ## regardless of the parameter r. The following equations are in 1-based
+    ## indexing.
+    ##
+    ## T[1,1] = T[4,4]
+    ## T[1,4] = T[4,1]
+    ## T[2,1] = T[3,1] = T[1,2] = T[1,3] = T[4,2] = T[4,3] = T[2,4] = T[3,4]
+    ## T[2,2] = T[3,3]
+    ## T[3,2] = T[2,3]
+    ##
+    ## Thus, rather than categorizing each progeny into one of 16 categories
+    ## they can be placed in one of 5 categories which should make the
+    ## proportions more accurately reflect the expected values because the
+    ## sample size will be larger. Further, because configurations <2,2> and
+    ## <2,3> and <3,2> and <3,3> all represent progeny that are heterozygous
+    ## at both markers, it is not possible to distinguish between them when
+    ## looking at reads (because it is unknown which homolog a read came
+    ## from), so these states will be combined as well. Thus each progeny in
+    ## the population (that has reads) will be counted toward exactly one of the
+    ## following 4 categories:
+    ##
+    ##         Category     |         Expected Proportion
+    ##    ------------------|------------------------------------
+    ##     hom X -> hom X   |T[1,1] + T[4,4]
+    ##    ------------------|------------------------------------
+    ##     hom X -> hom !X  |T[1,4] + T[4,1]
+    ##    ------------------|------------------------------------
+    ##     het -> hom OR    |T[2,1] + T[3,1] + T[1,2] + T[1,3]
+    ##     hom -> het       |+ T[4,2] + T[4,3] + T[2,4] + T[3,4]
+    ##    ------------------|------------------------------------
+    ##     het -> het       |T[2,2] + T[3,3] + T[3,2] + T[2,3]
+    ##        ## site.pair.transition.probs list sourced in call to `source(trans.file)`
 
-        condensed.trans.characteristics.generator <- function(r) {
-            T <- transition.prob.matrix.generator(r)
-            return.val <- c(T[1,1] + T[4,4],
-                            T[1,4] + T[4,1],
-                            T[2,1] + T[3,1] + T[1,2] + T[1,3]
-                            + T[4,2] + T[4,3] + T[2,4] + T[3,4],
-                            T[2,2] + T[3,3] + T[3,2] + T[2,3])
+    condensed.trans.characteristics.generator <- function(r) {
+        T <- transition.prob.matrix.generator(r)
+        return.val <- c(T[1,1] + T[4,4],
+                        T[1,4] + T[4,1],
+                        T[2,1] + T[3,1] + T[1,2] + T[1,3]
+                        + T[4,2] + T[4,3] + T[2,4] + T[3,4],
+                        T[2,2] + T[3,3] + T[3,2] + T[2,3])
 
-            names(return.val) <- get.type.names()
-            return.val
-        }
-        condensed.trans.characteristics.generator # return value
-    } else {
-        stop("Invalid model")
+        names(return.val) <- get.type.names()
+        return.val
     }
+    condensed.trans.characteristics.generator # return value
 }
 
 
@@ -1100,7 +1185,7 @@ get.weighted.counts <- function(a, b, gen, rerr) {
 ## two columns which represen the number of parent 1 allele reads and the number of
 ## parent 2 allele reads at each site
 get.unweighted.counts <- function(a, b, gen, rerr) {
-    min.reads <- 1
+    min.reads <- 5
 
     ## probability of each of 3 genetic states given the reads
     perc.het <- 0.5 ^ (gen - 1)
@@ -1162,11 +1247,66 @@ rowsums <- function(matrix) {
 
 
 do.it <- function() {
-parental <- readRDS("../paper_analysis/data/Lakin-Fuller/patental_imputation_result_jul9.rds")
+parental <- readRDS("/home/jason/Dropbox/research/LaByRInth/junk/patental_imputation_result_no_het_penalty_jul20.rds")## readRDS("../inst/extdata/datasets/Lakin-Fuller/patental_imputation_result_jul9.rds")
 tc2 <- calculate.transitional.characteristics(parental)
 F5.theory.generator <- get.condensed.characeristic.generator("F5")
 F4.theory.generator <- get.condensed.characeristic.generator("F4")
 F3.theory.generator <- get.condensed.characeristic.generator("F3")
+F2.theory.generator <- get.condensed.characeristic.generator("F2")
 gg.tc2 <- characteristics.to.ggplot.format(tc2)
 generate.plot(gg.tc2, F5.theory.generator)
 }
+
+do.it <- function() {
+HincII.parental <- readRDS("../../junk/HincII_patental_imputation_result_jul10.rds")
+HincII.tc4 <- calculate.transitional.characteristics(HincII.parental)
+F2.theory.generator <- get.condensed.characeristic.generator("F2")
+HincII.gg.tc <- characteristics.to.ggplot.format(HincII.tc4)
+generate.plot(HincII.gg.tc, F2.theory.generator)
+}
+
+do.it <- function() {
+RsaI.parental <- readRDS("../../junk/RsaI_patental_imputation_result_jul10.rds")
+RsaI.tc <- calculate.transitional.characteristics(RsaI.parental)
+F2.theory.generator <- get.condensed.characeristic.generator("F2")
+RsaI.gg.tc <- characteristics.to.ggplot.format(RsaI.tc)
+generate.plot(RsaI.gg.tc, F2.theory.generator)
+}
+
+do.it <- function() {
+IBM.RIL.parental <- readRDS("../../junk/IBM-RIL_patental_imputation_result_jul10.rds")
+IBM.RIL.tc <- calculate.transitional.characteristics(IBM.RIL.parental)
+F7.theory.generator <- get.condensed.characeristic.generator("F7")
+F6.theory.generator <- get.condensed.characeristic.generator("F6")
+F5.theory.generator <- get.condensed.characeristic.generator("F5")
+F4.theory.generator <- get.condensed.characeristic.generator("F4")
+F3.theory.generator <- get.condensed.characeristic.generator("F3")
+F2.theory.generator <- get.condensed.characeristic.generator("F2")
+IBM.RIL.gg.tc <- characteristics.to.ggplot.format(IBM.RIL.tc)
+generate.plot(IBM.RIL.gg.tc, F5.theory.generator)
+}
+
+do.it <- function() {
+## f1bc1.parental <- 
+f1bc1.tc <- calculate.transitional.characteristics(f1bc1.parental)
+F1BC1.theory.generator <- get.condensed.characeristic.generator("F1BC1")
+f1bc1.gg.tc <- characteristics.to.ggplot.format(f1bc1.tc)
+generate.plot(f1bc1.gg.tc, F1BC1.theory.generator)
+}
+
+animate.dataset <- function(characteristics, theory.generator) {
+    characteristics <- characteristics[order(characteristics$r), ]
+    characteristics <- characteristics[1:20, ]
+    plot.data <- characteristics.to.ggplot.format(characteristics)
+    if (nrow(plot.data) %% 4 != 0) {
+        stop("The number of rows should be a multiple of 4")
+    }
+    quarter <- nrow(plot.data)/4
+    log.10.num.images <- ceiling(log(quarter, 10))
+    file <- paste0("../../junk/HincII_animation/img_%0", log.10.num.images, "d.png")
+    for (i in 1:quarter) {
+        subset <- plot.data[i+(0:3)*quarter, ]
+        ggsave(file, plot = generate.plot(subset, theory.generator), device = "png", width = 600, height = 300, units = "mm")
+    }
+}
+

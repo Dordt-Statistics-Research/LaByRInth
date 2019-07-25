@@ -25,19 +25,6 @@
 ##
 
 
-################################################################################
-############################# LIBRARY REQUIREMENTS #############################
-################################################################################
-
-
-require(vcfR, quietly=T)
-require(abind, quietly=T)
-require(digest, quietly=T)
-
-
-
-
-
 LabyrinthAnalyze <- function(orig, masked, imputed) {
 
     gt.o <- getGT(orig)
@@ -70,73 +57,73 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
 }
 
 
-LabyrinthAnalyzePerSNP <- function(orig, masked, imputed) {
+## LabyrinthAnalyzePerSNP <- function(orig, masked, imputed) {
 
-    gt.o <- getGT(orig)
-    gt.m <- getGT(masked)
-    gt.i <- getGT(imputed)
+##     gt.o <- getGT(orig)
+##     gt.m <- getGT(masked)
+##     gt.i <- getGT(imputed)
 
-    ## vector.indices
-    masked.sites <-
-        (gt.o != "./." & gt.o != ".|.") &
-        (gt.m == "./." | gt.m == ".|.")
+##     ## vector.indices
+##     masked.sites <-
+##         (gt.o != "./." & gt.o != ".|.") &
+##         (gt.m == "./." | gt.m == ".|.")
 
-    same <-
-        ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
-        ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
-         (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
-        ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
+##     same <-
+##         ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
+##         ((gt.o == "0/1" | gt.o == "0|1" | gt.o == "1/0" | gt.o == "1|0") &
+##          (gt.i == "0/1" | gt.i == "0|1" | gt.i == "1/0" | gt.i == "1|0")) |
+##         ((gt.o == "1/1" | gt.o == "1|1") & (gt.i == "1/1" | gt.i == "1|1"))
 
-    skipped <-
-        (gt.i == "./.")
+##     skipped <-
+##         (gt.i == "./.")
 
-    snp.ids <- getID(orig)
-    marker.chroms <- getCHROM(orig)
-    per.snp.df <- do.call(rbind, lapply(seq_along(snp.ids), function(i) {
-        id        <- snp.ids[i]
-        chrom     <- marker.chroms[i]
+##     snp.ids <- getID(orig)
+##     marker.chroms <- getCHROM(orig)
+##     per.snp.df <- do.call(rbind, lapply(seq_along(snp.ids), function(i) {
+##         id        <- snp.ids[i]
+##         chrom     <- marker.chroms[i]
 
-        n.masked  <- sum(masked.sites[id, ])
-        n.same    <- sum(masked.sites[id, ] & same[id, ])
-        n.skipped <- sum(masked.sites[id, ] & skipped[id, ])
+##         n.masked  <- sum(masked.sites[id, ])
+##         n.same    <- sum(masked.sites[id, ] & same[id, ])
+##         n.skipped <- sum(masked.sites[id, ] & skipped[id, ])
 
-        data.frame(
-            snp       = id,
-            chrom     = chrom,
-            n.masked  = n.masked,
-            n.same    = n.same,
-            n.skipped = n.skipped,
-            n.wrong   = n.masked - n.same - n.skipped,
-            accuracy  = n.same / (n.masked - n.skipped),
-            quality   = n.same / n.masked
-        )
-    }))
+##         data.frame(
+##             snp       = id,
+##             chrom     = chrom,
+##             n.masked  = n.masked,
+##             n.same    = n.same,
+##             n.skipped = n.skipped,
+##             n.wrong   = n.masked - n.same - n.skipped,
+##             accuracy  = n.same / (n.masked - n.skipped),
+##             quality   = n.same / n.masked
+##         )
+##     }))
 
-    class(per.snp.df) <- c("LaByRInthAnalysis", class(per.snp.df))
-    per.snp.df
-}
+##     class(per.snp.df) <- c("LaByRInthAnalysis", class(per.snp.df))
+##     per.snp.df
+## }
 
 
-per.chrom.df <- function(df) {
-    if (! inherits(df, "LaByRInthAnalysis"))
-        stop("df must be of class LaByRInthAnalysis")
+## per.chrom.df <- function(df) {
+##     if (! inherits(df, "LaByRInthAnalysis"))
+##         stop("df must be of class LaByRInthAnalysis")
 
-    do.call(rbind, lapply(unique(df$chrom), function(chrom) {
+##     do.call(rbind, lapply(unique(df$chrom), function(chrom) {
 
-        rows <- df$chrom == chrom
+##         rows <- df$chrom == chrom
 
-        data.frame(
-            chrom     = chrom,
-            n.snps    = sum(rows),
-            n.masked  = n.masked <- sum(df$n.masked[rows]),
-            n.same    = n.same <- sum(df$n.same[rows]),
-            n.skipped = n.skipped <- sum(df$n.skipped[rows]),
-            n.wrong   = sum(df$n.wrong[rows]),
-            accuracy  = n.same / (n.masked - n.skipped),
-            quality   = n.same / n.masked
-        )
-    }))
-}
+##         data.frame(
+##             chrom     = chrom,
+##             n.snps    = sum(rows),
+##             n.masked  = n.masked <- sum(df$n.masked[rows]),
+##             n.same    = n.same <- sum(df$n.same[rows]),
+##             n.skipped = n.skipped <- sum(df$n.skipped[rows]),
+##             n.wrong   = sum(df$n.wrong[rows]),
+##             accuracy  = n.same / (n.masked - n.skipped),
+##             quality   = n.same / n.masked
+##         )
+##     }))
+## }
 
 
 LabyrinthAnalyzePosteriors <- function(orig, masked, imputed, resolution=10) {
@@ -150,6 +137,19 @@ LabyrinthAnalyzePosteriors <- function(orig, masked, imputed, resolution=10) {
     masked.sites <-
         (gt.o != "./." & gt.o != ".|.") &
         (gt.m == "./." | gt.m == ".|.")
+
+    gt.to.standard.numeric <- function(gt) {
+        apply(gt, 1:2, switch(entry,
+                              "0/0"=0,
+                              "0|0"=0,
+                              "0/1"=1,
+                              "0|1"=1,
+                              "1/0"=1,
+                              "1|0"=1,
+                              "1/1"=2,
+                              "1|1"=2,
+                                   -1))  #everything else including ./.
+    }
 
     same <-
         ((gt.o == "0/0" | gt.o == "0|0") & (gt.i == "0/0" | gt.i == "0|0")) |
