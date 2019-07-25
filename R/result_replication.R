@@ -41,6 +41,12 @@ get.breed.schemes <- function() {
     schemes
 }
 
+get.progeny.het <- function() {
+    result <- sapply(get.breed.schemes, LabyrinthCalcProgenyHet)
+    names(result) <- get.datasets()
+    result
+}
+
 ## minimum call depths found with trial and error to get ~1% called sites masked
 get.min.mask.depths <- function() {
     min.mask.depths <- c(7, 90, 12, 11)
@@ -208,6 +214,7 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
     parent.het      <- 0.01
     parents         <- get.all.parents()[[dataset]]
     breed.scheme    <- get.breed.schemes()[dataset]
+    progeny.het     <- get.progeny.het()[dataset]
 
     display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
 
@@ -263,9 +270,10 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
 
         if (! file.exists(par.file)) {
             LabyrinthImputeParents(vcf               = m.file,
+                                   out.file          = par.file,
                                    parents           = parents,
                                    breed.scheme      = breed.scheme,
-                                   out.file          = par.file,
+                                   progeny.het       = progeny.het,
                                    geno.err          = geno.err,
                                    parent.het        = parent.het,
                                    parallel          = parallel,

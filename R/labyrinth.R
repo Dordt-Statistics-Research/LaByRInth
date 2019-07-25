@@ -24,7 +24,7 @@
 ##                    R - P A C K A G E   I M P U T A T I O N
 ##
 
-version <- function() {"3.2.3"}
+version <- function() {"3.2.4"}
 
 ################################################################################
 ###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
@@ -759,6 +759,42 @@ LabyrinthImpute <- function(vcf, out.file, parents, breed.scheme, progeny.het=NU
 
     display(0, "LaByRInth full process completed in ", total.timer(), "\n")
     invisible(quality.result) ## implicit return
+}
+
+
+##' Calculate expected heterozygosity in a population
+##'
+##' Calculate expected heterozygosity in a population. Supported breeding
+##' schemes are "F1BC1" and "F<x>" where <x> is replaced by any (possibly
+##' multi-digit) number.
+##'
+##' @param breed.scheme Supported breeding scheme
+##' @return Expected heterozygousity proportion
+##' @author Jason Vander Woude
+##' @export
+LabyrinthCalcProgenyHet <- function(breed.scheme) {
+    RIL.pattern <- "^F[0-9]*$" # ^ and $ match beginning and end
+                               # F is literal
+                               # [0-9]* matches any number of numeric characters
+    F1BC1.str <- "F1BC1"
+
+    if (class(breed.scheme) != "character") {
+        stop("breed.scheme must be of class character\n")
+    }
+    if (length(breed.scheme) != 1) {
+        stop("LabyrinthCalcProgenyHet is not vectorized. breed.scheme must have length 1\n")
+    }
+
+    if (breed.scheme == F1BC1.str) {
+        0.5 # F1BC1 populations should have 50% heterozygosity
+    } else if (length(grep(RIL.pattern, breed.scheme))!=0) {
+        gen <- as.integer(substr(breed.scheme, 2, nchar(breed.scheme)))
+        # F1 has 100% heterozygosity, and the heterozygosity should be cut in
+        # half each generation after
+        0.5^(gen - 1)
+    } else {
+        stop("Unsupported breed.scheme")
+    }
 }
 
 
