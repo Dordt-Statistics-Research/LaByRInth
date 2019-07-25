@@ -1,0 +1,142 @@
+> LabyrinthPreparePublicationData("Lakin-Fuller", "~/Desktop/publication/")
+ * Filtering the Lakin-Fuller dataset
+
+ * Loading vcf
+    * Completed in 2.11 secs
+
+ * Checking if parents are in the vcf
+
+ * Checking for sites that are not biallelic
+    * The following sites are not biallelic and will be removed:
+       * CHR:1A	POS:267367471	REF:NT	ALT:NA,N
+       * CHR:1B	POS:558850175	REF:T	ALT:G,C
+       * CHR:6A	POS:416179127	REF:NG	ALT:N,NA
+       * CHR:7A	POS:585875031	REF:T	ALT:G,A
+
+ * Removing sites and saving vcf
+
+ * Summary: 4 of 9833 sites removed
+
+ * LaByRInth filtering completed in 5.39 secs
+
+ * Masking the Lakin-Fuller dataset
+
+ * Sites are considered progeny/marker pairs
+ * 1368555 sites in the progeny are called of 3066648 total sites (44.6%)
+ * There were 2537276 total reads in the progeny across all sites: an average depth of 0.827 reads per progeny site
+ * 12972 sites in the progeny will be masked of 3066648 total sites (0.4%)
+ * 12972 sites in the progeny will be masked of 1368555 called sites (0.9%)
+
+
+
+
+
+
+
+
+
+
+> LabyrinthPreparePublicationData("HincII", "~/Desktop/publication/")
+ * Filtering the HincII dataset
+
+ * Loading vcf
+    * Completed in 1.22 secs
+
+ * Checking if parents are in the vcf
+
+ * Checking for sites that are not biallelic
+
+ * All sites okay; copying original vcf file
+
+ * Summary: 0 of 11205 sites removed
+
+ * LaByRInth filtering completed in 2.85 secs
+
+ * Masking the HincII dataset
+
+ * Sites are considered progeny/marker pairs
+ * 889937 sites in the progeny are called of 1008450 total sites (88.2%)
+ * There were 13746629 total reads in the progeny across all sites: an average depth of 13.631 reads per progeny site
+ * 10273 sites in the progeny will be masked of 1008450 total sites (1%)
+ * 10273 sites in the progeny will be masked of 889937 called sites (1.2%)
+
+
+
+
+
+
+
+
+
+
+
+> LabyrinthPreparePublicationData("RsaI", "~/Desktop/publication/")
+ * Filtering the RsaI dataset
+
+ * Loading vcf
+    * Completed in 13.01 secs
+
+ * Checking if parents are in the vcf
+
+ * Checking for sites that are not biallelic
+
+ * All sites okay; copying original vcf file
+
+ * Summary: 0 of 127056 sites removed
+
+ * LaByRInth filtering completed in 27.25 secs
+
+ * Masking the RsaI dataset
+
+ * Sites are considered progeny/marker pairs
+ * 6700091 sites in the progeny are called of 11307984 total sites (59.3%)
+ * There were 17746348 total reads in the progeny across all sites: an average depth of 1.569 reads per progeny site
+ * 79023 sites in the progeny will be masked of 11307984 total sites (0.7%)
+ * 79023 sites in the progeny will be masked of 6700091 called sites (1.2%)
+
+
+
+
+
+
+
+
+
+
+
+> LabyrinthPreparePublicationData("IBM-RIL", "~/Desktop/publication/")
+ * Filtering the IBM-RIL dataset
+
+ * Loading vcf
+    * Completed in 2.53 secs
+
+ * Checking if parents are in the vcf
+
+ * Checking for sites that are not biallelic
+    * The following sites are not biallelic and will be removed:
+       * CHR:1	POS:91513940	REF:A	ALT:T,C
+       * CHR:2	POS:4172949	REF:G	ALT:C,A
+       * CHR:2	POS:56523805	REF:C	ALT:T,G
+       * CHR:3	POS:2108586	REF:G	ALT:T,C
+       * CHR:3	POS:159862180	REF:C	ALT:T,G
+       * CHR:4	POS:70022354	REF:T	ALT:A,C
+       * CHR:4	POS:142828335	REF:T	ALT:G,C
+       * CHR:4	POS:157146609	REF:C	ALT:A,T
+       * CHR:4	POS:170841801	REF:G	ALT:C,T
+       * CHR:5	POS:193877067	REF:C	ALT:T,G
+       * CHR:8	POS:166117514	REF:G	ALT:C,A
+       * CHR:9	POS:83759969	REF:C	ALT:T,A
+
+ * Removing sites and saving vcf
+
+ * Summary: 12 of 13912 sites removed
+
+ * LaByRInth filtering completed in 6.07 secs
+
+ * Masking the IBM-RIL dataset
+
+ * Sites are considered progeny/marker pairs
+ * 1004826 sites in the progeny are called of 3836400 total sites (26.2%)
+ * There were 2693530 total reads in the progeny across all sites: an average depth of 0.702 reads per progeny site
+ * 8004 sites in the progeny will be masked of 3836400 total sites (0.2%)
+ * 8004 sites in the progeny will be masked of 1004826 called sites (0.8%)
