@@ -227,7 +227,8 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
     ## Ensure the original dataset file stil exists in the package
     if (! file.exists(original.file(dataset))) {
         stop("The ", dataset,
-             " dataset is missing from the labyrinth package. Try re-installing the package.")
+             " dataset is missing from the labyrinth package. ",
+             "Try re-installing the package.\n")
     }
 
     ## Create the outpur directory if needed
@@ -254,7 +255,7 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
     ## Impute the datasets
     for (i in seq_along(geno.errs)) {
         display(0, "Beginning full imputation of the dataset ", dataset,
-                " with genotype error ", geno.errs[i])
+                " with genotype error ", geno.errs[i], "\n")
 
         par.file        <- imputed.parents.file(dataset,
                                                 output.dir,
@@ -285,9 +286,6 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         if (! file.exists(out.file)) {
             LabyrinthImputeProgeny(parental          = readRDS(par.file),
                                    out.file          = out.file,
-                                   use.fwd.bkwd      = use.fwd.bkwd,
-                                   calc.posteriors   = use.fwd.bkwd,
-                                   viterbi.threshold = NA,  # irrelevant,
                                    parallel          = parallel,
                                    cores             = cores)
         } else {
