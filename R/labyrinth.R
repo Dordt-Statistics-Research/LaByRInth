@@ -405,21 +405,6 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, breed.scheme,
 ##'        LabyrinthParentalImputation function) which will contain information
 ##'        about the population including the parental imputation information.
 ##' @param out.file File path of output file.
-##' @param use.fwd.bkwd Logical indicating if the forward-backward algorithm or
-##'        the Viterbi algorithm should be used to find the optimal solution to
-##'        the hidden Markov model (HMM); use of the Viterbi algorithm is highly
-##'        discouraged because theory suggests the forward-backward algorithm
-##'        should outperform it, and testing of the Viterbi implementation was
-##'        only cursory.
-##' @param calc.posteriors Logical indicating if marginal posterior
-##'        probabilities should be calculated for every imputation call made. If
-##'        the forward-backward algorithm is used, these probabilities must be
-##'        computed, so this parameter is only meaningful if the Viterbi
-##'        algorithm is used in which case the forward-backward algorithm is run
-##'        in the background with the sole purpose of computing these posterior
-##'        probabilities.
-##' @param viterbi.threshold Numeric indicating at what threshold probability
-##'        sites should be left uncalled instead of imputed.
 ##' @param parallel Logical indicating if imputation should be run in parallel
 ##'        or serial.
 ##' @param cores Numeric indicating how many sub-processes should be spawned if
@@ -441,8 +426,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, breed.scheme,
 ##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
-LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
-                                    calc.posteriors=TRUE, viterbi.threshold=1e-3,
+LabyrinthImputeProgeny <- function (parental, out.file,
                                     parallel=TRUE, cores=4) {
     ## begin timer
     total.timer <- new.timer()
@@ -453,12 +437,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
         stop("vcf must be of class character or parental.imputation\n")
     if (class(out.file) != "character")
         stop("out.file must be of class character\n")
-    if (class(use.fwd.bkwd) != "logical")
-        stop("use.fwd.bkwd must be of class logical\n")
-    if (class(calc.posteriors) != "logical")
-        stop("calc.posteriors must be of class logical\n")
-    if (class(viterbi.threshold) != "numeric")
-        stop("viterbi.threshold must be of class numeric\n")
     if (class(parallel) != "logical")
         stop("parallel must be of class logical\n")
     if (class(cores) != "numeric")
@@ -485,14 +463,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     }
 
 
-    ## Without more thorough validation, users should be prevented from using Viterbi
-    if (! use.fwd.bkwd) {
-        stop(paste("Not using the forward-backward algorithm is heavily",
-                   "discouraged; To use the Viterbi instead, you will have to",
-                   "remove this line of the source code"))
-    }
-
-
     ## file verification
     if (file.exists(out.file))
         stop("Output file already exists; please choose another name\n")
@@ -500,12 +470,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
         stop("Output file name must end with '.vcf.gz'\n")
     if (! verify.file.dir.exists(out.file))
         stop("Directory of the output file does not exist; please create it\n")
-
-    ## parameter verification
-    if (use.fwd.bkwd && !calc.posteriors) {
-        display(0, "When using fwd.bkwd, posterior probabilities must be calculated anyway")
-        display(0, "These probabilities will be included in the output file\n")
-    }
     if (cores == 1 && parallel)
         stop("Cores cannot be 1 if parallel is true\n")
     if (cores > 1 && !parallel)
@@ -558,9 +522,6 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
                       snp.chroms,
                       parallel,
                       cores,
-                      use.fwd.bkwd,
-                      calc.posteriors,
-                      viterbi.threshold,
                       fwd.bkwd.threshold)
     display(1, "Completed in ", timer(), "\n")
 
@@ -1080,8 +1041,8 @@ viterbi <- function(emm, trans, emm.log=FALSE, trans.log=FALSE) {
 ## hom.ref     het     hom.alt
 ## 0/0         0/1     1/1
 impute <- function(parents, emm.structures, trans.structures, parent.models,
-                   sample.names, snp.chroms, parallel, cores, use.fwd.bkwd,
-                   calc.posteriors, viterbi.threshold, fwd.bkwd.threshold) {
+                   sample.names, snp.chroms, parallel, cores,
+                   fwd.bkwd.threshold) {
 
     listapply <- get.lapply(parallel, cores)
     u.chroms <- unique(snp.chroms)
@@ -1104,79 +1065,38 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
         res <- list()
         res$posteriors <- NULL
 
-        if (use.fwd.bkwd || calc.posteriors) {
-            if (sample %in% parents) {
-                posterior.mat <- rbind("hom.ref" = rep(1/3, n.sites),
-                                       "het.I"   = rep(1/6, n.sites),
-                                       "het.II"  = rep(1/6, n.sites),
-                                       "hom.alt" = rep(1/3, n.sites))
-            } else {
-                posterior.mat <- fwd.bkwd(emm, trans, sample=="HincII_F2-01" && as.character(chrom)=="2")
-            }
-
-            posteriors <- rbind("hom.ref" = posterior.mat["hom.ref", ],
-                                "het"     = posterior.mat["het.I", ] + posterior.mat["het.II", ],
-                                "hom.alt" = posterior.mat["hom.alt", ])
-
-            phred.scaled <- apply(posteriors, 1:2,  prob.to.phred)
-
-            res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
-
-            if (use.fwd.bkwd) {
-                if (sample == parents[1]) {
-                    res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[1]]]
-                } else if (sample == parents[2]) {
-                    res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[2]]]
-                } else {
-                    res$gt <- apply(posteriors, 2, function(states) {
-                        c("0/0","0/1","1/1")[which.max(states)]
-                    })
-                }
-
-                which.remove <- apply(posteriors, 2, function(states) {
-                    max(states) < fwd.bkwd.threshold
-                })
-
-                res$gt[which.remove] <- "./."
-            }
+        if (sample %in% parents) {
+            posterior.mat <- rbind("hom.ref" = rep(1/3, n.sites),
+                                   "het.I"   = rep(1/6, n.sites),
+                                   "het.II"  = rep(1/6, n.sites),
+                                   "hom.alt" = rep(1/3, n.sites))
+        } else {
+            posterior.mat <- fwd.bkwd(emm, trans, sample=="HincII_F2-01" && as.character(chrom)=="2")
         }
 
-        if (!use.fwd.bkwd) {
-            if (sample == parents[1]) {
-                best.path <- parent.paths[[1]]
-            } else if (sample == parents[2]) {
-                best.path <- parent.paths[[2]]
-            } else {
-                relevant <- ! apply(emm, 2, function(state.probs) {
-                    all(state.probs == state.probs[1])
-                })
+        posteriors <- rbind("hom.ref" = posterior.mat["hom.ref", ],
+                            "het"     = posterior.mat["het.I", ] + posterior.mat["het.II", ],
+                            "hom.alt" = posterior.mat["hom.alt", ])
 
-                which.relevant <- which(relevant)
-                names(which.relevant) <- NULL
+        phred.scaled <- apply(posteriors, 1:2,  prob.to.phred)
 
-                if (length(which.relevant) < 2) {
-                    best.path <- rep(5, length(relevant))
-                } else {
+        res$posteriors <- apply(phred.scaled, 2, paste0, collapse=",")
 
-                    path.and.prob <- viterbi(emm, trans)
-                    best.path <- path.and.prob$path
-
-                    inter.relevant.probs <- sapply.pairs(which.relevant, function(a, b) {exp(log.lik.path(best.path, emm, trans, a, b))})
-                    names(inter.relevant.probs) <- NULL
-
-                    for (unlikely.index in which(inter.relevant.probs < viterbi.threshold)) {
-                        start <- which.relevant[unlikely.index] + 1
-                        end <- which.relevant[unlikely.index + 1] - 1
-
-                        best.path[start:end] <- 5
-                    }
-
-                    best.path
-                }
-            }
-
-            res$gt <- c("0|0", "0|1", "1|0", "1|1", "./.")[best.path]
+        if (sample == parents[1]) {
+            res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[1]]]
+        } else if (sample == parents[2]) {
+            res$gt <- c("0|0", "0|1", "1|0", "1|1")[parent.paths[[2]]]
+        } else {
+            res$gt <- apply(posteriors, 2, function(states) {
+                c("0/0","0/1","1/1")[which.max(states)]
+            })
         }
+
+        which.remove <- apply(posteriors, 2, function(states) {
+            max(states) < fwd.bkwd.threshold
+        })
+
+        res$gt[which.remove] <- "./."
 
         res  # implicit return
     }
