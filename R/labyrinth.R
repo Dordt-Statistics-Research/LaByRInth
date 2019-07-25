@@ -24,7 +24,7 @@
 ##                    R - P A C K A G E   I M P U T A T I O N
 ##
 
-version <- function() {"3.2.4"}
+version <- function() {"3.2.5"}
 
 ################################################################################
 ###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
@@ -220,7 +220,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, breed.scheme,
     if (class(parents) != "character")
         stop("parents must be of class character\n")
     if (class(breed.scheme) != "character")
-        stop("breed.schemes must be of class character\n")
+        stop("breed.scheme must be of class character\n")
     if (class(progeny.het) != "numeric" && !is.null(progeny.het))
         stop("progeny.het must be of class numeric (or NULL)\n")
     if (class(read.err) != "numeric" && !is.null(read.err))
