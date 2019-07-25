@@ -176,7 +176,7 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##' @param vcf File path or vcfR object to impute.
 ##' @param out.file File path of output file.
 ##' @param parents Character vector with names of the two parents.
-##' @param generation Numeric representing generation (e.g. 5 for F5 population).
+##' @param breed.scheme Population type (e.g. F2, F5, F1BC1).
 ##' @param geno.err Estimate of proportion of calls genotyped incorrectly.
 ##' @param parent.het Estimate of proportion of sites in each parent that are
 ##'        truly heterozygous.
@@ -198,14 +198,16 @@ LabyrinthFilter <- function(vcf, out.file, parents, require.hom.poly=FALSE) {
 ##'     vcf = input,
 ##'     out.file = output,
 ##'     parents = c("LAKIN", "FULLER"),
-##'     generation = 5,
+##'     breed.scheme = "F5",
+##'     progeny.het = 0.5^4, # expected heterozygosity of F5 population
 ##'     geno.err = 0.015,
 ##'     parent.het = 0.005,
 ##'     parallel = FALSE,
 ##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
-LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
+LabyrinthImputeParents <- function (vcf, out.file, parents, breed.scheme,
+                                    progeny.het=NULL, read.err=NULL,
                                     geno.err=0.01, parent.het=0.01,
                                     parallel=TRUE, cores=4) {
     ## begin timer
@@ -217,8 +219,12 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
         stop("vcf must be of class character or vcfR\n")
     if (class(parents) != "character")
         stop("parents must be of class character\n")
-    if (class(generation) != "numeric")
-        stop("generation must be of class numeric\n")
+    if (class(breed.scheme) != "character")
+        stop("breed.schemes must be of class character\n")
+    if (class(progeny.het) != "numeric" && !is.null(progeny.het))
+        stop("progeny.het must be of class numeric (or NULL)\n")
+    if (class(read.err) != "numeric" && !is.null(read.err))
+        stop("read.err must be of class numeric (or NULL)\n")
     if (class(out.file) != "character")
         stop("out.file must be of class character\n")
     if (class(geno.err) != "numeric")
@@ -249,6 +255,40 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
         stop("Cores cannot be less than 1\n")
     if (length(parents) != 2)
         stop("parents must have length 2\n")
+    if ((is.null(progeny.het) && is.null(read.err)) ||
+        (!is.null(progeny.het) && !is.null(read.err)))
+        stop("Exactly one of progeny.het and read.err must be specified. ",
+             "If read.err is specified, that will be used as the probability ",
+             "of a sequencing error. If progeny.het is specified, the ",
+             "probability of a sequencing error will be estimated from the ",
+             "population characteristics.")
+    if (!is.null(read.err) && read.err > 0.5)
+        stop("read.err must be between 0 and 0.5 (inclusive)")
+    if (!is.null(read.err) && read.err > 0.1)
+        warning("read.err set to ", round(read.err*100, 2), "%. ",
+                "This is unusually high. Proceeding anyway.")
+
+
+    ## Variable initialization and function loading
+    timer <- new.timer()
+    display(0, "Loading data specific to ", breed.scheme, " populations")
+    ## site.pair.transition.probs variable will be loaded
+    tryCatch({
+        trans.file <- system.file("extdata",
+                                  "transition-probs",
+                                  paste0(breed.scheme, ".R"),
+                                  package = "labyrinth",
+                                  mustWork = TRUE)
+        source(trans.file)
+    }, error = function(e) {
+        stop(paste("Cannot find file ", trans.file, "; the specified ",
+                   "breeding scheme may not be supported by default. ",
+                   "Additional breeding schemes can be added; for instructions, ",
+                   "see the inst/extdata/multi-model-symbolics.sage file in the ",
+                   "labyrinth package directory."))
+    })
+    display(1, "Completed in ", timer(), "\n")
+
 
 
     ## load vcf if needed
@@ -287,31 +327,6 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     display(1, "Completed in ", timer(), "\n")
 
 
-
-    ## Variable initialization and function loading
-    timer <- new.timer()
-    display(0, "Loading data specific to F", generation)
-    ## site.pair.transition.probs variable will be loaded
-    tryCatch({
-        trans.file <- system.file("extdata",
-                                  "transition-probs",
-                                  paste0("F", generation, ".R"),
-                                  package = "labyrinth",
-                                  mustWork = TRUE)
-        source(trans.file)
-    }, error = function(e) {
-        stop(paste("Cannot find file ", trans.file, "; the specified ",
-                   "generation may be too high, either try imputing as a ",
-                   "lower generation population or generate the appropriate ",
-                   "file yourself. To view details on how to generate such a ",
-                   "file, see the README file in the ",
-                   "inst/extdata/transition-probs sub-directory of the ",
-                   "LaByRInth package."))
-    })
-    display(1, "Completed in ", timer(), "\n")
-
-
-
     timer <- new.timer()
     display(0, "Generating and caching variables")
     result <- list()
@@ -319,7 +334,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     ## save parameters in result
     result$vcf <- vcf
     result$parents <- parents
-    result$generation <- generation
+    result$breed.scheme <- breed.scheme
     result$geno.err <- geno.err
     result$parent.het <- parent.het
     result$site.pair.transition.probs <- site.pair.transition.probs
@@ -335,12 +350,15 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
 
 
 
-    timer <- new.timer()
-    display(0, "Estimating erroneous read rate from heterozygosity")
-    read.err <- estimate.read.err(ad, generation)
-    display(1, "Error rate estimated to be ", round(read.err*100, 2), "%")
+    if (is.null(read.err)) {
+        timer <- new.timer()
+        display(0, "Estimating erroneous read rate from heterozygosity")
+        read.err <- estimate.read.err(ad, progeny.het)
+        display(1, "Error rate estimated to be ", round(read.err*100, 2), "%")
+        display(1, "Completed in ", timer(), "\n")
+    }
     result$read.err <- read.err
-    display(1, "Completed in ", timer(), "\n")
+
 
 
     ## emission probability code
@@ -349,7 +367,7 @@ LabyrinthImputeParents <- function (vcf, out.file, parents, generation,
     emission.structure <- get.emission.structures(ad,
                                                   sample.names,
                                                   marker.names,
-                                                  generation,
+                                                  progeny.het,
                                                   read.err,
                                                   geno.err)
     result$emission.structure <- emission.structure
@@ -502,7 +520,7 @@ LabyrinthImputeProgeny <- function (parental, out.file, use.fwd.bkwd=TRUE,
     vcf <- parental$vcf
     parents <- parental$parents
     parent.models <- parental$parent.models
-    generation <- parental$generation
+    breed.scheme <- parental$breed.scheme
     read.err <- parental$read.err
     geno.err <- parental$geno.err
     site.pair.transition.probs <- parental$site.pair.transition.probs
@@ -687,7 +705,7 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##' @param vcf File path or vcfR object to impute.
 ##' @param out.file File path of output file.
 ##' @param parents Character vector with names of the two parents.
-##' @param generation Numeric representing generation (e.g. 5 for F5 population).
+##' @param breed.scheme Population type (e.g. F2, F5, F1BC1).
 ##' @param min.posterior Numeric specifying the minimum probability for any call
 ##'        that is kept.
 ##' @param geno.err Estimate of proportion of calls genotyped incorrectly.
@@ -719,7 +737,8 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##'     vcf = input,
 ##'     out.file = output,
 ##'     parents = c("LAKIN", "FULLER"),
-##'     generation = 5,
+##'     breed.scheme = "F5",
+##'     progeny.het = 0.5^4, # expected heterozygosity of F5 population
 ##'     min.posterior = 0.8,
 ##'     geno.err = 0.015,
 ##'     parent.het = 0.005,
@@ -728,8 +747,8 @@ LabyrinthQualityControl <- function(vcf, out.file, min.posterior,
 ##'     cores = 1)
 ##' @author Jason Vander Woude
 ##' @export
-LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
-                            geno.err=0.01, parent.het=0.01,
+LabyrinthImpute <- function(vcf, out.file, parents, breed.scheme, progeny.het=NULL,
+                            read.err=NULL, min.posterior, geno.err=0.01, parent.het=0.01,
                             require.hom.poly=FALSE, parallel=TRUE, cores=4) {
 
     total.timer <- new.timer()
@@ -750,7 +769,7 @@ LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
         vcf = filtered.result,
         out.file = parental.file,
         parents = parents,
-        generation = generation,
+        breed.scheme = breed.scheme,
         geno.err = geno.err,
         parent.het = parent.het,
         parallel = parallel,
@@ -804,9 +823,9 @@ LabyrinthImpute <- function(vcf, out.file, parents, generation, min.posterior,
 ## probabilities, so it was faster to compute all of the emission probabilities
 ## only once.
 get.emission.structures <- function(ad, sample.names, marker.names,
-                                    generation, read.err, geno.err) {
+                                    progeny.het, read.err, geno.err) {
 
-    perc.het <- 0.5^(generation - 1)
+    perc.het <- progeny.het
     perc.hom.ref <- perc.hom.alt <- (1 - perc.het) / 2
 
     k <- choose(ad[ , , 1] + ad[ , , 2], ad[ , , 1])  # n choose k
@@ -1403,8 +1422,8 @@ determine.parents.and.recombs <- function(emm.structure, parents, snp.chroms,
             p1 <- floor(i / 4)  # bit shift i right twice to get two most sig bits
             p2 <- i - p1*4      # two least significant bits
             log(snp.depths[1, (p1+1)]) +
-                log(snp.depths[2, (p2+1)]) +
-                log.penalty[i+1]
+                log(snp.depths[2, (p2+1)])# +
+               log.penalty[i+1]
         })
         names(result) <- NULL
         result  # implicit return
@@ -1543,15 +1562,13 @@ extract.each.parent <- function(parental.model) {
 }
 
 
-estimate.read.err <- function(ad, n.gen) {
+estimate.read.err <- function(ad, expected.het) {
     depths <- ad[ , , 1] + ad[ , , 2]
     relevant <- depths > 1  # depth of 0 or 1 gives no info on heterozygosity
     ref <- ad[ , , 1][relevant]
     alt <- ad[ , , 2][relevant]
 
-    ## TODO(Jason): this should depend on the expected heterozygosity of the
-    ## parents and the single F1 that all progeny are based on
-    h <- 0.5^(n.gen - 1)  # expected proportion of sites that are heterozygous
+    h <- expected.het
 
     ## objective function of r, the probability of an erroneous read at the
     ## haplotype level
