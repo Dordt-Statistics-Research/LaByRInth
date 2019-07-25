@@ -35,10 +35,10 @@ get.all.parents <- function() {
 }
 
 ## I don't actually know what generation IBM-RIL is, so I'm just saying 7
-get.generations <- function() {
-    generations <- c(5, 2, 2, 7)
-    names(generations) <- get.datasets()
-    generations
+get.breed.schemes <- function() {
+    schemes <- c("F5", "F2", "F2", "F7")
+    names(schemes) <- get.datasets()
+    schemes
 }
 
 ## minimum call depths found with trial and error to get ~1% called sites masked
@@ -207,7 +207,7 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
     geno.errs       <- c(0.001, 0.01, 0.1)
     parent.het      <- 0.01
     parents         <- get.all.parents()[[dataset]]
-    generation      <- get.generations()[dataset]
+    breed.scheme    <- get.breed.schemes()[dataset]
 
     display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
 
@@ -264,7 +264,7 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         if (! file.exists(par.file)) {
             LabyrinthImputeParents(vcf               = m.file,
                                    parents           = parents,
-                                   generation        = generation,
+                                   breed.scheme      = breed.scheme,
                                    out.file          = par.file,
                                    geno.err          = geno.err,
                                    parent.het        = parent.het,
