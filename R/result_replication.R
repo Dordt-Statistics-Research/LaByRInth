@@ -125,9 +125,9 @@ imputed.progeny.file <- function(dataset.name, base.dir, algorithm,  parental.co
 ##'        "RsaI", or "IBM-RIL"
 ##' @param output.dir a directory where all subdirectories and filtered and
 ##'        masked files will be placed.
-##'
-##' @return nothing
+##' @return NULL
 ##' @author Jason Vander Woude
+##' @export
 LabyrinthPreparePublicationData <- function(dataset, output.dir) {
 
     ## Ensure dataset is a valid option
@@ -181,6 +181,113 @@ LabyrinthPreparePublicationData <- function(dataset, output.dir) {
                       lik.ratio = 100,
                       rerr      = 0.05)
     }
+
+    NULL
+}
+
+
+##' Impute the masked publication data
+##'
+##' First run LabyrinthPreparePublicationData,
+##'
+##' @param dataset one of the following strings: "Lakin-Fuller", "HincII",
+##'        "RsaI", or "IBM-RIL"
+##' @param output.dir a directory where all subdirectories and filtered and
+##'        masked files will be placed. MUST BE THE SAME AS THE output.dir
+##'        PARAMETER USED WHEN RUNNING LabyrinthPreparePublicationData.
+##' @param parallel Logical indicating if imputation should be run in parallel
+##'        or serial.
+##' @param cores Numeric indicating how many sub-processes should be spawned if
+##'        running in parallel.
+##' @return NULL
+##' @author Jason Vander Woude
+##' @export
+LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, cores=1) {
+
+    geno.errs       <- c(0.001, 0.01, 0.1)
+    parent.het      <- 0.01
+    parents         <- get.all.parents()[[dataset]]
+    generation      <- get.generations()[dataset]
+
+    display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
+
+    ## Ensure dataset is a valid option
+    if (! dataset %in% get.datasets()) {
+        stop("dataset must be one of these strings: '", paste0(get.datasets(),
+        collapse="', '"), "'")
+    }
+
+    ## Ensure the original dataset file stil exists in the package
+    if (! file.exists(original.file(dataset))) {
+        stop("The ", dataset,
+             " dataset is missing from the labyrinth package. Try re-installing the package.")
+    }
+
+    ## Create the outpur directory if needed
+    if (! dir.exists(output.dir)) {
+        dir.create(imputed.dir(dataset), recursive=TRUE)
+    }
+
+    ## Check if masked datasets exist
+    m.file <- masked.file(dataset, output.dir)
+    if (! file.exists(m.file)) {
+        stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
+    }
+
+    ## Ensure imputed datasets can be saved, creating the directory if needed
+    example.parent.file <- imputed.parents.file(dataset, output.dir, "LaByRInth")
+    example.progeny.file <- imputed.progeny.file(dataset, output.dir, "LaByRInth")
+    if (! dir.exists(dirname(example.parent.file))) {
+        dir.create(dirname(example.parent.file), recursive=TRUE)
+    }
+    if (! dir.exists(dirname(example.progeny.file))) {
+        dir.create(dirname(example.progeny.file), recursive=TRUE)
+    }
+
+    ## Impute the datasets
+    for (i in seq_along(geno.errs)) {
+        display(0, "Beginning full imputation of the dataset ", dataset,
+                " with genotype error ", geno.errs[i])
+
+        par.file        <- imputed.parents.file(dataset,
+                                                output.dir,
+                                                "LaByRInth",
+                                                config=i)
+        out.file        <- imputed.progeny.file(dataset,
+                                                output.dir,
+                                                "LaByRInth",
+                                                parental.config=i,
+                                                progeny.config=1)
+
+        geno.err        <- geno.errs[i]
+
+        if (! file.exists(par.file)) {
+            LabyrinthImputeParents(vcf               = m.file,
+                                   parents           = parents,
+                                   generation        = generation,
+                                   out.file          = par.file,
+                                   geno.err          = geno.err,
+                                   parent.het        = parent.het,
+                                   parallel          = parallel,
+                                   cores             = cores)
+        } else {
+            display(1, "Parental file ", par.file, " already exists and will be used")
+        }
+
+        if (! file.exists(out.file)) {
+            LabyrinthImputeProgeny(parental          = readRDS(par.file),
+                                   out.file          = out.file,
+                                   use.fwd.bkwd      = use.fwd.bkwd,
+                                   calc.posteriors   = use.fwd.bkwd,
+                                   viterbi.threshold = NA,  # irrelevant,
+                                   parallel          = parallel,
+                                   cores             = cores)
+        } else {
+            display(1, "Imputed file ", out.file, " already exists and will be used")
+        }
+    }
+
+    NULL
 }
 
 
@@ -311,97 +418,6 @@ LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0
     write.vcf(vcf, out.file)
     invisible(vcf)  # implicit return
 }
-
-
-LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, cores=1) {
-
-    geno.errs       <- c(0.001, 0.01, 0.1)
-    parent.het      <- 0.01
-    parents         <- get.all.parents()[[dataset]]
-    generation      <- get.generations()[dataset]
-
-    display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
-
-    ## Ensure dataset is a valid option
-    if (! dataset %in% get.datasets()) {
-        stop("dataset must be one of these strings: '", paste0(get.datasets(),
-        collapse="', '"), "'")
-    }
-
-    ## Ensure the original dataset file stil exists in the package
-    if (! file.exists(original.file(dataset))) {
-        stop("The ", dataset,
-             " dataset is missing from the labyrinth package. Try re-installing the package.")
-    }
-
-    ## Create the outpur directory if needed
-    if (! dir.exists(output.dir)) {
-        dir.create(imputed.dir(dataset), recursive=TRUE)
-    }
-
-    ## Check if masked datasets exist
-    m.file <- masked.file(dataset, output.dir)
-    if (! file.exists(m.file)) {
-        stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
-    }
-
-    ## Ensure imputed datasets can be saved, creating the directory if needed
-    example.parent.file <- imputed.parents.file(dataset, output.dir, "LaByRInth")
-    example.progeny.file <- imputed.progeny.file(dataset, output.dir, "LaByRInth")
-    if (! dir.exists(dirname(example.parent.file))) {
-        dir.create(dirname(example.parent.file), recursive=TRUE)
-    }
-    if (! dir.exists(dirname(example.progeny.file))) {
-        dir.create(dirname(example.progeny.file), recursive=TRUE)
-    }
-
-    ## Impute the datasets
-    for (i in seq_along(geno.errs)) {
-        display(0, "Beginning full imputation of the dataset ", dataset,
-                " with genotype error ", geno.errs[i])
-
-        par.file        <- imputed.parents.file(dataset,
-                                                output.dir,
-                                                "LaByRInth",
-                                                config=i)
-        out.file        <- imputed.progeny.file(dataset,
-                                                output.dir,
-                                                "LaByRInth",
-                                                parental.config=i,
-                                                progeny.config=1)
-
-        geno.err        <- geno.errs[i]
-
-        if (! file.exists(par.file)) {
-            LabyrinthImputeParents(vcf               = m.file,
-                                   parents           = parents,
-                                   generation        = generation,
-                                   out.file          = par.file,
-                                   geno.err          = geno.err,
-                                   parent.het        = parent.het,
-                                   parallel          = parallel,
-                                   cores             = cores)
-        } else {
-            display(1, "Parental file ", par.file, " already exists and will be used")
-        }
-
-        if (! file.exists(out.file)) {
-            LabyrinthImputeProgeny(parental          = readRDS(par.file),
-                                   out.file          = out.file,
-                                   use.fwd.bkwd      = use.fwd.bkwd,
-                                   calc.posteriors   = use.fwd.bkwd,
-                                   viterbi.threshold = NA,  # irrelevant,
-                                   parallel          = parallel,
-                                   cores             = cores)
-        } else {
-            display(1, "Imputed file ", out.file, " already exists and will be used")
-        }
-    }
-}
-
-
-
-
 
 
 ## original <- read.vcfR(filtered.file(dataset))

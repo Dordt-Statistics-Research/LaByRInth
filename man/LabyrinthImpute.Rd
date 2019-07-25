@@ -4,9 +4,9 @@
 \alias{LabyrinthImpute}
 \title{Run entire imputation including filtering and quality control}
 \usage{
-LabyrinthImpute(vcf, out.file, parents, generation, min.posterior,
-  geno.err = 0.01, parent.het = 0.01, require.hom.poly = FALSE,
-  parallel = TRUE, cores = 4)
+LabyrinthImpute(vcf, out.file, parents, breed.scheme, progeny.het = NULL,
+  read.err = NULL, min.posterior, geno.err = 0.01, parent.het = 0.01,
+  require.hom.poly = FALSE, parallel = TRUE, cores = 4)
 }
 \arguments{
 \item{vcf}{File path or vcfR object to impute.}
@@ -15,7 +15,7 @@ LabyrinthImpute(vcf, out.file, parents, generation, min.posterior,
 
 \item{parents}{Character vector with names of the two parents.}
 
-\item{generation}{Numeric representing generation (e.g. 5 for F5 population).}
+\item{breed.scheme}{Population type (e.g. F2, F5, F1BC1).}
 
 \item{min.posterior}{Numeric specifying the minimum probability for any call
 that is kept.}
@@ -64,7 +64,8 @@ result <- LabyrinthImpute(
     vcf = input,
     out.file = output,
     parents = c("LAKIN", "FULLER"),
-    generation = 5,
+    breed.scheme = "F5",
+    progeny.het = 0.5^4, # expected heterozygosity of F5 population
     min.posterior = 0.8,
     geno.err = 0.015,
     parent.het = 0.005,

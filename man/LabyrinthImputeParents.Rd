@@ -4,8 +4,9 @@
 \alias{LabyrinthImputeParents}
 \title{Parental imputation}
 \usage{
-LabyrinthImputeParents(vcf, out.file, parents, generation,
-  geno.err = 0.01, parent.het = 0.01, parallel = TRUE, cores = 4)
+LabyrinthImputeParents(vcf, out.file, parents, breed.scheme,
+  progeny.het = NULL, read.err = NULL, geno.err = 0.01,
+  parent.het = 0.01, parallel = TRUE, cores = 4)
 }
 \arguments{
 \item{vcf}{File path or vcfR object to impute.}
@@ -14,7 +15,7 @@ LabyrinthImputeParents(vcf, out.file, parents, generation,
 
 \item{parents}{Character vector with names of the two parents.}
 
-\item{generation}{Numeric representing generation (e.g. 5 for F5 population).}
+\item{breed.scheme}{Population type (e.g. F2, F5, F1BC1).}
 
 \item{geno.err}{Estimate of proportion of calls genotyped incorrectly.}
 
@@ -47,7 +48,8 @@ result <- LabyrinthImputeParents(
     vcf = input,
     out.file = output,
     parents = c("LAKIN", "FULLER"),
-    generation = 5,
+    breed.scheme = "F5",
+    progeny.het = 0.5^4, # expected heterozygosity of F5 population
     geno.err = 0.015,
     parent.het = 0.005,
     parallel = FALSE,

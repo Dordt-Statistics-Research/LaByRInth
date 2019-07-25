@@ -4,9 +4,7 @@
 \alias{LabyrinthImputeProgeny}
 \title{Offspring imputation}
 \usage{
-LabyrinthImputeProgeny(parental, out.file, use.fwd.bkwd = TRUE,
-  calc.posteriors = TRUE, viterbi.threshold = 0.001, parallel = TRUE,
-  cores = 4)
+LabyrinthImputeProgeny(parental, out.file, parallel = TRUE, cores = 4)
 }
 \arguments{
 \item{parental}{An object of class parental.imputation (a result of the
@@ -14,24 +12,6 @@ LabyrinthParentalImputation function) which will contain information
 about the population including the parental imputation information.}
 
 \item{out.file}{File path of output file.}
-
-\item{use.fwd.bkwd}{Logical indicating if the forward-backward algorithm or
-the Viterbi algorithm should be used to find the optimal solution to
-the hidden Markov model (HMM); use of the Viterbi algorithm is highly
-discouraged because theory suggests the forward-backward algorithm
-should outperform it, and testing of the Viterbi implementation was
-only cursory.}
-
-\item{calc.posteriors}{Logical indicating if marginal posterior
-probabilities should be calculated for every imputation call made. If
-the forward-backward algorithm is used, these probabilities must be
-computed, so this parameter is only meaningful if the Viterbi
-algorithm is used in which case the forward-backward algorithm is run
-in the background with the sole purpose of computing these posterior
-probabilities.}
-
-\item{viterbi.threshold}{Numeric indicating at what threshold probability
-sites should be left uncalled instead of imputed.}
 
 \item{parallel}{Logical indicating if imputation should be run in parallel
 or serial.}

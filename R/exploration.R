@@ -26,13 +26,6 @@
 
 
 
-##' .. content for \description{} (no empty lines) ..
-##'
-##' .. content for \details{} ..
-##' @title 
-##' @param model a string such as "F2", or "F7"
-##' @return 
-##' @author Jason Vander Woude
 hom.poly.vcf.to.common.ref.alt.parents <- function(vcf, parents) {
 
     ## load vcf if needed
