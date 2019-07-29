@@ -507,6 +507,7 @@ LabyrinthImputeProgeny <- function (parental, out.file,
                                                        site.pair.transition.probs,
                                                        parallel,
                                                        cores)
+    gc()
     display(1, "Completed in ", timer(), "\n")
 
 
@@ -523,6 +524,7 @@ LabyrinthImputeProgeny <- function (parental, out.file,
                       parallel,
                       cores,
                       fwd.bkwd.threshold)
+    gc()
     display(1, "Completed in ", timer(), "\n")
 
     ## new vcf creation code
@@ -1134,6 +1136,7 @@ impute <- function(parents, emm.structures, trans.structures, parent.models,
 
         res$gt[which.remove] <- "./."
 
+        gc()
         res  # implicit return
     }
 
