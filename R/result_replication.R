@@ -516,6 +516,7 @@ LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05
 
     vcfR::write.vcf(vcf, out.file)
 
+    message("\n")
     message(" * Sites are considered taxa/marker pairs")
     message(" * All metrics are with respect to the progeny (parents are ignored)")
 
@@ -525,7 +526,7 @@ LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05
     message(" * There were ", n.progeny.reads,
             " total reads in the progeny across all sites: an average depth of ",
             round(n.progeny.reads / n.total, 3), " reads per site")
-
+    message("")
     message(" * ", n.masked, " sites in the progeny will be masked of ", n.total, " total sites (",
             round(n.masked / n.total, 3)*100, "%)")
 
@@ -534,6 +535,9 @@ LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05
     message(" * ", n.progeny.reads.masked, " reads in the progeny will be masked of ",
             n.progeny.reads, " reads in the progeny (",
             round(n.progeny.reads.masked / n.progeny.reads, 3)*100, "%)")
+    message(" * There masked file will have ", n.progeny.reads - n.progeny.reads.masked,
+            " remaining reads in the progeny across all sites: an average depth of ",
+            round((n.progeny.reads - n.progeny.reads.masked) / n.total, 3), " reads per site")
     message(" * All masked sites in the progeny have a call depth of at least ", min.depth)
     message(" * All masked sites in the progeny have a liklihood ratio of at least ", min.liklihood.ratio)
 
