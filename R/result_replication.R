@@ -25,33 +25,90 @@
 ##
 
 
-get.datasets <- function() {c("Lakin-Fuller", "HincII", "RsaI", "IBM-RIL")}
 
-get.all.parents <- function() {
-    list("Lakin-Fuller"  = c("LAKIN",      "FULLER"),
-         "HincII"        = c("HincII_B73", "HincII_CG"),
-         "RsaI"          = c("RsaI_B73",   "RsaI_CG"),
-         "IBM-RIL"       = c("B73",        "M17"))
+get.datasets <- function() {
+    c("Lakin-Fuller",
+      "HincII",
+      "RsaI",
+      "IBM-RIL",
+      "Sim-A-F1BC1")
+}
+
+## get.sim.datasets <- function() {
+##     c("Lakin-Fuller",
+##       "HincII",
+##       "RsaI",
+##       "IBM-RIL")
+## }
+
+## get.real.datasets <- function() {
+##     c("Sim-A-F1BC1")
+## }
+
+get.masks <- function(dataset) {
+    if (dataset %in% c("Lakin-Fuller",
+                       "HincII",
+                       "RsaI",
+                       "IBM-RIL"))
+    {
+        list(list(ID="all_of_top_10_percent",  mask.prop=0.10,  top.prop=0.10),
+             list(ID="all_of_top_5_percent",   mask.prop=0.05,  top.prop=0.05),
+             list(ID="all_of_top_3_percent",   mask.prop=0.03,  top.prop=0.03),
+             list(ID="all_of_top_1_percent",   mask.prop=0.01,   top.prop=0.01))
+    } else if (dataset == "Sim-A-F1BC1") {
+        list()
+    } else {
+        stop("did not find masks for dataset ", dataset)
+    }
+}
+
+get.geno.errs <- function() {
+    c(0.05)
+}
+
+get.parents <- function(dataset) {
+    list("Lakin-Fuller" = c("LAKIN",      "FULLER"),
+         "HincII"       = c("HincII_B73", "HincII_CG"),
+         "RsaI"         = c("RsaI_B73",   "RsaI_CG"),
+         "IBM-RIL"      = c("B73",        "M17"),
+         "Sim-A-F1BC1"  = c("par1",       "par2")
+         )[[dataset]]
+}
+
+get.fsfhap.contributions <- function(dataset) {
+    list("Lakin-Fuller" = c(0.5, 0.5),
+         "HincII"       = c(0.5, 0.5),
+         "RsaI"         = c(0.5, 0.5),
+         "IBM-RIL"      = c(0.5, 0.5),
+         "Sim-A-F1BC1"  = c(0.75, 0.25)
+         )[[dataset]]
+}
+
+get.fsfhap.inbreeding.coef <- function(dataset) {
+    1 - get.progeny.het(dataset)
 }
 
 ## I don't actually know what generation IBM-RIL is, so I'm just saying 7
-get.breed.schemes <- function() {
-    schemes <- c("F5", "F2", "F2", "F7")
-    names(schemes) <- get.datasets()
-    schemes
+get.breed.scheme <- function(dataset) {
+    c("Lakin-Fuller" = "F5",
+      "HincII"       = "F2",
+      "RsaI"         = "F2",
+      "IBM-RIL"      = "F7",
+      "Sim-A-F1BC1"  = "F1BC1"
+      )[dataset]
 }
 
-get.progeny.het <- function() {
-    result <- sapply(get.breed.schemes(), LabyrinthCalcProgenyHet)
-    names(result) <- get.datasets()
-    result
+get.read.err.rate <- function(dataset) {
+    c("Lakin-Fuller" = 0.0138, # 1.38%
+      "HincII"       = 0.0033, # 0.33%
+      "RsaI"         = 0.0009, # 0.09%
+      "IBM-RIL"      = 0.0008, # 0.08%
+      "Sim-A-F1BC1"  = 0       # 0%
+      )[dataset]
 }
 
-## minimum call depths found with trial and error to get ~1% called sites masked
-get.min.mask.depths <- function() {
-    min.mask.depths <- c(7, 90, 12, 11)
-    names(min.mask.depths) <- get.datasets()
-    min.mask.depths
+get.progeny.het <- function(dataset) {
+    LabyrinthCalcProgenyHet(get.breed.scheme(dataset))
 }
 
 ## directory associated with extra data files for package
@@ -87,14 +144,35 @@ imputation.dir <- function(dataset.name, base.dir, algorithm) {
 }
 
 filtered.file <- function(dataset.name, base.dir) {
-    paste0(prep.dir(dataset.name, base.dir), "/", dataset.name, "_filtered.vcf.gz")
+    paste0(prep.dir(dataset.name, base.dir), "/",
+           dataset.name, "_filtered.vcf.gz")
 }
 
-masked.file <- function(dataset.name, base.dir, mask.ID = 1) {
-    paste0(prep.dir(dataset.name, base.dir), "/", dataset.name, "_masked_", mask.ID, ".vcf.gz")
+masked.file <- function(dataset.name, base.dir, mask.ID) {
+    paste0(prep.dir(dataset.name, base.dir), "/",
+           dataset.name, "_masked_", mask.ID, ".vcf.gz")
 }
 
-uncompressed.masked.file <- function(dataset.name, base.dir, mask.ID = 1) {
+fsfhap.dir <- function(dataset.name, base.dir) {
+    paste0(prep.dir(dataset.name, base.dir), "/FSF-Hap/")
+}
+
+fsfhap.filtered.vcf.file <- function(dataset.name, base.dir) {
+    paste0(fsfhap.dir(dataset.name, base.dir), "/",
+           dataset.name, "_filtered_no_parents.vcf.gz")
+}
+
+fsfhap.masked.vcf.file <- function(dataset.name, base.dir, mask.ID) {
+    paste0(fsfhap.dir(dataset.name, base.dir), "/",
+           dataset.name, "_masked_", mask.ID, "_no_parents.vcf.gz")
+}
+
+fsfhap.pedigree.file <- function(dataset.name, base.dir, mask.ID) {
+    paste0(fsfhap.dir(dataset.name, base.dir), "/",
+           dataset.name, "_filtered_pedigree.txt")
+}
+
+uncompressed.masked.file <- function(dataset.name, base.dir, mask.ID) {
     paste0(prep.dir(dataset.name, base.dir), "/", dataset.name, "_masked_", mask.ID, ".vcf")
 }
 
@@ -110,11 +188,14 @@ imputed.parents.file <- function(dataset.name, base.dir, algorithm, config = 1) 
     }
 }
 
-imputed.progeny.file <- function(dataset.name, base.dir, algorithm,  parental.config = 1, progeny.config = 1) {
+imputed.progeny.file <- function(dataset.name, base.dir, algorithm,
+                                 parental.config = 1, progeny.config = 1) {
+        path <- paste0(imputation.dir(dataset.name, base.dir, algorithm), "/",
+                       dataset.name, "_", algorithm, "_")
     if (algorithm=="LaByRInth") {
-        paste0(imputation.dir(dataset.name, base.dir, algorithm), "/imputed-progeny_", parental.config, "_", progeny.config, ".vcf.gz")
+        paste0(path, "imputed-progeny_", parental.config, "_", progeny.config, ".vcf.gz")
     } else if (algorithm=="LB-Impute") {
-        paste0(imputation.dir(dataset.name, base.dir, algorithm), "/imputed-progeny_", parental.config, "_", progeny.config, ".vcf")
+        paste0(path, "imputed-progeny_", parental.config, "_", progeny.config, ".vcf")
     } else {
         stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
     }
@@ -165,30 +246,33 @@ LabyrinthPreparePublicationData <- function(dataset, output.dir) {
     } else {
         LabyrinthFilter(vcf      = original.file(dataset),
                         out.file = f.file,
-                        parents  = get.all.parents()[[dataset]],
+                        parents  = get.parents(dataset),
                         require.hom.poly = FALSE)
     }
 
-    ## Mask the datasets
-    m.file <- masked.file(dataset, output.dir)
-    if (! dir.exists(dirname(m.file))) {
-        dir.create(dirname(m.file), recursive=TRUE)
-    }
-    display(0, "Masking the ", dataset, " dataset\n")
-    if (file.exists(m.file)) {
-        display(1, m.file, " already exists, so ", dataset,
-                " will not be masked again.\n")
-    } else {
-        set.seed(0)  # for repeatability
-        LabyrinthMask(vcf       = filtered.file(dataset, output.dir),
-                      parents   = get.all.parents()[[dataset]],
-                      out.file  = m.file,
-                      depth     = get.min.mask.depths()[dataset],
-                      lik.ratio = 100,
-                      rerr      = 0.05)
+    for (index in seq_along(get.masks(dataset))) {
+        mask <- get.masks(dataset)[[index]]
+
+        m.file <- masked.file(dataset, output.dir, mask$ID)
+        if (! dir.exists(dirname(m.file))) {
+            dir.create(dirname(m.file), recursive=TRUE)
+        }
+        display(0, "Masking the ", dataset, " dataset with ", mask$ID, "\n")
+        if (file.exists(m.file)) {
+            display(1, m.file, " already exists, so ", dataset,
+                    " will not be masked in this way again.\n")
+        } else {
+            set.seed(index)  # for repeatability
+            LabyrinthMask(vcf       = filtered.file(dataset, output.dir),
+                          parents   = get.parents(dataset),
+                          out.file  = m.file,
+                          mask.prop = mask$mask.prop,
+                          top.prop = mask$top.prop,
+                          rerr      = get.read.err.rate(dataset))
+        }
     }
 
-    NULL
+    invisible(NULL)
 }
 
 
@@ -210,11 +294,11 @@ LabyrinthPreparePublicationData <- function(dataset, output.dir) {
 ##' @export
 LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, cores=1) {
 
-    geno.errs       <- c(0.001, 0.01, 0.1)
+    geno.errs       <- 0.05
     parent.het      <- 0.01
-    parents         <- get.all.parents()[[dataset]]
-    breed.scheme    <- get.breed.schemes()[dataset]
-    progeny.het     <- get.progeny.het()[dataset]
+    parents         <- get.parents(dataset)
+    breed.scheme    <- get.breed.scheme(dataset)
+    progeny.het     <- get.progeny.het(dataset)
 
     display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
 
@@ -224,76 +308,72 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         collapse="', '"), "'")
     }
 
-    ## Ensure the original dataset file stil exists in the package
-    if (! file.exists(original.file(dataset))) {
-        stop("The ", dataset,
-             " dataset is missing from the labyrinth package. ",
-             "Try re-installing the package.\n")
-    }
-
     ## Create the outpur directory if needed
     if (! dir.exists(output.dir)) {
         dir.create(imputed.dir(dataset), recursive=TRUE)
     }
 
-    ## Check if masked datasets exist
-    m.file <- masked.file(dataset, output.dir)
-    if (! file.exists(m.file)) {
-        stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
-    }
+    for (mask in get.masks(dataset)) {
 
-    ## Ensure imputed datasets can be saved, creating the directory if needed
-    example.parent.file <- imputed.parents.file(dataset, output.dir, "LaByRInth")
-    example.progeny.file <- imputed.progeny.file(dataset, output.dir, "LaByRInth")
-    if (! dir.exists(dirname(example.parent.file))) {
-        dir.create(dirname(example.parent.file), recursive=TRUE)
-    }
-    if (! dir.exists(dirname(example.progeny.file))) {
-        dir.create(dirname(example.progeny.file), recursive=TRUE)
-    }
-
-    ## Impute the datasets
-    for (i in seq_along(geno.errs)) {
-        display(0, "Beginning full imputation of the dataset ", dataset,
-                " with genotype error ", geno.errs[i], "\n")
-
-        par.file        <- imputed.parents.file(dataset,
-                                                output.dir,
-                                                "LaByRInth",
-                                                config=i)
-        out.file        <- imputed.progeny.file(dataset,
-                                                output.dir,
-                                                "LaByRInth",
-                                                parental.config=i,
-                                                progeny.config=1)
-
-        geno.err        <- geno.errs[i]
-
-        if (! file.exists(par.file)) {
-            LabyrinthImputeParents(vcf               = m.file,
-                                   out.file          = par.file,
-                                   parents           = parents,
-                                   breed.scheme      = breed.scheme,
-                                   progeny.het       = progeny.het,
-                                   geno.err          = geno.err,
-                                   parent.het        = parent.het,
-                                   parallel          = parallel,
-                                   cores             = cores)
-        } else {
-            display(1, "Parental file ", par.file, " already exists and will be used")
+        ## Check if masked datasets exist
+        m.file <- masked.file(dataset, output.dir, mask$ID)
+        if (! file.exists(m.file)) {
+            stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
         }
 
-        if (! file.exists(out.file)) {
-            LabyrinthImputeProgeny(parental          = readRDS(par.file),
-                                   out.file          = out.file,
-                                   parallel          = parallel,
-                                   cores             = cores)
-        } else {
-            display(1, "Imputed file ", out.file, " already exists and will be used")
+        ## Ensure imputed datasets can be saved, creating the directory if needed
+        example.parent.file <- imputed.parents.file(dataset, output.dir, "LaByRInth")
+        example.progeny.file <- imputed.progeny.file(dataset, output.dir, "LaByRInth")
+        if (! dir.exists(dirname(example.parent.file))) {
+            dir.create(dirname(example.parent.file), recursive=TRUE)
+        }
+        if (! dir.exists(dirname(example.progeny.file))) {
+            dir.create(dirname(example.progeny.file), recursive=TRUE)
+        }
+
+        ## Impute the datasets
+        for (i in seq_along(geno.errs)) {
+            display(0, "Beginning full imputation of the dataset ", dataset,
+                    " with genotype error ", geno.errs[i], "\n")
+
+            par.file        <- imputed.parents.file(dataset,
+                                                    output.dir,
+                                                    "LaByRInth",
+                                                    config=i)
+            out.file        <- imputed.progeny.file(dataset,
+                                                    output.dir,
+                                                    "LaByRInth",
+                                                    parental.config=i,
+                                                    progeny.config=1)
+
+            geno.err        <- geno.errs[i]
+
+            if (! file.exists(par.file)) {
+                LabyrinthImputeParents(vcf               = m.file,
+                                       out.file          = par.file,
+                                       parents           = parents,
+                                       breed.scheme      = breed.scheme,
+                                       progeny.het       = progeny.het,
+                                       geno.err          = geno.err,
+                                       parent.het        = parent.het,
+                                       parallel          = parallel,
+                                       cores             = cores)
+            } else {
+                display(1, "Parental file ", par.file, " already exists and will be used")
+            }
+
+            if (! file.exists(out.file)) {
+                LabyrinthImputeProgeny(parental          = readRDS(par.file),
+                                       out.file          = out.file,
+                                       parallel          = parallel,
+                                       cores             = cores)
+            } else {
+                display(1, "Imputed file ", out.file, " already exists and will be used")
+            }
         }
     }
 
-    NULL
+    invisible(NULL)
 }
 
 
@@ -314,23 +394,26 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
 ##'        determining the likelihood of the reads).
 ##' @return A vcfR object with all sites removed that meet the masking criteria.
 ##' @author Jason Vander Woude
-LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0.05) {
+LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05) {
 
     ## file verification
     if (file.exists(out.file)) {
         stop("Output file already exists; please choose another name\n")
     }
-
     if (! verify.file.extension(out.file, ".vcf.gz")) {
         stop("Output file name must end with '.vcf.gz'\n")
     }
-
     if (! verify.file.dir.exists(out.file)) {
         stop("Directory of the outuput file does not exist; please create it\n")
     }
-
     if (rerr > 0.5) {
         stop("The value of rerr should be in the range [0, 0.5]")
+    }
+    if (mask.prop > top.prop) {
+        stop("mask.prop must be less than or equal to top.prop")
+    }
+    if (mask.prop > 1 || top.prop > 1) {
+        stop("mask.prop and top.prop must be in the range [0,1]")
     }
 
     ## Compute the liklihood of the the reads for each of the three genotypes
@@ -378,31 +461,41 @@ LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0
     parental         <- matrix(rep(getSAMPLES(vcf) %in% parents, nrow(ad.arr)),
                                nrow=nrow(ad.arr),
                                byrow=TRUE)
-    sufficient.depth <- depths >= depth
-    sufficient.ratio <- liklihood.ratios >= lik.ratio
-    mask <- sufficient.depth & sufficient.ratio & !parental
 
-    n.parent.reads <- sum(depths[parental])
-    n.reads <- sum(depths) - n.parent.reads
-    n.total <- nrow(depths) * (ncol(depths) - 2) # total number of non-parent sites
-    n.called <- sum(depths != 0 & !parental)
-    n.masked <- sum(mask)
+    ## get array of indices indicating a decreasing ordering where progeny are
+    ## indexed first (! parental) and then liklihood ratios are used.
+    call.confidence.ordering <- order(!parental,
+                                      liklihood.ratios,
+                                      decreasing=TRUE)
+    ## how many sites must be masked
+    progeny.depths <- depths[!parental]
+    n.called <- sum(progeny.depths != 0)
+    ## how many called sites constitute the top 'top.prop'
+    n.top <- ceiling(n.called * top.prop)
+    n.masked <- ceiling(n.called * mask.prop)
+    top.indices <- call.confidence.ordering[1:n.top]
+    ## randomly select mask indices
+    if (n.top == n.masked) {
+        mask.indices <- top.indices
+    } else {
+        mask.indices <- sample(top.indices, size=n.masked)
+    }
 
-    message(" * Sites are considered progeny/marker pairs")
+    ## the mask to use
+    mask <- sapply(liklihood.ratios, function(x) {FALSE})
+    mask[mask.indices] <- TRUE
 
-    message(" * ", n.called, " sites in the progeny are called of ", n.total, " total sites (",
-            round(n.called / n.total, 3)*100, "%)")
+    if (any(mask & parental)) {
+        stop("Error in code")
+    }
 
-    message(" * There were ", n.reads,
-            " total reads in the progeny across all sites: an average depth of ",
-            round(n.reads / n.total, 3), " reads per progeny site")
-
-    message(" * ", n.masked, " sites in the progeny will be masked of ", n.total, " total sites (",
-            round(n.masked / n.total, 3)*100, "%)")
-
-    message(" * ", n.masked, " sites in the progeny will be masked of ", n.called, " called sites (",
-            round(n.masked / n.called, 3)*100, "%)")
-    message("")
+    ## other metrics
+    n.total <- length(liklihood.ratios[!parental]) # total progeny sites in vcf
+    masked.depths <- depths[mask]
+    min.depth <- min(masked.depths)
+    n.progeny.reads <- sum(progeny.depths)
+    n.progeny.reads.masked <- sum(masked.depths)
+    min.liklihood.ratio <- min(liklihood.ratios[mask])
 
 
     new.ad <- getAD(vcf)
@@ -421,45 +514,107 @@ LabyrinthMask <- function(vcf, parents, out.file, depth=0, lik.ratio=100, rerr=0
     colnames(vcf@gt) <- c("FORMAT", colnames(new.ad))
     rownames(vcf@gt) <- rownames(new.ad)
 
-    write.vcf(vcf, out.file)
+    vcfR::write.vcf(vcf, out.file)
+
+    message(" * Sites are considered taxa/marker pairs")
+    message(" * All metrics are with respect to the progeny (parents are ignored)")
+
+    message(" * ", n.called, " sites in the progeny are called of ", n.total, " total sites (",
+            round(n.called / n.total, 3)*100, "%)")
+
+    message(" * There were ", n.progeny.reads,
+            " total reads in the progeny across all sites: an average depth of ",
+            round(n.progeny.reads / n.total, 3), " reads per site")
+
+    message(" * ", n.masked, " sites in the progeny will be masked of ", n.total, " total sites (",
+            round(n.masked / n.total, 3)*100, "%)")
+
+    message(" * ", n.masked, " sites in the progeny will be masked of ", n.called, " called sites (",
+            round(n.masked / n.called, 3)*100, "%)")
+    message(" * ", n.progeny.reads.masked, " reads in the progeny will be masked of ",
+            n.progeny.reads, " reads in the progeny (",
+            round(n.progeny.reads.masked / n.progeny.reads, 3)*100, "%)")
+    message(" * All masked sites in the progeny have a call depth of at least ", min.depth)
+    message(" * All masked sites in the progeny have a liklihood ratio of at least ", min.liklihood.ratio)
+
     invisible(vcf)  # implicit return
 }
 
 
-## original <- read.vcfR(filtered.file(dataset))
-## masked <- read.vcfR(in.file)
+LabyrinthPrepareFSFHap <- function(dataset, output.dir) {
+    ## Ensure dataset is a valid option
+    if (! dataset %in% get.datasets()) {
+        stop("dataset must be one of these strings: '", paste0(get.datasets(),
+        collapse="', '"), "'")
+    }
 
-## analysis.df <- do.call(rbind, lapply(seq_along(geno.errs), function(i) {
-##     parental.result <- readRDS(parental.file(dataset, config=i))
-##     imputed <- read.vcfR(imputed.file(dataset, parental.config=i, progeny.config=1))
-##     good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.9)
-##     really.good.imputed <- LabyrinthUncall(vcf = imputed, min.posterior = 0.99)
+    for (mask in get.masks(dataset)) {
 
-##     rbind(
-##         LBImputeAnalyze(original,
-##                         masked,
-##                         imputed,
-##                         parental.result$read.err,
-##                         parental.result$geno.err,
-##                         NA,
-##                         "everything"),
+        ## Check if masked datasets exist
+        m.file <- masked.file(dataset, output.dir, mask$ID)
+        if (! file.exists(m.file)) {
+            stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
+        }
 
-##         LBImputeAnalyze(original,
-##                         masked,
-##                         good.imputed,
-##                         parental.result$read.err,
-##                         parental.result$geno.err,
-##                         NA,
-##                         "> 90% posterior"),
+        ## Create the filtered output directory if needed
+        filtered.vcf.file <- fsfhap.filtered.vcf.file(dataset, output.dir)
+        if (! dir.exists(dirname(filtered.vcf.file))) {
+            dir.create(dirname(filtered.vcf.file), recursive=TRUE)
+        }
 
-##         LBImputeAnalyze(original,
-##                         masked,
-##                         really.good.imputed,
-##                         parental.result$read.err,
-##                         parental.result$geno.err,
-##                         NA,
-##                         "> 99% posterior")
-##     )
-## }))
+        ## Create the masked vcf output directory if needed
+        masked.vcf.file <- fsfhap.masked.vcf.file(dataset, output.dir, mask.ID)
+        if (! dir.exists(dirname(masked.vcf.file))) {
+            dir.create(dirname(masked.vcf.file), recursive=TRUE)
+        }
 
-## write.csv(analysis.df, analysis.file(dataset), row.names = FALSE)
+        ## Create the pedigree output directory if needed
+        ped.file <- fsfhap.pedigree.file(dataset, output.dir, mask.ID)
+        if (! dir.exists(dirname(ped.file))) {
+            dir.create(dirname(ped.file), recursive=TRUE)
+        }
+
+        ## Check if filtered datasets exist
+        f.file <- filtered.file(dataset, output.dir)
+        if (! file.exists(m.file)) {
+            stop("Filtered file is missing. Run LabyrinthPreparePublicationData first.")
+        }
+
+        ## Check if masked datasets exist
+        m.file <- masked.file(dataset, output.dir, mask.ID)
+        if (! file.exists(m.file)) {
+            stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
+        }
+
+        ## save new vcf files with parents removed
+        f.vcf <- vcfR::read.vcfR(f.file)
+        m.vcf <- vcfR::read.vcfR(m.file)
+        parents <- get.parents(dataset)
+        taxa <- getSAMPLES(f.vcf)
+        is.progeny <- !(taxa %in% parents)
+        cols.to.keep <- c(TRUE, is.progeny) # first column is 'FORMAT'
+        out.f.vcf <- f.vcf                  # copy vcf
+        out.m.vcf <- m.vcf                  # copy vcf
+
+        out.f.vcf@gt <- f.vcf@gt[ , cols.to.keep] # remove parents
+        out.m.vcf@gt <- m.vcf@gt[ , cols.to.keep] # remove parents
+        vcfR::write.vcf(out.f.vcf, filtered.vcf.file)
+        vcfR::write.vcf(out.m.vcf, masked.vcf.file)
+
+        ## save pedigree file
+        family <- dataset                   # name of the family/dataset
+        progeny <- taxa[is.progeny]         # all progeny, no parents
+        contributions <- get.fsfhap.contributions(dataset)
+        coef.of.inbreeding <- get.fsfhap.inbreeding.coef(dataset)
+        ## all areguments except `progeny` have length 1, so are repeated for every
+        ## row of this matrix
+        data <- cbind("Family" = family,
+                      "Taxa" = progeny,
+                      "Parent1" = parents[1],
+                      "Parent2" = parents[2],
+                      "Contribution1" = contributions[1],
+                      "Contribution2" = contributions[2],
+                      "F" = coef.of.inbreeding)
+        write.table(data, ped.file, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
+    }
+}
