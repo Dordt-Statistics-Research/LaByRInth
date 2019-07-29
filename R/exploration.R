@@ -1303,3 +1303,10 @@ animate.dataset <- function(characteristics, theory.generator) {
     }
 }
 
+do.it <- function() {
+    dataset <- "IBM-RIL"
+    vcf <- vcfR::read.vcfR(filtered.file(dataset, "~/Desktop/lab.out/"))
+    parents <- get.all.parents()[[dataset]]
+    out.file <- tempfile(fileext=".vcf.gz")
+    LabyrinthMask(vcf, parents, out.file, mask.prop=0.05, top.prop=0.1, rerr=0.05)
+}
