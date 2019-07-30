@@ -25,7 +25,31 @@
 ##
 
 
+##' Produce a data frame with analysis information for the imputation
+##'
+##' This will return a data frame with one row for each masked site. The columns
+##' of the data frame are `orig` which contains the number of alternate alleles
+##' in the original call (0, 1, or 2), `imputed` which contains the number of '
+##' alternate alleles in the imputed call (0, 1, or 2), `correct` as a logical '
+##' indicating if these two calls are the same, `p.ref`, `p.het`, and `p.alt` '
+##' indicating respectively the probability returned for each genetic state by '
+##' LaByRInth. These three values will be NA if the imputed vcf does not
+##' contiain posterior probablilities converted to phred scores.
+##'
+##' @param orig original (filtered) unmasked unimputed vcfR object
+##' @param masked masked vcfR object
+##' @param imputed imputed vcfR object
+##' @return data frame contatianing analysis information
+##' @export
+##' @author Jason Vander Woude
 LabyrinthAnalyze <- function(orig, masked, imputed) {
+
+    if (class(orig) != "vcfR")
+        stop("orig must be of class vcfR\n")
+    if (class(masked) != "vcfR")
+        stop("masked must be of class vcfR\n")
+    if (class(imputed) != "vcfR")
+        stop("imputed must be of class vcfR\n")
 
     samples.o <- getSAMPLES(orig)
     samples.m <- getSAMPLES(masked)
@@ -131,8 +155,23 @@ get.r.sq <- function(df) {
 }
 
 
+##' Generate a plot of imputation metrics against posterior probabilities
+##'
+##' Generate and possibly save a plot where the x-axis is the posterior
+##' probability thresholds and the y-axis is various metrics indicating how good
+##' the imputation is.
+##'
+##' @param labyrinth.df a data frame of the analysis of a LaByRInth imputation
+##' @param lb.impute.df a data frame of the analysis of an LB-Impute imputation
+##' @param fsfhap.df a data frame of the analysis of an FSF-Hap imputation
+##' @param dataset.name single element character vector used in plot title
+##' @param out.file file to save the plot (if NULL, plot is sent to standard graphics)
+##' @param n how many different posterior thresholds to use
+##' @export
+##' @return nothing
+##' @author Jason Vander Woude
 LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
-                                    n=21, dataset.name, out.file) {
+                                    dataset.name, out.file=NULL, n=21) {
 
     ## function to remove low-quality imputation calls from analysis result
     filter.posterior <- function(df, thresh) {
@@ -171,19 +210,19 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
 
     my_geom_line <- function(metric, metric.name, linetype) {
         ggplot2::geom_line(
-            aes(x = thresholds,
-                y = metric,
-                color = metric.name),
+            ggplot2::aes(x = thresholds,
+                         y = metric,
+                         color = metric.name),
             linetype = linetype,
             size = 0.25)
     }
 
     my_geom_point <- function(metric, metric.name) {
         ggplot2::geom_point(
-            aes(x = thresholds,
-                y = metric,
-                color = metric.name,
-                shape = metric.name),
+            ggplot2::aes(x = thresholds,
+                         y = metric,
+                         color = metric.name,
+                         shape = metric.name),
             size = 1.2)
     }
 
@@ -195,20 +234,20 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
 
     my_theme <- list(
         ggplot2::theme(
-            text = element_text(size=10, color="black"),
-            axis.text = element_text(color = "black"),
-            plot.margin = unit(c(1,1,1,1), "cm"),
-            plot.title = element_text(hjust = 0.5),
-            axis.title.x=element_text(vjust = -3),
-            axis.title.y=element_text(vjust = 3),
-            panel.grid.minor.x = element_blank(),
-            panel.grid.minor.y = element_blank(),
-            legend.justification=c(0,0), # which corner is positioned
-            legend.position=c(0.05,0.05),      # bottom right of graph
+            text =                 ggplot2::element_text(size=10, color="black"),
+            axis.text =            ggplot2::element_text(color = "black"),
+            plot.margin =          ggplot2::unit(c(1,1,1,1), "cm"),
+            plot.title =           ggplot2::element_text(hjust = 0.5),
+            axis.title.x =         ggplot2::element_text(vjust = -3),
+            axis.title.y =         ggplot2::element_text(vjust = 3),
+            panel.grid.minor.x =   ggplot2::element_blank(),
+            panel.grid.minor.y =   ggplot2::element_blank(),
+            legend.justification = c(0,0), # which corner is positioned
+            legend.position =      c(0.05,0.05),      # bottom right of graph
             legend.background =
-                element_rect(size=0.25, linetype="solid", colour ="black"),
+                ggplot2::element_rect(size=0.25, linetype="solid", colour ="black"),
             panel.background =
-                element_rect(size=0.5, linetype="solid", colour ="black")
+                ggplot2::element_rect(size=0.5, linetype="solid", colour ="black")
             )
     )
 
@@ -216,7 +255,7 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
     ## Compute LB-Impute and FSF-Hap accuracy and quality
     if (! is.null(lb.impute.df)) {
         lb.accuracy <- get.accuracy(lb.impute.df)
-        lb.quality <- get.quality(lb.impute.df, nrow(fsfhap.df))
+        lb.quality <- get.quality(lb.impute.df, nrow(lb.impute.df))
         lb.r.sq <- get.r.sq(lb.impute.df)
         lb.gg <- list(
             my_geom_line(rep(lb.accuracy, n), "Accuracy", "longdash"),
@@ -231,33 +270,36 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
         fsfhap.accuracy <- get.accuracy(fsfhap.df)
         fsfhap.quality <- get.quality(fsfhap.df, nrow(fsfhap.df))
         fsfhap.r.sq <- get.r.sq(fsfhap.df)
-        fsfhap.gg <- list(
-            my_geom_line(rep(fsfhap.accuracy, n), "Accuracy", "dotdash"),
-            my_geom_line(rep(fsfhap.quality, n), "Quality", "dotdash"),
-            my_geom_line(rep(fsfhap.r.sq, n), "R²", "dotdash"),
+        ## fsfhap.gg <- list(
+        ##     my_geom_line(rep(fsfhap.accuracy, n), "Accuracy", "dotdash"),
+        ##     my_geom_line(rep(fsfhap.quality, n), "Quality", "dotdash"),
+        ##     my_geom_line(rep(fsfhap.r.sq, n), "R²", "dotdash"),
 
-            geom_ribbon(aes(x = thresholds,
-                            ymin = 0.72,
-                            ymax = 0.77,
-                            fill = "Quality"),
-                        show.legend = FALSE,
-                        alpha=0.4),
-            geom_ribbon(aes(x = thresholds,
-                            ymin = 0.94,
-                            ymax = 0.98,
-                            fill = "Accuracy"),
-                        show.legend = FALSE,
-                        alpha=0.4),
-            geom_ribbon(aes(x = thresholds,
-                            ymin = 0.7,
-                            ymax = 0.8,
-                            fill = "R²"),
-                        show.legend = FALSE,
-                        alpha=0.4)
-        )
+        ##     geom_ribbon(aes(x = thresholds,
+        ##                     ymin = 0.72,
+        ##                     ymax = 0.77,
+        ##                     fill = "Quality"),
+        ##                 show.legend = FALSE,
+        ##                 alpha=0.4),
+        ##     geom_ribbon(aes(x = thresholds,
+        ##                     ymin = 0.94,
+        ##                     ymax = 0.98,
+        ##                     fill = "Accuracy"),
+        ##                 show.legend = FALSE,
+        ##                 alpha=0.4),
+        ##     geom_ribbon(aes(x = thresholds,
+        ##                     ymin = 0.7,
+        ##                     ymax = 0.8,
+        ##                     fill = "R²"),
+        ##                 show.legend = FALSE,
+        ##                 alpha=0.4)
+        ## )
+    } else {
+        fsfhap.gg <- list()
     }
 
-    p <- ggplot2::ggplot(data.frame(thresholds, accuracy, expected.accuracy, quality)) +
+
+    p <- ggplot2::ggplot(data.frame(thresholds)) +
          my_theme +
 
          ggplot2::ggtitle(paste0("Imputation Metrics for ", dataset.name, "\n")) +
@@ -274,7 +316,7 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
          ggplot2::labs(color="Metric") +
          ggplot2::labs(shape="Metric") +
 
-         ggplot2::geom_errorbar(aes(x=thresholds,
+         ggplot2::geom_errorbar(ggplot2::aes(x=thresholds,
                        ymin = mapply(min, accuracy, expected.accuracy),
                        ymax = mapply(max, accuracy, expected.accuracy),
                        color = "Accuracy"),
@@ -285,5 +327,9 @@ LabyrinthPlotPosteriors <- function(labyrinth.df, lb.impute.df, fsfhap.df,
          lb.gg +
          fsfhap.gg
 
-    ggplot2::ggsave(out.file, plot=p, width=4, height=4, units="in", dpi=500)
+    if (is.null(out.file)) {
+        p
+    } else {
+        ggplot2::ggsave(out.file, plot=p, width=4, height=4, units="in", dpi=500)
+    }
 }
