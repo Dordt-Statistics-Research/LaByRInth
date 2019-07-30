@@ -653,7 +653,7 @@ LabyrinthPrepareFSFHap <- function(dataset, output.dir) {
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
-    masks <- get.masks()
+    masks <- get.masks(dataset)
     names(masks) <- sapply(masks, `[`, "ID") # apply the index function to get mask IDs
     lapply(masks, function(mask) {
 
