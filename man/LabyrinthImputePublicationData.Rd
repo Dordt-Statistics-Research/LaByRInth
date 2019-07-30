@@ -5,11 +5,11 @@
 \title{Impute the masked publication data}
 \usage{
 LabyrinthImputePublicationData(dataset, output.dir, parallel = FALSE,
-  cores = 1)
+  cores = 1, mask.IDs = NULL)
 }
 \arguments{
 \item{dataset}{one of the following strings: "Lakin-Fuller", "HincII",
-"RsaI", or "IBM-RIL"}
+"RsaI", "IBM-RIL", "Sim-A-F1BC1}
 
 \item{output.dir}{a directory where all subdirectories and filtered and
 masked files will be placed. MUST BE THE SAME AS THE output.dir

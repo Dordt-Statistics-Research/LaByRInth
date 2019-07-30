@@ -8,13 +8,13 @@ LabyrinthPreparePublicationData(dataset, output.dir)
 }
 \arguments{
 \item{dataset}{one of the following strings: "Lakin-Fuller", "HincII",
-"RsaI", or "IBM-RIL"}
+"RsaI", "IBM-RIL", "Sim-A-F1BC1}
 
 \item{output.dir}{a directory where all subdirectories and filtered and
 masked files will be placed.}
 }
 \description{
-This function will filter and mask one of the four data files from the
+This function will filter and mask one of the five data files from the
 LaByRInth publication so that the results can be verified. The filtered and
 masked result files will be placed in the specified output directory.
 }

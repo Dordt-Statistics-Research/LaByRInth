@@ -663,7 +663,7 @@ LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
 
             tryCatch({
                 files <- list(orig    = filtered.file(dataset, output.dir),
-                              masked  = masked.file(dataset, output.dir, mask$ID)
+                              masked  = masked.file(dataset, output.dir, mask$ID),
                               imputed = imputed.progeny.file(dataset, output.dir,
                                                              algorithm, mask$ID,
                                                              config$ID)
