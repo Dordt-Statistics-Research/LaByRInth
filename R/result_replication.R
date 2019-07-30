@@ -65,8 +65,8 @@ get.masks <- function(dataset) {
     }
 }
 
-get.geno.errs <- function() {
-    c(0.05)
+get.configs <- function() {
+    list(list(ID="geno_0.05", geno.err=0.05))
 }
 
 get.parents <- function(dataset) {
@@ -179,26 +179,27 @@ uncompressed.masked.file <- function(dataset.name, base.dir, mask.ID) {
     paste0(prep.dir(dataset.name, base.dir), "/", dataset.name, "_masked_", mask.ID, ".vcf")
 }
 
-imputed.parents.file <- function(dataset.name, base.dir, algorithm, config = 1) {
+imputed.parents.file <- function(dataset.name, base.dir, algorithm, mask.ID, config.ID) {
     path <- paste0(imputation.dir(dataset.name, base.dir, algorithm), "/",
                    dataset.name, "_", algorithm, "_")
     if (algorithm=="LaByRInth") {
-        paste0(path, "parental-imputation-result_", config, ".rds")
+        paste0(path, "parental-imputation-result_masked_", mask.ID, "_config_", config.ID, ".rds")
     } else if (algorithm=="LB-Impute") {
-        paste0(path, "imputed-parents_", config, ".vcf")
+        paste0(path, "imputed-parents_masked_", mask.ID, "_config_", config.ID, ".vcf")
     } else {
         stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
     }
 }
 
 imputed.progeny.file <- function(dataset.name, base.dir, algorithm,
-                                 parental.config = 1, progeny.config = 1) {
+                                 mask.ID, progeny.config.ID) {
         path <- paste0(imputation.dir(dataset.name, base.dir, algorithm), "/",
-                       dataset.name, "_", algorithm, "_")
+                       dataset.name, "_", algorithm, "_imputed-progeny_masked_",
+                       mask.ID, "_config_", progeny.config.ID)
     if (algorithm=="LaByRInth") {
-        paste0(path, "imputed-progeny_", parental.config, "_", progeny.config, ".vcf.gz")
+        paste0(path, ".vcf.gz")
     } else if (algorithm=="LB-Impute") {
-        paste0(path, "imputed-progeny_", parental.config, "_", progeny.config, ".vcf")
+        paste0(path, ".vcf")
     } else {
         stop("Algorithm must be either 'LaByRInth' or 'LB-Impute'")
     }
@@ -207,12 +208,12 @@ imputed.progeny.file <- function(dataset.name, base.dir, algorithm,
 
 ##' Reproduce the prepared data of the LaByRInth publication
 ##'
-##' This function will filter and mask one of the four data files from the
+##' This function will filter and mask one of the five data files from the
 ##' LaByRInth publication so that the results can be verified. The filtered and
 ##' masked result files will be placed in the specified output directory.
 ##'
 ##' @param dataset one of the following strings: "Lakin-Fuller", "HincII",
-##'        "RsaI", or "IBM-RIL"
+##'        "RsaI", "IBM-RIL", "Sim-A-F1BC1
 ##' @param output.dir a directory where all subdirectories and filtered and
 ##'        masked files will be placed.
 ##' @return NULL
@@ -284,7 +285,7 @@ LabyrinthPreparePublicationData <- function(dataset, output.dir) {
 ##' First run LabyrinthPreparePublicationData,
 ##'
 ##' @param dataset one of the following strings: "Lakin-Fuller", "HincII",
-##'        "RsaI", or "IBM-RIL"
+##'        "RsaI", "IBM-RIL", "Sim-A-F1BC1
 ##' @param output.dir a directory where all subdirectories and filtered and
 ##'        masked files will be placed. MUST BE THE SAME AS THE output.dir
 ##'        PARAMETER USED WHEN RUNNING LabyrinthPreparePublicationData.
@@ -295,15 +296,14 @@ LabyrinthPreparePublicationData <- function(dataset, output.dir) {
 ##' @return NULL
 ##' @author Jason Vander Woude
 ##' @export
-LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, cores=1) {
+LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, cores=1, mask.IDs=NULL) {
 
-    geno.errs       <- 0.05
     parent.het      <- 0.01
     parents         <- get.parents(dataset)
     breed.scheme    <- get.breed.scheme(dataset)
     progeny.het     <- get.progeny.het(dataset)
 
-    display(0, "The ", dataset, " dataset will be imputed with ", length(geno.errs), " different parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
+    display(0, "The ", dataset, " masked datasets will be imputed with various parameter configurations. This could take a few hours. If you are not using Windows, you can set the parallel argument to TRUE and and the cores argument to the number CPUs on your machine to run this in parallel.")
 
     ## Ensure dataset is a valid option
     if (! dataset %in% get.datasets()) {
@@ -318,6 +318,13 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
 
     for (mask in get.masks(dataset)) {
 
+        if (! is.null(mask.IDs)) {
+            if (! mask$ID %in% mask.IDs) {
+                display(1, "skipping mask ", mask$ID)
+                next
+            }
+        }
+
         ## Check if masked datasets exist
         m.file <- masked.file(dataset, output.dir, mask$ID)
         if (! file.exists(m.file)) {
@@ -325,8 +332,10 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         }
 
         ## Ensure imputed datasets can be saved, creating the directory if needed
-        example.parent.file <- imputed.parents.file(dataset, output.dir, "LaByRInth")
-        example.progeny.file <- imputed.progeny.file(dataset, output.dir, "LaByRInth")
+        example.parent.file <- imputed.parents.file(
+            dataset, output.dir, "LaByRInth", mask$ID, "TEMP-CONFIG")
+        example.progeny.file <- imputed.progeny.file(
+            dataset, output.dir, "LaByRInth", mask$ID, "TEMP-CONFIG")
         if (! dir.exists(dirname(example.parent.file))) {
             dir.create(dirname(example.parent.file), recursive=TRUE)
         }
@@ -335,21 +344,21 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         }
 
         ## Impute the datasets
-        for (i in seq_along(geno.errs)) {
+        configs <- get.configs()
+        for (i in seq_along(configs)) {
             display(0, "Beginning full imputation of the dataset ", dataset,
-                    " with genotype error ", geno.errs[i], "\n")
+                    " with genotype error ", configs[[i]]$geno.err, "\n")
 
             par.file        <- imputed.parents.file(dataset,
                                                     output.dir,
                                                     "LaByRInth",
-                                                    config=i)
+                                                    mask = mask$ID,
+                                                    config = configs[[i]]$ID)
             out.file        <- imputed.progeny.file(dataset,
                                                     output.dir,
                                                     "LaByRInth",
-                                                    parental.config=i,
-                                                    progeny.config=1)
-
-            geno.err        <- geno.errs[i]
+                                                    mask = mask$ID,
+                                                    progeny.config = configs[[i]]$ID)
 
             if (! file.exists(par.file)) {
                 LabyrinthImputeParents(vcf               = m.file,
@@ -357,7 +366,7 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
                                        parents           = parents,
                                        breed.scheme      = breed.scheme,
                                        progeny.het       = progeny.het,
-                                       geno.err          = geno.err,
+                                       geno.err          = configs[[i]]$geno.err,
                                        parent.het        = parent.het,
                                        parallel          = parallel,
                                        cores             = cores)
@@ -519,7 +528,6 @@ LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05
 
     vcfR::write.vcf(vcf, out.file)
 
-    message("\n")
     message(" * Sites are considered taxa/marker pairs")
     message(" * All metrics are with respect to the progeny (parents are ignored)")
 
@@ -543,6 +551,7 @@ LabyrinthMask <- function(vcf, parents, out.file, mask.prop, top.prop, rerr=0.05
             round((n.progeny.reads - n.progeny.reads.masked) / n.total, 3), " reads per site")
     message(" * All masked sites in the progeny have a call depth of at least ", min.depth)
     message(" * All masked sites in the progeny have a liklihood ratio of at least ", min.liklihood.ratio)
+    message("\n")
 
     invisible(vcf)  # implicit return
 }
@@ -624,4 +633,50 @@ LabyrinthPrepareFSFHap <- function(dataset, output.dir) {
                       "F" = coef.of.inbreeding)
         write.table(data, ped.file, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
     }
+}
+
+
+##' Analyze all masks and imputation configurations of a dataset
+##'
+##' Analyze all masks and imputation configurations of a dataset
+##'
+##' @param dataset one of the following strings: "Lakin-Fuller", "HincII",
+##'        "RsaI", "IBM-RIL", "Sim-A-F1BC1"
+##' @param output.dir a directory where all subdirectories and filtered and
+##'        masked files will be placed. MUST BE THE SAME AS THE output.dir
+##'        PARAMETER USED WHEN RUNNING LabyrinthPreparePublicationData.
+##' @param parallel Logical indicating if imputation should be run in parallel
+##'        or serial.
+##' @param cores Numeric indicating how many sub-processes should be spawned if
+##'        running in parallel.
+##' @return list containing analysis results
+##' @author Jason Vander Woude
+##' @export
+LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
+    masks <- get.masks()
+    names(masks) <- sapply(masks, `[`, "ID") # apply the index function to get mask IDs
+    lapply(masks, function(mask) {
+
+        configs <- get.configs()
+        names(configs) <- sapply(configs, `[`, "ID")
+        lapply(configs, function(config) {
+
+            tryCatch({
+                files <- list(orig    = filtered.file(dataset, output.dir),
+                              masked  = masked.file(dataset, output.dir, mask$ID)
+                              imputed = imputed.progeny.file(dataset, output.dir,
+                                                             algorithm, mask$ID,
+                                                             config$ID)
+                              )
+
+                vcfs <- lapply(files, vcfR::read.vcfR)
+
+                do.call(LabyrinthAnalyze, vcfs)
+            }, warning = function(warning_condition) {
+                NULL
+            }, error = function(error_condition) {
+                NULL
+            })
+        })
+    })
 }
