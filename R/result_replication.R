@@ -51,12 +51,15 @@ get.masks <- function(dataset) {
                        "RsaI",
                        "IBM-RIL"))
     {
-        list(list(ID="all_of_top_10_percent",  mask.prop=0.10,  top.prop=0.10),
-             list(ID="all_of_top_5_percent",   mask.prop=0.05,  top.prop=0.05),
+        list(list(ID="all_of_top_1_percent",   mask.prop=0.01,  top.prop=0.01),
              list(ID="all_of_top_3_percent",   mask.prop=0.03,  top.prop=0.03),
-             list(ID="all_of_top_1_percent",   mask.prop=0.01,   top.prop=0.01))
+             list(ID="all_of_top_5_percent",   mask.prop=0.05,  top.prop=0.05),
+             list(ID="all_of_top_10_percent",  mask.prop=0.10,  top.prop=0.10),
+             list(ID="all_of_top_50_percent",  mask.prop=0.50,  top.prop=0.50),
+             list(ID="all_of_top_75_percent",  mask.prop=0.75,  top.prop=0.75))
+
     } else if (dataset == "Sim-A-F1BC1") {
-        list()
+        list(list(ID="sampled"))
     } else {
         stop("did not find masks for dataset ", dataset)
     }
