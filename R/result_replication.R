@@ -797,7 +797,7 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
         parental.impute.cmd <- paste(
             "java -jar LB-Impute.jar",
             "-method impute",
-            "-f",            mask,
+            "-f",            mask.ID,
             "-readerr ",     read.err,
             "-genotypeerr",  geno.err,
             "-recombdist",   recomb.dist,
