@@ -775,13 +775,13 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
                             "_recomb-", recomb.dist)
 
         parental.file <- imputed.parents.file(dataset,
-                                              ouput.dir,
+                                              output.dir,
                                               "LB-Impute",
                                               mask.ID,
                                               config.ID)
 
         filtered.parental.file <- imputed.parents.file(dataset,
-                                                       ouput.dir,
+                                                       output.dir,
                                                        "LB-Impute",
                                                        mask.ID,
                                                        paste0("filtered_", config.ID))
