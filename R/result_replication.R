@@ -750,9 +750,9 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
 
     ## Ensure imputed datasets can be saved, creating the directory if needed
     example.parent.file <- imputed.parents.file(
-        dataset, output.dir, "LB-Impute", mask, "TEMP-CONFIG")
+        dataset, output.dir, "LB-Impute", mask.ID, "TEMP-CONFIG")
     example.progeny.file <- imputed.progeny.file(
-        dataset, output.dir, "LB-Impute", mask, "TEMP-CONFIG")
+        dataset, output.dir, "LB-Impute", mask.ID, "TEMP-CONFIG")
     if (! dir.exists(dirname(example.parent.file))) {
         dir.create(dirname(example.parent.file), recursive=TRUE)
     }
