@@ -656,24 +656,32 @@ LabyrinthPrepareFSFHap <- function(dataset, output.dir) {
 ##' @author Jason Vander Woude
 ##' @export
 LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
+    orig <- vcfR::read.vcfR(filtered.file(dataset, output.dir))
+
     masks <- get.masks(dataset)
     names(masks) <- sapply(masks, `[`, "ID") # apply the index function to get mask IDs
     lapply(masks, function(mask) {
+
+        masked <- tryCatch({
+            vcfR::read.vcfR(masked.file(dataset, output.dir, mask$ID))
+        }, warning = function(warning_condition) {
+            NULL
+        }, error = function(error_condition) {
+            NULL
+        })
+
 
         configs <- get.configs()
         names(configs) <- sapply(configs, `[`, "ID")
         lapply(configs, function(config) {
 
             tryCatch({
-                files <- list(orig    = filtered.file(dataset, output.dir),
-                              masked  = masked.file(dataset, output.dir, mask$ID),
-                              imputed = imputed.progeny.file(dataset, output.dir,
-                                                             algorithm, mask$ID,
-                                                             config$ID)
-                              )
-
-                vcfs <- lapply(files, vcfR::read.vcfR)
-
+                imputed <- vcfR::read.vcfR(imputed.progeny.file(dataset,
+                                                                output.dir,
+                                                                algorithm,
+                                                                mask$ID,
+                                                                config$ID))
+                vcfs <- list(orig, masked, imputed)
                 do.call(LabyrinthAnalyze, vcfs)
             }, warning = function(warning_condition) {
                 NULL
