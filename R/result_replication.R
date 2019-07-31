@@ -740,7 +740,7 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
             display(0, "Uncompressed mask not found; uncompressing ", compressed.m.file)
             system(paste("gunzip -c", compressed.m.file, ">", m.file))
         }
-    }, mc.preschedule=F, mc.cores=cores)
+    })
 
     imputations <- expand.grid(mask.ID     = mask.IDs,
                                window      = c(7),
@@ -858,7 +858,7 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
         } else {
             message("Found offspring file ", offspring.file, "; skipping parental imputation\n")
         }
-    }, c.preschedule=F, mc.cores=cores)
+    })
 }
 
 
