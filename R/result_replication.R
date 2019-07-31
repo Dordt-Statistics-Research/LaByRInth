@@ -346,6 +346,9 @@ LabyrinthImputePublicationData <- function(dataset, output.dir, parallel=FALSE, 
         ## Impute the datasets
         configs <- get.configs()
         for (i in seq_along(configs)) {
+
+            gc()  # garbage collect
+
             display(0, "Beginning full imputation of the dataset ", dataset,
                     " with genotype error ", configs[[i]]$geno.err, "\n")
 
