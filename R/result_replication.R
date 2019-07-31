@@ -151,9 +151,13 @@ filtered.file <- function(dataset.name, base.dir) {
            dataset.name, "_filtered.vcf.gz")
 }
 
-masked.file <- function(dataset.name, base.dir, mask.ID) {
+uncompressed.masked.file <- function(dataset.name, base.dir, mask.ID) {
     paste0(prep.dir(dataset.name, base.dir), "/",
-           dataset.name, "_masked_", mask.ID, ".vcf.gz")
+           dataset.name, "_masked_", mask.ID, ".vcf")
+}
+
+masked.file <- function(dataset.name, base.dir, mask.ID) {
+    paste0(uncompressed.masked.file(dataset.name, base.dir, mask.ID), ".gz")
 }
 
 fsfhap.dir <- function(dataset.name, base.dir) {
@@ -173,10 +177,6 @@ fsfhap.masked.vcf.file <- function(dataset.name, base.dir, mask.ID) {
 fsfhap.pedigree.file <- function(dataset.name, base.dir, mask.ID) {
     paste0(fsfhap.dir(dataset.name, base.dir), "/",
            dataset.name, "_filtered_pedigree.txt")
-}
-
-uncompressed.masked.file <- function(dataset.name, base.dir, mask.ID) {
-    paste0(prep.dir(dataset.name, base.dir), "/", dataset.name, "_masked_", mask.ID, ".vcf")
 }
 
 imputed.parents.file <- function(dataset.name, base.dir, algorithm, mask.ID, config.ID) {
@@ -682,7 +682,7 @@ LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
                                                                 mask$ID,
                                                                 config$ID))
                 vcfs <- list(orig, masked, imputed)
-                do.call(LabyrinthAnalyze, vcfs)
+                result <- do.call(LabyrinthAnalyze, vcfs)
             }, warning = function(warning_condition) {
                 NULL
             }, error = function(error_condition) {
@@ -691,3 +691,182 @@ LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
         })
     })
 }
+
+
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##'
+##' @param dataset 
+##' @param output.dir 
+##' @param parallel 
+##' @param cores 
+##' @return
+##' @export
+##' @author Jason Vander Woude
+LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
+                                                       parallel=FALSE, cores=1) {
+
+    ## Ensure dataset is a valid option
+    if (! dataset %in% get.datasets()) {
+        stop("dataset must be one of these strings: '", paste0(get.datasets(),
+                                                               collapse="', '"), "'")
+    }
+
+    ## Create the outpur directory if needed
+    if (! dir.exists(output.dir)) {
+        dir.create(imputed.dir(dataset), recursive=TRUE)
+    }
+
+
+    parent1 <- get.parents(dataset)[1]
+    parent2 <- get.parents(dataset)[2]
+    # use double recombination or not
+    dr <- ifelse(get.breed.scheme(dataset)=="F2", "", "-dr")
+
+    mask.IDs <- sapply(get.masks(dataset), `[`, "ID")
+
+    listapply <- get.lapply(parallel, cores)
+
+    listapply(mask.IDs, function(mask.ID) {
+        ## Check if masked datasets exist
+        compressed.m.file <- masked.file(dataset, output.dir, mask.ID)
+        if (! file.exists(compressed.m.file)) {
+            stop("Masked file is missing. Run LabyrinthPreparePublicationData first.")
+        }
+
+        m.file <- uncompressed.masked.file(dataset, output.dir, mask.ID)
+        if (! file.exists(m.file)) {
+            display(0, "Uncompressed mask not found; uncompressing ", compressed.m.file)
+            system(paste("gunzip -c", compressed.m.file, ">", m.file))
+        }
+    }, mc.preschedule=F, mc.cores=cores)
+
+    imputations <- expand.grid(mask.ID     = mask.IDs,
+                               window      = c(7),
+                               read.err    = c(5e-2),
+                               geno.err    = c(5e-2),
+                               recomb.dist = c(1e7))
+
+    ## Ensure imputed datasets can be saved, creating the directory if needed
+    example.parent.file <- imputed.parents.file(
+        dataset, output.dir, "LB-Impute", mask, "TEMP-CONFIG")
+    example.progeny.file <- imputed.progeny.file(
+        dataset, output.dir, "LB-Impute", mask, "TEMP-CONFIG")
+    if (! dir.exists(dirname(example.parent.file))) {
+        dir.create(dirname(example.parent.file), recursive=TRUE)
+    }
+    if (! dir.exists(dirname(example.progeny.file))) {
+        dir.create(dirname(example.progeny.file), recursive=TRUE)
+    }
+
+
+    listapply(seq(nrow(imputations)), function(index) {
+        mask.ID     <- imputations[index, "mask.ID"]
+        read.err    <- imputations[index, "read.err"]
+        geno.err    <- imputations[index, "geno.err"]
+        recomb.dist <- imputations[index, "recomb.dist"]
+        window      <- imputations[index, "window"]
+
+
+        config.ID <- paste0("window-",  recomb.dist,
+                            "_rerr-",   read.err,
+                            "_gerr-",   geno.err,
+                            "_recomb-", recomb.dist)
+
+        parental.file <- imputed.parents.file(dataset,
+                                              ouput.dir,
+                                              "LB-Impute",
+                                              mask.ID,
+                                              config.ID)
+
+        filtered.parental.file <- imputed.parents.file(dataset,
+                                                       ouput.dir,
+                                                       "LB-Impute",
+                                                       mask.ID,
+                                                       paste0("filtered_", config.ID))
+
+        compressed.filtered.parental.file <- paste0(filtered.parental.file, ".gz")
+
+        offspring.file <- imputed.progeny.file(dataset,
+                                               output.dir,
+                                               "LB-Impute",
+                                               mask.ID,
+                                               config.ID)
+
+        parental.impute.cmd <- paste(
+            "java -jar LB-Impute.jar",
+            "-method impute",
+            "-f",            mask,
+            "-readerr ",     read.err,
+            "-genotypeerr",  geno.err,
+            "-recombdist",   recomb.dist,
+            "-window",       window,
+            "-parentimpute",
+            "-parents",      paste0(parent1, ",", parent2),
+            dr,
+            "-o",            parental.file
+        )
+
+        offspring.impute.cmd <- paste(
+            "java -jar LB-Impute.jar",
+            "-method impute",
+            "-f",            filtered.parental.file,
+            "-readerr ",     read.err,
+            "-genotypeerr",  geno.err,
+            "-recombdist",   recomb.dist,
+            "-window",       window,
+            "-offspringimpute",
+            "-parents",      paste0(parent1, ",", parent2),
+            dr,
+            "-o",            offspring.file
+        )
+
+
+        message("Parental file:  ", parental.file)
+        message("Offspring file: ", offspring.file)
+        message("")
+
+        ## parental imputation
+        if (! file.exists(parental.file)) {
+            message("Running command:\n\t", parental.impute.cmd, "\n")
+            system(parental.impute.cmd)
+        } else {
+            message("Found parental file ", parental.file, "; skipping parental imputation\n")
+        }
+
+        ## parental filtering
+        if (! file.exists(filtered.parental.file)) {
+            if (! file.exists(compressed.filtered.parental.file)) {
+                message("Filtering out non-homozygous and non-polymorphic sites")
+                LabyrinthFilter(vcf = parental.file,
+                                parents = c(parent1, parent2),
+                                out.file = compressed.filtered.parental.file,
+                                hom.poly = TRUE)
+            }
+
+            system(paste("gunzip -c", compressed.filtered.parental.file, ">", filtered.parental.file))
+        } else {
+            message("Found filtered parental file ", filtered.parental.file)
+        }
+
+
+        ## offspring imputation
+        if (! file.exists(offspring.file)) {
+            message("Running command:\n", offspring.impute.cmd, "\n")
+            system(offspring.impute.cmd)
+        } else {
+            message("Found offspring file ", offspring.file, "; skipping parental imputation\n")
+        }
+    }, c.preschedule=F, mc.cores=cores)
+}
+
+
+
+## LabyrinthPlotPublicationData <- function(dataset, output.dir, algorithm)
+
+##     dataset <- "HincII"
+## analysis <- hinc.analysis
+## sapply(get.masks(dataset), function(mask) {id <- mask$ID; LabyrinthPlotPosteriors(analysis[[id]][[1]], NULL, NULL, dataset, out.file=paste0("../../junk/", dataset, "_plot_", mask$ID, ".tiff"))})
+
+
