@@ -704,7 +704,7 @@ LabyrinthAnalyzePublicationData <- function(dataset, output.dir, algorithm) {
 ##' @return
 ##' @export
 ##' @author Jason Vander Woude
-LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
+LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir, jarfile,
                                                        parallel=FALSE, cores=1) {
 
     ## Ensure dataset is a valid option
@@ -763,9 +763,9 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
 
     listapply(seq(nrow(imputations)), function(index) {
         mask.ID     <- imputations[index, "mask.ID"]
-        read.err    <- imputations[index, "read.err"]
-        geno.err    <- imputations[index, "geno.err"]
-        recomb.dist <- imputations[index, "recomb.dist"]
+        read.err    <- format(imputations[index, "read.err"], scientific=FALSE)
+        geno.err    <- format(imputations[index, "geno.err"], scientific=FALSE)
+        recomb.dist <- format(imputations[index, "recomb.dist"], scientific=FALSE)
         window      <- imputations[index, "window"]
 
 
@@ -773,6 +773,8 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
                             "_rerr-",   read.err,
                             "_gerr-",   geno.err,
                             "_recomb-", recomb.dist)
+
+        m.file <- uncompressed.masked.file(dataset, output.dir, mask.ID)
 
         parental.file <- imputed.parents.file(dataset,
                                               output.dir,
@@ -795,9 +797,9 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
                                                config.ID)
 
         parental.impute.cmd <- paste(
-            "java -jar LB-Impute.jar",
+            "java -jar", jarfile,
             "-method impute",
-            "-f",            mask.ID,
+            "-f",            m.file,
             "-readerr ",     read.err,
             "-genotypeerr",  geno.err,
             "-recombdist",   recomb.dist,
@@ -809,7 +811,7 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
         )
 
         offspring.impute.cmd <- paste(
-            "java -jar LB-Impute.jar",
+            "java -jar", jarfile,
             "-method impute",
             "-f",            filtered.parental.file,
             "-readerr ",     read.err,
@@ -840,9 +842,9 @@ LabyrinthImputePublicationDataWithLBImpute <- function(dataset, output.dir,
             if (! file.exists(compressed.filtered.parental.file)) {
                 message("Filtering out non-homozygous and non-polymorphic sites")
                 LabyrinthFilter(vcf = parental.file,
-                                parents = c(parent1, parent2),
                                 out.file = compressed.filtered.parental.file,
-                                hom.poly = TRUE)
+                                parents = c(parent1, parent2),
+                                require.hom.poly = TRUE)
             }
 
             system(paste("gunzip -c", compressed.filtered.parental.file, ">", filtered.parental.file))
