@@ -51,12 +51,33 @@ get.masks <- function(dataset) {
                        "RsaI",
                        "IBM-RIL"))
     {
-        list(list(ID="all_of_top_1_percent",   mask.prop=0.01,  top.prop=0.01),
-             list(ID="all_of_top_3_percent",   mask.prop=0.03,  top.prop=0.03),
-             list(ID="all_of_top_5_percent",   mask.prop=0.05,  top.prop=0.05),
-             list(ID="all_of_top_10_percent",  mask.prop=0.10,  top.prop=0.10),
-             list(ID="all_of_top_50_percent",  mask.prop=0.50,  top.prop=0.50),
-             list(ID="all_of_top_75_percent",  mask.prop=0.75,  top.prop=0.75))
+        ## list(list(ID="all_of_top_1_percent",   mask.prop=0.01,  top.prop=0.01),
+        ##      list(ID="all_of_top_3_percent",   mask.prop=0.03,  top.prop=0.03),
+        ##      list(ID="all_of_top_5_percent",   mask.prop=0.05,  top.prop=0.05),
+        ##      list(ID="all_of_top_10_percent",  mask.prop=0.10,  top.prop=0.10),
+        ##      list(ID="all_of_top_50_percent",  mask.prop=0.50,  top.prop=0.50),
+        ##      list(ID="all_of_top_75_percent",  mask.prop=0.75,  top.prop=0.75))
+        list(list(ID="0.5_percent_of_top_5_percent_instance_1",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_2",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_3",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_4",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_5",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_6",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_7",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_8",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_9",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_10",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_11",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_12",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_13",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_14",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_15",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_16",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_17",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_18",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_19",   mask.prop=0.005,  top.prop=0.05),
+             list(ID="0.5_percent_of_top_5_percent_instance_20",   mask.prop=0.005,  top.prop=0.05))
+
 
     } else if (dataset == "Sim-A-F1BC1") {
         list(list(ID="sampled"))
