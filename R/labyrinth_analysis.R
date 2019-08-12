@@ -81,7 +81,7 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
         is.format <- colnames(new.imputed@gt) == "FORMAT"
         new.imputed@gt[ , is.format] <- "GT"
         new.imputed@gt[ , ! is.format] <- "./."
-        new.imputed@gt[common, ! is.format] <- imputed@gt[common, ! is.format]
+        new.imputed@gt[common, ! is.format] <- imputed@gt[ , ! is.format]
         imputed <- new.imputed
     }
 
@@ -134,7 +134,7 @@ LabyrinthAnalyze <- function(orig, masked, imputed) {
 }
 
 
-get.coverage <- function(df, total.sites) {
+get.coverage <- function(df, total.sites=nrow(df)) {
     sum(! is.na(df$correct)) / total.sites
 }
 
@@ -144,7 +144,7 @@ get.accuracy <- function(df) {
 }
 
 
-get.quality <- function(df, total.sites) {
+get.quality <- function(df, total.sites=nrow(df)) {
     sum(df$correct, na.rm=TRUE) / total.sites
 }
 
