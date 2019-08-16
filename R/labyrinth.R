@@ -24,7 +24,7 @@
 ##                    R - P A C K A G E   I M P U T A T I O N
 ##
 
-version <- function() {"3.2.15"}
+version <- function() {"3.2.16"}
 
 ################################################################################
 ###################### PRIMARY TOP-LEVEL FUNCTIONS FOR USER ####################
